@@ -1,0 +1,171 @@
+# The folder tree is the dependency graph. Each business concept under
+# `component/` is split into a `domain` crate (the rules and the contracts),
+# a `data` crate (what satisfies the contracts) and a `di` crate (what wires
+# the two). No domain crate lists its data crate, so an import in the wrong
+# direction does not build. See docs/architecture.md.
+
+[workspace]
+resolver = "2"
+members = [
+    "component/account/domain",
+    "component/account/data",
+    "component/account/di",
+    "component/preferences/domain",
+    "component/preferences/data",
+    "component/preferences/di",
+    "component/farming/domain",
+    "component/farming/data",
+    "library/config-file",
+    "library/debug-log",
+    "library/steam-api",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/joshgallantt/steamcards"
+# Our own code needs 1.88 for let chains (`if x && let Some(y) = z`), as do
+# the `instability` and `darling` crates that ratatui builds with.
+rust-version = "1.88"
+# None of these crates goes to crates.io: steamcards is installed as a
+# binary, or built from this repository. Saying so also lets them depend on
+# each other by path alone, which cargo-deny would otherwise count as `*`.
+publish = false
+
+# Every crate opts in with `[lints] workspace = true`. Most of these keep the
+# architecture honest rather than style: see docs/architecture.md, "Rust
+# features this codebase doesn't use".
+[workspace.lints.rust]
+unsafe_code = "forbid"
+# No dead code: an unused function, field, import, variable or ignored
+# `#[must_use]` result fails the build.
+unused = { level = "deny", priority = -1 }
+# `pub` only on what a crate exports: its surface is exactly its re-exports,
+# so what one crate may use of another is decided in one place.
+unreachable_pub = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unused_qualifications = "deny"
+unused_lifetimes = "deny"
+
+[workspace.lints.clippy]
+# Clippy's default set (correctness, suspicious, style, complexity, perf).
+all = { level = "deny", priority = -1 }
+# A glob import hides what a module depends on.
+wildcard_imports = "deny"
+enum_glob_use = "deny"
+# Only presentation writes to the terminal; everything else reports upward.
+print_stdout = "deny"
+print_stderr = "deny"
+# Unfinished work doesn't get merged.
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+# An exception says why, and fails once it's no longer needed:
+# `#[expect(lint, reason = "…")]`, never `#[allow]`.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+# A module split across files keeps them all in its folder, with a mod.rs,
+# never a foo.rs beside a foo/ folder.
+self_named_module_files = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[workspace.dependencies]
+# Domain
+account = { path = "component/account/domain" }
+preferences = { path = "component/preferences/domain" }
+farming = { path = "component/farming/domain" }
+
+# Data
+account-data = { path = "component/account/data" }
+preferences-data = { path = "component/preferences/data" }
+farming-data = { path = "component/farming/data" }
+
+# DI
+account-di = { path = "component/account/di" }
+preferences-di = { path = "component/preferences/di" }
+farming-di = { path = "component/farming/di" }
+
+# Library
+config-file = { path = "library/config-file" }
+debug-log = { path = "library/debug-log" }
+steam-api = { path = "library/steam-api" }
+
+# Presentation
+terminal-ui = { path = "ui/terminal-ui" }
+headless = { path = "ui/headless" }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7" }
+futures = "0.3"
+async-trait = "0.1"
+
+# Error handling
+anyhow = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP: the CM server list, and steamcommunity.com's badge pages
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# WebSocket: the connection to Steam (a CM server)
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+
+# Steam's messages are protobufs. The few steamcards sends and reads are
+# written out by hand with prost's derive, so no build script or protoc.
+prost = "0.14"
+
+# The badge pages are HTML, read with CSS selectors as ASF reads them.
+scraper = "0.27"
+
+# TUI. ratatui's `crossterm_0_29` feature builds its backend for the same
+# crossterm as ours. Keep the two in step, so only one crossterm is built.
+# Its other defaults (the calendar widget, which brings the `time` crate, and
+# its macros) aren't used, so only what 0.29 had by default is on.
+ratatui = { version = "0.30", default-features = false, features = [
+    "crossterm_0_29",
+    "layout-cache",
+    "underline-color",
+] }
+crossterm = { version = "0.29", features = ["event-stream"] }
+
+# QR code for the Steam app to scan. The TUI draws it from the module grid
+# itself, so none of the image, SVG or picture renderers (or the `image`
+# crate) are needed.
+qrcode = { version = "0.14", default-features = false }
+
+# Opening a game's badge page in the default browser
+webbrowser = "1"
+
+# Encoding
+base64 = "0.22"
+flate2 = "1"
+rand = { version = "0.8", features = ["small_rng"] }
+hex = "0.4"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Platform config/data directories
+dirs = "5"
+
+# Tests: a local stand-in for steamcommunity.com
+wiremock = "0.6"
+
+[profile.release]
+opt-level = 3
+# One codegen unit with whole-program LTO: slower release builds, a smaller,
+# faster binary. Worth it for something built rarely and left running.
+lto = "fat"
+codegen-units = 1
+# `panic = "unwind"` (the default) stays: a panic inside the farmer's task is
+# caught by tokio and ends that task, not the whole dashboard.

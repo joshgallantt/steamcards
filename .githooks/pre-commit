@@ -1,0 +1,10 @@
+#!/bin/sh
+# Before every commit: formatting, lints and tests, as CI checks them.
+# Turned on with `cargo xtask hooks`. Skip once with `git commit --no-verify`.
+
+# Git apps that don't load the shell's profile start hooks without cargo on
+# PATH; rustup puts it here.
+if ! command -v cargo >/dev/null 2>&1; then
+    PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+fi
+exec cargo xtask pre-commit

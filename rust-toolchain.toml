@@ -1,0 +1,12 @@
+# The compiler every build uses: yours, CI's and the release's. rustup reads
+# this file and installs it when it's missing. One compiler means one set of
+# lints, so a check that passes here passes in CI too, and a newer Rust can't
+# fail CI on a pull request that didn't touch it.
+#
+# Updating it is a pull request of its own, which fixes whatever the new lints
+# find. The oldest Rust steamcards builds with is `rust-version` in
+# Cargo.toml, which CI checks separately.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

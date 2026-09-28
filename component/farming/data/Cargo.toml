@@ -1,0 +1,25 @@
+[package]
+name = "farming-data"
+description = "Steam's badges and game sessions, written to fit the farming domain's repositories."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+farming.workspace = true
+steam-api.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+config-file.workspace = true
+debug-log.workspace = true
+steam-api = { workspace = true, features = ["test-support"] }
+wiremock.workspace = true

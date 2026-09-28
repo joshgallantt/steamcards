@@ -1,0 +1,15 @@
+[package]
+name = "debug-log"
+description = "Opt-in debug logging to a file, since the TUI owns the terminal."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono.workspace = true

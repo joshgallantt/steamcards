@@ -1,0 +1,15 @@
+# Configuration is read once, in app/src/settings.rs, and handed inward as
+# arguments. Anywhere else, reading the environment or the OS's directories is
+# a hidden dependency — an ambient service locator.
+disallowed-methods = [
+    { path = "std::env::var", reason = "read settings in app/src/settings.rs and pass them in" },
+    { path = "std::env::var_os", reason = "read settings in app/src/settings.rs and pass them in" },
+    { path = "std::env::vars", reason = "read settings in app/src/settings.rs and pass them in" },
+    { path = "std::env::set_var", reason = "pass values as arguments, not through the environment" },
+    { path = "std::env::remove_var", reason = "pass values as arguments, not through the environment" },
+    { path = "dirs::config_dir", reason = "resolve paths in app/src/settings.rs and pass them in" },
+    { path = "dirs::home_dir", reason = "resolve paths in app/src/settings.rs and pass them in" },
+]
+
+# Tests may print what they render (the previews do).
+allow-print-in-tests = true

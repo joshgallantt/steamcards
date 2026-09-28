@@ -1,0 +1,17 @@
+[package]
+name = "preferences-data"
+description = "Preferences kept in the config file, written to fit the preferences domain's PreferencesRepository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+preferences.workspace = true
+config-file.workspace = true
+anyhow.workspace = true

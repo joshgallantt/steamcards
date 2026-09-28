@@ -1,0 +1,3 @@
+[alias]
+# Project tooling: `cargo xtask ci | pre-commit | fix | hooks`. See xtask/.
+xtask = "run --package xtask --quiet --"

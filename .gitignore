@@ -1,0 +1,11 @@
+# Build output
+/target
+
+# OS clutter
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~

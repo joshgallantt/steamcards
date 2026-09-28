@@ -1,0 +1,71 @@
+# What the dependencies may be. `cargo deny check` reads this, as a step of
+# `cargo xtask ci`. Every option is explained at
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Every platform is checked, the ones steamcards doesn't ship for too:
+# there's no `targets` list.
+
+# Security advisories, from the RustSec database (https://rustsec.org). A
+# crate with a known vulnerability fails the check, and so does one that's
+# unmaintained, which won't get a fix when it needs one. To accept one for
+# now, add its id to `ignore`, with the reason.
+[advisories]
+ignore = []
+# A version its author has pulled (yanked) fails the check too: authors pull
+# a release when it's broken, or when it was published by someone who
+# shouldn't have. The version pinned in Cargo.lock would otherwise carry on.
+yanked = "deny"
+
+# steamcards ships as an MIT binary, so every crate built into it has to
+# allow that. Where a crate offers a choice ("MIT OR Apache-2.0"), one allowed
+# licence is enough. Dev-dependencies aren't checked: they're not in the
+# binary.
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+# Licences that are fine for these crates, but want a look before any other
+# crate brings them in.
+exceptions = [
+    # The Mozilla root certificates that rustls trusts, under a permissive
+    # licence written for data rather than code.
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+    # MPL-2.0 is copyleft for the crate's own files only, which are built
+    # unchanged and published on crates.io. It doesn't reach the rest of the
+    # binary. `option-ext` comes through `dirs`; the CSS selector crates
+    # through `scraper`, which reads the badge pages.
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+    { crate = "cssparser", allow = ["MPL-2.0"] },
+    { crate = "cssparser-macros", allow = ["MPL-2.0"] },
+    { crate = "dtoa-short", allow = ["MPL-2.0"] },
+    { crate = "selectors", allow = ["MPL-2.0"] },
+]
+
+[bans]
+# Two versions of one crate are both built: slower builds and a bigger
+# binary. Worth seeing, but it doesn't fail: nearly all of them come from the
+# dependencies' own choices.
+multiple-versions = "warn"
+# A `*` version accepts any release, including one that breaks the build.
+wildcards = "deny"
+# The workspace's own crates depend on each other by path, with no version.
+allow-wildcard-paths = true
+deny = [
+    # TLS is rustls with ring, everywhere. Each of these would break
+    # something CI doesn't try: the static Linux release builds, or rustls
+    # itself.
+    { crate = "openssl-sys", reason = "it needs the system's OpenSSL, which the static Linux release builds can't link" },
+    { crate = "aws-lc-sys", reason = "a second crypto provider for rustls, which then can't pick one, so ClientConfig::builder() panics" },
+]
+
+# Crates come from crates.io only, never from a git repository or another
+# registry, so everything built was published, and is checked above.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

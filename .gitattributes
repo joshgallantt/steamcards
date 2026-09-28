@@ -1,0 +1,8 @@
+# LF everywhere, so rustfmt sees the same bytes on every OS.
+* text=auto eol=lf
+
+# Hooks run under sh, which needs LF.
+.githooks/* text eol=lf
+
+# Saved Steam pages the parser is tested against: keep them byte for byte.
+library/steam-api/tests/pages/* -text

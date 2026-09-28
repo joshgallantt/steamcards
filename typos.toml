@@ -1,0 +1,13 @@
+# What typos accepts: the spelling step of `cargo xtask ci`. A word that's
+# right but that typos doesn't know goes here, as narrowly as possible, with
+# why. Made-up test data (account names, tokens) passes as it is.
+
+[files]
+# The dot-folders are checked too (.github, .githooks, .cargo), but not git's
+# own.
+ignore-hidden = false
+extend-exclude = [".git", "library/steam-api/tests/pages"]
+
+[default.extend-words]
+# The crate the terminal UI is drawn with.
+ratatui = "ratatui"
