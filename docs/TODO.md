@@ -40,6 +40,17 @@ done, and move it into a numbered section if it grows.
 - [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
       steamctl): disputed, ASF calls it a glitch. Maybe later, opt-in, if
       measured.
+- [ ] Look at farming faster (2026-09-29, "at some point"). The redesign's
+      time-to-finish estimate learns from real drops, so it will show
+      whether a change helps.
+- [ ] Some games read 0.0h on the badge page but have drops received
+      (one had 6 of 12). Check what their badge rows say. If Steam
+      leaves their hours out, farming builds 3 hours for games that may not
+      need it.
+- [~] Redesign the UI for card farming, not streamdrops' layout: overall
+      progress, progress per game, the cards that dropped this session,
+      what each card is worth, the session's value, and the time and value
+      to finish. See section 7.
 
 ---
 
@@ -101,9 +112,9 @@ done, and move it into a numbered section if it grows.
       an account). Done 2026-09-29: Steam's London server answered with a QR
       code, and polling ran cleanly.
 - [x] Drive the real TUI to a live QR code in a terminal (2026-09-29).
-- [~] Sign in with a real account, see its badges, and farm one game until a
-      card drops. Signed in, read the badges and farming on 2026-09-29; the
-      first drop is still to come.
+- [x] Sign in with a real account, see its badges, and farm one game until a
+      card drops. Signed in, read the badges and farmed on 2026-09-29: games
+      took turns alone and cards dropped about every 30 minutes.
 - [ ] Save a real badge page as a test fixture (the current fixtures are
       modelled on ASF's selectors).
 
@@ -113,7 +124,26 @@ done, and move it into a numbered section if it grows.
 - [ ] Install scripts and a Homebrew formula (macOS and Linux), the release
       workflow and CI.
 
+## 7. The redesign `[~]`
+
+- [x] Research where prices, the wallet's currency, drop asset IDs and
+      completion estimates come from, and what quick-sell will need:
+      [docs/research/market-and-session.md](research/market-and-session.md).
+- [~] Design: five designs from different angles, judged, and one spec
+      made from them (`docs/design/ui.md`).
+- [ ] Domain first: the farming session and its card drops; a `market`
+      component with money, prices, the wallet and the value basis.
+- [ ] Data: the wallet's currency and the drops' asset IDs over the CM
+      connection, set prices from the market at a polite pace, fee maths.
+- [ ] The new screens, their previews, and a check that nothing is cut off
+      at any size.
+- [ ] Review it adversarially, then try it on the real account.
+
 ## Later
+
+- [ ] Quick-sell: list each card on the market as it drops. The research
+      (section 4) covers the request, confirmations, pricing and pacing;
+      the redesign leaves room for it.
 
 - [ ] Hours threshold as a setting (ASF's `HoursUntilCardDrops`; 0 farms
       every game one at a time).
