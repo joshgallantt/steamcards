@@ -7,23 +7,27 @@
 [workspace]
 resolver = "2"
 members = [
+    "app",
     "component/account/domain",
     "component/account/data",
     "component/account/di",
-    "component/preferences/domain",
-    "component/preferences/data",
-    "component/preferences/di",
     "component/library/domain",
     "component/library/data",
     "component/library/di",
+    "component/preferences/domain",
+    "component/preferences/data",
+    "component/preferences/di",
     "component/farming/domain",
     "component/farming/data",
     "component/farming/di",
     "library/config-file",
     "library/debug-log",
     "library/steam-api",
+    "ui/terminal-ui",
+    "ui/headless",
     "xtask",
 ]
+default-members = ["app"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,0 +1,36 @@
+[package]
+name = "terminal-ui"
+description = "The full-screen terminal dashboard: view models over use cases, and the ratatui screens that draw them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Domain crates only. No *-data crate is listed, so a screen cannot reach a
+# repository, Steam or the config file: `use farming_data` does not resolve.
+[dependencies]
+account.workspace = true
+farming.workspace = true
+library.workspace = true
+preferences.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+crossterm.workspace = true
+futures.workspace = true
+qrcode.workspace = true
+ratatui.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+webbrowser.workspace = true
+
+[dev-dependencies]
+account = { workspace = true, features = ["test-support"] }
+farming = { workspace = true, features = ["test-support"] }
+library = { workspace = true, features = ["test-support"] }
+preferences = { workspace = true, features = ["test-support"] }
+serde_json.workspace = true

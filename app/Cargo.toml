@@ -1,0 +1,36 @@
+[package]
+name = "steamcards"
+description = "Farms Steam trading cards from the terminal."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "steamcards"
+path = "src/main.rs"
+
+# The outermost ring: the one crate that depends on everything, and that
+# nothing depends on.
+[dependencies]
+account-di.workspace = true
+farming-di.workspace = true
+library-di.workspace = true
+preferences-di.workspace = true
+config-file.workspace = true
+debug-log.workspace = true
+steam-api.workspace = true
+terminal-ui.workspace = true
+headless.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+dirs.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

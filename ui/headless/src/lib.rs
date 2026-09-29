@@ -1,0 +1,97 @@
+//! Presentation without a screen: farms, and prints every event as a line of
+//! plain text, for logs and servers.
+
+#![expect(
+    clippy::print_stdout,
+    reason = "printing to stdout is this presentation's whole job"
+)]
+
+use std::time::Duration;
+
+use account::GetAccount;
+use farming::{FarmCards, FarmingEvent, FarmingStatus};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+/// Farms until `duration` passes (never, if `None`) or ctrl-c. Signing in
+/// takes the Steam app and a screen for its QR code, so it's done in the
+/// TUI first.
+pub async fn run(account: GetAccount, farm: FarmCards, duration: Option<Duration>) {
+    let Some(signed_in) = account() else {
+        println!(
+            "Not signed in to Steam. Run steamcards without --headless once, and sign in with \
+             the Steam app."
+        );
+        return;
+    };
+    if signed_in.expired {
+        println!("Steam no longer takes the saved sign-in: run steamcards to sign in again.");
+        return;
+    }
+    let token = CancellationToken::new();
+    if let Some(d) = duration {
+        let t = token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(d).await;
+            t.cancel();
+        });
+    }
+    {
+        let t = token.clone();
+        tokio::spawn(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            t.cancel();
+        });
+    }
+
+    let (tx, mut rx) = mpsc::channel::<FarmingEvent>(256);
+    let printer = tokio::spawn(async move {
+        let mut last = None;
+        while let Some(ev) = rx.recv().await {
+            print_event(&ev, &mut last);
+        }
+    });
+    let _ = farm(token, tx).await;
+    let _ = printer.await;
+}
+
+/// What a status line says, to print it only when that changes.
+type Said = (String, Vec<String>, String);
+
+fn print_event(e: &FarmingEvent, last: &mut Option<Said>) {
+    let ts = chrono::Local::now().format("%H:%M:%S");
+    if let Some(s) = &e.status {
+        let said = said(s);
+        if last.as_ref() != Some(&said) {
+            let (status, playing, note) = &said;
+            let playing = if playing.is_empty() {
+                String::new()
+            } else {
+                format!(" playing={}", playing.join(", "))
+            };
+            let note = if note.is_empty() {
+                String::new()
+            } else {
+                format!(" ({note})")
+            };
+            println!("{ts} STATUS {status}{playing}{note}");
+            *last = Some(said);
+        }
+    }
+    if !e.message.is_empty() {
+        println!("{ts} {}", e.message);
+    }
+}
+
+fn said(s: &FarmingStatus) -> Said {
+    let playing = s
+        .playing
+        .iter()
+        .map(|&id| {
+            s.library
+                .game(id)
+                .map_or_else(|| format!("app {id}"), |g| g.name.clone())
+        })
+        .collect();
+    (s.status.to_string(), playing, s.note.clone())
+}

@@ -1,0 +1,21 @@
+[package]
+name = "headless"
+description = "Farming without the TUI: every event as a line of plain text on stdout."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# Domain crates only, like terminal-ui.
+
+[lints]
+workspace = true
+
+[dependencies]
+account.workspace = true
+farming.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
