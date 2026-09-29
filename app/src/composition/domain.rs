@@ -20,6 +20,7 @@ impl DomainAssembler {
         let preferences = PreferencesComponent::new(data.config.clone());
         let farming = FarmingComponent::new(
             data.steam.clone(),
+            data.awake.clone(),
             library.read.clone(),
             library.look_at.clone(),
             preferences.get.clone(),

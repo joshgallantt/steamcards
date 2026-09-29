@@ -7,6 +7,7 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use farming::{PlayRepository, Signal};
 use farming_data::SteamPlayRepository;
+use keep_awake::KeepAwake;
 use steam_api::{
     EResult, Session,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
@@ -51,7 +52,7 @@ async fn signal(repo: &SteamPlayRepository) -> Signal {
 #[tokio::test]
 async fn games_are_played_and_told_again_only_when_they_change() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "play"));
+    let repo = SteamPlayRepository::new(session(&steam, "play"), Arc::new(KeepAwake::off()));
 
     repo.play(&[620], false).await.unwrap();
     repo.play(&[620], false).await.unwrap();
@@ -65,7 +66,7 @@ async fn games_are_played_and_told_again_only_when_they_change() {
 #[tokio::test]
 async fn appearing_online_is_said_and_unsaid() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "online"));
+    let repo = SteamPlayRepository::new(session(&steam, "online"), Arc::new(KeepAwake::off()));
 
     repo.play(&[620], true).await.unwrap();
     repo.play(&[620], true).await.unwrap();
@@ -78,7 +79,7 @@ async fn appearing_online_is_said_and_unsaid() {
 #[tokio::test]
 async fn steams_news_arrives_as_signals() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "signals"));
+    let repo = SteamPlayRepository::new(session(&steam, "signals"), Arc::new(KeepAwake::off()));
     repo.play(&[620], false).await.unwrap();
 
     steam.block(true, 730);
@@ -99,7 +100,7 @@ async fn steams_news_arrives_as_signals() {
 #[tokio::test]
 async fn another_session_taking_over_is_its_own_signal() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "replaced"));
+    let repo = SteamPlayRepository::new(session(&steam, "replaced"), Arc::new(KeepAwake::off()));
     repo.play(&[620], false).await.unwrap();
 
     steam.sign_off(EResult::LOGON_SESSION_REPLACED);
@@ -110,7 +111,7 @@ async fn another_session_taking_over_is_its_own_signal() {
 #[tokio::test]
 async fn after_a_drop_the_new_connection_is_told_everything() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "again"));
+    let repo = SteamPlayRepository::new(session(&steam, "again"), Arc::new(KeepAwake::off()));
     repo.play(&[620], true).await.unwrap();
     // Frames still on their way when a connection drops are lost, as they
     // would be: let these arrive first.
@@ -127,9 +128,26 @@ async fn after_a_drop_the_new_connection_is_told_everything() {
 }
 
 #[tokio::test]
+async fn the_computer_stays_awake_while_games_play() {
+    let steam = FakeSteam::start().await;
+    let awake = Arc::new(KeepAwake::running("sleep", &["60"]));
+    let repo = SteamPlayRepository::new(session(&steam, "awake"), awake.clone());
+
+    repo.play(&[620], false).await.unwrap();
+    assert!(awake.is_held(), "held while playing");
+
+    repo.play(&[], false).await.unwrap();
+    assert!(!awake.is_held(), "let go with nothing to play");
+
+    repo.play(&[620], false).await.unwrap();
+    repo.stop().await;
+    assert!(!awake.is_held(), "let go when farming stops");
+}
+
+#[tokio::test]
 async fn stopping_stops_the_games_and_signs_off() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "stop"));
+    let repo = SteamPlayRepository::new(session(&steam, "stop"), Arc::new(KeepAwake::off()));
     repo.play(&[620], false).await.unwrap();
 
     repo.stop().await;

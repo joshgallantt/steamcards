@@ -1,0 +1,15 @@
+[package]
+name = "keep-awake"
+description = "Keeps the computer awake while games are being played: a farm that sleeps drops nothing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+debug-log.workspace = true

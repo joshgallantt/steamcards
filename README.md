@@ -26,6 +26,10 @@ played, the way the Steam client tells it.
   friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute
   after you stop.
+- **Keeps your computer awake** while it plays (with `caffeinate` on macOS,
+  `systemd-inhibit` on Linux), and lets it sleep when there's nothing to
+  farm. The screen can still turn off. A closed laptop lid still sleeps
+  unless it's plugged into a display.
 - **Every game with cards in one list,** with its hours, drops and card set.
 - **macOS and Linux.**
 

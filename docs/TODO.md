@@ -30,6 +30,13 @@ done, and move it into a numbered section if it grows.
       for drops, 3 hours, 32 together only to build hours.
 - [x] Build the domain from its entities: `SteamLibrary`, `Game`, `Card`, in a
       `library` component that farming works through.
+- [x] Keep the computer awake while games play: `caffeinate` on macOS,
+      `systemd-inhibit` on Linux, let go when there's nothing to farm
+      (2026-09-29).
+- [x] First real run (2026-09-29): signed in with the Steam app, signed on
+      with the saved sign-in, read the badges and started farming. A first run's debug log couldn't open before the config's
+      folder existed; fixed.
+- [ ] Keeping awake as a setting, for anyone who'd rather it didn't.
 - [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
       steamctl): disputed, ASF calls it a glitch. Maybe later, opt-in, if
       measured.
@@ -94,8 +101,9 @@ done, and move it into a numbered section if it grows.
       an account). Done 2026-09-29: Steam's London server answered with a QR
       code, and polling ran cleanly.
 - [x] Drive the real TUI to a live QR code in a terminal (2026-09-29).
-- [ ] Sign in with a real account, see its badges, and farm one game until a
-      card drops.
+- [~] Sign in with a real account, see its badges, and farm one game until a
+      card drops. Signed in, read the badges and farming on 2026-09-29; the
+      first drop is still to come.
 - [ ] Save a real badge page as a test fixture (the current fixtures are
       modelled on ASF's selectors).
 

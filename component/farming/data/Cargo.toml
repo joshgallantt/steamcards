@@ -1,6 +1,6 @@
 [package]
 name = "farming-data"
-description = "Playing games on Steam's CM servers, written to fit the farming domain's PlayRepository."
+description = "Playing games on Steam's CM servers, and keeping the computer awake meanwhile, written to fit the farming domain's PlayRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 farming.workspace = true
+keep-awake.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

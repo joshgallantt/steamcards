@@ -15,7 +15,7 @@ is: the same layers, the same rules, and the same checks that keep them.
 | Domain | `account`, `library`, `preferences`, `farming` | Domain |
 | Data | `account-data`, `library-data`, `preferences-data`, `farming-data` | Domain, Library |
 | DI | `account-di`, `library-di`, `preferences-di`, `farming-di` | Domain, Data, Library |
-| Library | `config-file`, `debug-log`, `steam-api` | Library |
+| Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `terminal-ui`, `headless` | Domain |
 | App | `steamcards` | Domain, DI, Library, Presentation |
 
@@ -129,6 +129,7 @@ straight away, and signing in again clears it.
 | `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back), QR sign-in, the badge and card pages, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON file, readable by its owner only: `CredentialStore`, and the stored shape of preferences. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
+| `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
 
 ---
 
@@ -160,7 +161,7 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `steam_api::Session` | `Settings` |
+| `DataAssembler` | `ConfigFile`, `steam_api::Session`, `KeepAwake` | `Settings` |
 | `DomainAssembler` | `AccountComponent`, `LibraryComponent`, `PreferencesComponent`, `FarmingComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
@@ -234,9 +235,10 @@ graph TD
         SA[steam-api]
         CF[config-file]
         DL[debug-log]
+        KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & LDI & PDI & FDI & CF & SA & DL
+    APP --> TUI & HL & ADI & LDI & PDI & FDI & CF & SA & DL & KA
     TUI --> ACC & LIB & PREF & FARM
     HL --> ACC & FARM
     ADI --> AD
@@ -246,9 +248,10 @@ graph TD
     AD --> ACC & SA
     LD --> LIB & SA
     PD --> PREF & CF
-    FD --> FARM & SA
+    FD --> FARM & SA & KA
     FARM --> LIB & PREF
     SA --> CF & DL
+    KA --> DL
 ```
 
 Every arrow is a line in a `Cargo.toml`.

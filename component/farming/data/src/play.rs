@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use farming::{PlayRepository, Signal};
+use keep_awake::KeepAwake;
 use steam_api::{
     EResult, Session,
     cm::{Connection, Event},
@@ -9,9 +10,11 @@ use steam_api::{
 use tokio::sync::broadcast;
 
 /// Playing games on the Steam session's CM connection, as the Steam client
-/// does: nothing is launched, Steam is told what's being played.
+/// does: nothing is launched, Steam is told what's being played. While
+/// anything is, the computer is kept awake.
 pub struct SteamPlayRepository {
     session: Arc<Session>,
+    awake: Arc<KeepAwake>,
     /// The connection being played on, and what it was last told: a
     /// connection that went is replaced, and the new one told afresh.
     on: Mutex<Option<Played>>,
@@ -26,9 +29,10 @@ struct Played {
 }
 
 impl SteamPlayRepository {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub fn new(session: Arc<Session>, awake: Arc<KeepAwake>) -> Self {
         Self {
             session,
+            awake,
             on: Mutex::default(),
             news: tokio::sync::Mutex::default(),
         }
@@ -62,6 +66,11 @@ impl PlayRepository for SteamPlayRepository {
             games: app_ids.to_vec(),
             online,
         });
+        if app_ids.is_empty() {
+            self.awake.let_sleep();
+        } else {
+            self.awake.hold();
+        }
         Ok(())
     }
 
@@ -71,6 +80,7 @@ impl PlayRepository for SteamPlayRepository {
             let _ = p.conn.play(&[]);
         }
         *self.news.lock().await = None;
+        self.awake.let_sleep();
         self.session.disconnect().await;
     }
 

@@ -90,7 +90,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        19,
+        20,
         "a crate was added or removed; place it in a layer above"
     );
 

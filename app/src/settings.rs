@@ -33,9 +33,15 @@ impl Settings {
             None => config_dir()?.join("config.json"),
         };
 
-        // "1" or "true" logs beside the config; anything else is a path.
+        // "1" or "true" logs beside the config; anything else is a path. On a
+        // first run the config's folder isn't there yet: make it, or the log
+        // couldn't open.
         let debug_log = match std::env::var("STEAMCARDS_DEBUG").ok().as_deref() {
-            Some("1" | "true") => DebugLog::to_file(&config_dir()?.join("debug.log")),
+            Some("1" | "true") => {
+                let dir = config_dir()?;
+                std::fs::create_dir_all(&dir)?;
+                DebugLog::to_file(&dir.join("debug.log"))
+            }
             Some(path) => DebugLog::to_file(path.as_ref()),
             None if headless => DebugLog::to_stderr(),
             None => DebugLog::off(),
