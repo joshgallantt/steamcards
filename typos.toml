@@ -11,3 +11,5 @@ extend-exclude = [".git", "library/steam-api/tests/pages"]
 [default.extend-words]
 # The crate the terminal UI is drawn with.
 ratatui = "ratatui"
+# Valve's game, one of the three whose badge pages can't be trusted.
+Dota = "Dota"
