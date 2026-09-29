@@ -38,10 +38,19 @@ Dev-dependencies are exempt. A test may reach anywhere it needs to.
 The domain starts from its entities:
 
 - **`SteamLibrary`**, in `library`: the games on the account that have
-  trading cards. It holds each game once, and knows the drops still to come.
+  trading cards. It holds each game once, and knows the drops received and
+  still to come, and how many games have had every drop.
 - **`Game`**: one of those games, by app ID: its hours, its `CardDrops`
-  (received and still to come), its badge level and its card set.
-- **`Card`**: a card in a game's set, and how many the account has.
+  (received and still to come), its badge level and its card set. Drops and
+  the set are two measures, and neither stands in for the other: drops are
+  what farming works through, the set is what a badge needs.
+- **`Card`**: a card in a game's set, and how many the account has. The
+  same card can drop more than once, so that's a count, and copies beyond
+  one are spares.
+- **`CardAsset`**: one copy of a card the account holds, by its asset ID:
+  the game whose set it's from, its name, its market hash name, and whether
+  it's a foil, marketable and tradable. Each copy that drops is its own. It
+  says which card dropped, and is what selling one takes.
 - **`Account`**, in `account`: the one Steam account, and whether Steam still
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
@@ -79,6 +88,7 @@ constructor builds the real one over the repositories. Call sites read
 | | `UnlinkAccount` (`unlink_account`) | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
 | library | `ReadLibrary` (`read_library`) | The whole library, games with drops left first. Errs with `LibraryError`. |
 | | `LookAtGame` (`look_at_game`) | One game afresh: its drops, hours and card set. |
+| | `DescribeCards` (`describe_cards`) | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
 | preferences | `GetPreferences` (`get_preferences`) | The current preferences. |
 | | `SetGameTier` (`set_game_tier`) | Moves a game between priority (at a rank), indifferent and skip. |
 | | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
@@ -126,7 +136,7 @@ straight away, and signing in again clears it.
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back), QR sign-in, the badge and card pages, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON file, readable by its owner only: `CredentialStore`, and the stored shape of preferences. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |

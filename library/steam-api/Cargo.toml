@@ -1,6 +1,6 @@
 [package]
 name = "steam-api"
-description = "Steam in Steam's own vocabulary: the CM connection, sign-in, playing games, and badge pages."
+description = "Steam in Steam's own vocabulary: the CM connection, sign-in, playing games, badge pages and the inventory's items."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

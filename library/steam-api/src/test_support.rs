@@ -1,10 +1,11 @@
 //! A stand-in for Steam, for tests here and in the data crates: a CM server
-//! on this computer that signs in, signs on and plays as a test tells it to,
-//! and remembers what it was sent. It speaks Steam's own messages over a real
-//! WebSocket, so the code under test is the code that runs.
+//! on this computer that signs in, signs on, plays and describes the items
+//! it holds as a test tells it to, and remembers what it was sent. It speaks
+//! Steam's own messages over a real WebSocket, so the code under test is the
+//! code that runs.
 
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -17,12 +18,14 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{
     EResult, Endpoints,
+    inventory::{COMMUNITY_CONTEXT, STEAM_APP},
     packet::{Packet, pack_multi},
     proto::{
-        BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
+        Asset, BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
         ClientItemAnnouncements, ClientLoggedOff, ClientLogon, ClientLogonResponse,
-        ClientPlayingSessionState, GenerateAccessTokenResponse, Header,
-        PollAuthSessionStatusResponse, RevokeTokenRequest, RevokeTokenResponse, emsg, method,
+        ClientPlayingSessionState, GenerateAccessTokenResponse, GetInventoryItemsRequest,
+        GetInventoryItemsResponse, Header, ItemDescription, ItemTag, PollAuthSessionStatusResponse,
+        RevokeTokenRequest, RevokeTokenResponse, emsg, method,
     },
     token,
 };
@@ -47,6 +50,97 @@ pub struct QrScript {
     pub ended_at: Option<usize>,
 }
 
+/// An item in the stand-in account's inventory, among its community items,
+/// as Steam describes it. Items with one market hash name are one class,
+/// and share a description.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldItem {
+    pub asset_id: u64,
+    /// Its name on the market, as Steam gives it: "Chell (Foil)".
+    pub market_name: String,
+    pub market_hash_name: String,
+    /// The app the publisher's share of a sale goes to: its game.
+    pub market_fee_app: u32,
+    /// Its tags, as `(category, internal name)`.
+    pub tags: Vec<(String, String)>,
+    pub marketable: bool,
+    pub tradable: bool,
+    /// Steam hasn't caught up with it yet: the first ask about it finds it
+    /// missing, and the next finds it.
+    pub late: bool,
+}
+
+impl HeldItem {
+    /// A card from `app_id`'s set, named as the market names it: "Chell", or
+    /// "Intro (Trading Card)" where the name clashes with another item's.
+    pub fn card(asset_id: u64, app_id: u32, market_name: &str) -> Self {
+        Self::tagged(
+            asset_id,
+            app_id,
+            market_name,
+            &[
+                ("item_class", "item_class_2"),
+                ("cardborder", "cardborder_0"),
+            ],
+        )
+    }
+
+    /// A foil card: "Chell (Foil)", or "Intro (Foil Trading Card)".
+    pub fn foil(asset_id: u64, app_id: u32, market_name: &str) -> Self {
+        Self::tagged(
+            asset_id,
+            app_id,
+            market_name,
+            &[
+                ("item_class", "item_class_2"),
+                ("cardborder", "cardborder_1"),
+            ],
+        )
+    }
+
+    /// Anything else from `app_id`, of Steam's item class `class`: 3 is a
+    /// profile background, 4 an emoticon, 5 a booster pack.
+    pub fn other(asset_id: u64, app_id: u32, class: u32, market_name: &str) -> Self {
+        let class = format!("item_class_{class}");
+        Self::tagged(asset_id, app_id, market_name, &[("item_class", &class)])
+    }
+
+    /// One Steam hasn't caught up with yet.
+    pub fn late(self) -> Self {
+        Self { late: true, ..self }
+    }
+
+    fn tagged(asset_id: u64, app_id: u32, market_name: &str, tags: &[(&str, &str)]) -> Self {
+        let game = format!("app_{app_id}");
+        Self {
+            asset_id,
+            market_name: market_name.to_owned(),
+            market_hash_name: format!("{app_id}-{market_name}"),
+            market_fee_app: app_id,
+            tags: [("Game", game.as_str())]
+                .iter()
+                .chain(tags)
+                .map(|&(category, name)| (category.to_owned(), name.to_owned()))
+                .collect(),
+            marketable: true,
+            tradable: true,
+            late: false,
+        }
+    }
+}
+
+/// An ask to describe items, as the stand-in heard it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InventoryAsk {
+    pub steam_id: u64,
+    pub app_id: u32,
+    pub context_id: u64,
+    /// Whether it asked for what the items are, not just their IDs.
+    pub descriptions: bool,
+    pub language: String,
+    pub asset_ids: Vec<u64>,
+}
+
 struct State {
     /// One script per QR sign-in begun; the last one repeats.
     qr: VecDeque<QrScript>,
@@ -62,6 +156,10 @@ struct State {
     statuses: Vec<u32>,
     revoked: Vec<String>,
     log_offs: usize,
+    inventory: Vec<HeldItem>,
+    /// Asset IDs asked about so far.
+    asked_about: HashSet<u64>,
+    inventory_asks: Vec<InventoryAsk>,
     clients: Vec<mpsc::UnboundedSender<Vec<u8>>>,
 }
 
@@ -99,6 +197,9 @@ impl FakeSteam {
             statuses: Vec::new(),
             revoked: Vec::new(),
             log_offs: 0,
+            inventory: Vec::new(),
+            asked_about: HashSet::new(),
+            inventory_asks: Vec::new(),
             clients: Vec::new(),
         }));
         let stop = CancellationToken::new();
@@ -182,6 +283,16 @@ impl FakeSteam {
 
     pub fn log_offs(&self) -> usize {
         self.state().log_offs
+    }
+
+    /// The account's community items are these, in place of any before.
+    pub fn hold(&self, items: Vec<HeldItem>) {
+        self.state().inventory = items;
+    }
+
+    /// Every ask to describe items, in order.
+    pub fn inventory_asks(&self) -> Vec<InventoryAsk> {
+        self.state().inventory_asks.clone()
     }
 
     /// Another device starts (or stops) playing.
@@ -404,17 +515,102 @@ impl State {
                 self.revoked.push(req.token.unwrap_or_default());
                 (EResult::OK, RevokeTokenResponse {}.encode_to_vec())
             }
-            method::GENERATE_ACCESS_TOKEN | method::REVOKE_TOKEN => {
+            method::GET_INVENTORY_ITEMS if signed_on => {
+                let req = GetInventoryItemsRequest::decode(body).unwrap_or_default();
+                let ask = InventoryAsk {
+                    steam_id: req.steamid.unwrap_or_default(),
+                    app_id: req.appid.unwrap_or_default(),
+                    context_id: req.contextid.unwrap_or_default(),
+                    descriptions: req.get_descriptions.unwrap_or_default(),
+                    language: req.language.unwrap_or_default(),
+                    asset_ids: req.filters.map(|f| f.assetids).unwrap_or_default(),
+                };
+                let items = self.items(&ask);
+                self.inventory_asks.push(ask);
+                (EResult::OK, items.encode_to_vec())
+            }
+            method::GENERATE_ACCESS_TOKEN | method::REVOKE_TOKEN | method::GET_INVENTORY_ITEMS => {
                 (EResult::ACCESS_DENIED, Vec::new())
             }
             _ => (EResult::FAIL, Vec::new()),
         }
     }
 
+    /// Steam's answer to `ask`: each item it names that the stand-in account
+    /// holds among its community items, unless Steam hasn't caught up with it
+    /// yet; the rest are missing. An ask naming no items is for them all.
+    fn items(&mut self, ask: &InventoryAsk) -> GetInventoryItemsResponse {
+        let ours =
+            (ask.steam_id, ask.app_id, ask.context_id) == (STEAM_ID, STEAM_APP, COMMUNITY_CONTEXT);
+        let named = if ask.asset_ids.is_empty() {
+            self.inventory.iter().map(|i| i.asset_id).collect()
+        } else {
+            ask.asset_ids.clone()
+        };
+        let mut answer = GetInventoryItemsResponse::default();
+        for id in named {
+            let first_ask = self.asked_about.insert(id);
+            let held = self
+                .inventory
+                .iter()
+                .find(|i| ours && i.asset_id == id && !(i.late && first_ask));
+            let Some(item) = held else {
+                answer.missing_assets.push(Asset {
+                    assetid: Some(id),
+                    ..Default::default()
+                });
+                continue;
+            };
+            let class = self.class_of(item);
+            answer.assets.push(Asset {
+                assetid: Some(id),
+                classid: Some(class),
+                instanceid: Some(0),
+            });
+            let described = answer.descriptions.iter().any(|d| d.classid == Some(class));
+            if ask.descriptions && !described {
+                answer.descriptions.push(description(item, class));
+            }
+        }
+        answer
+    }
+
+    /// The class of items that share `item`'s market hash name.
+    fn class_of(&self, item: &HeldItem) -> u64 {
+        let first = self
+            .inventory
+            .iter()
+            .position(|i| i.market_hash_name == item.market_hash_name)
+            .unwrap_or_default();
+        1_000 + first as u64
+    }
+
     /// A new refresh token, unlike any before it.
     fn issue(&mut self) -> String {
         self.issued += 1;
         token::fake(STEAM_ID, now() + 200 * 24 * 60 * 60 + self.issued)
+    }
+}
+
+/// What Steam says items of `item`'s class are.
+fn description(item: &HeldItem, class: u64) -> ItemDescription {
+    ItemDescription {
+        classid: Some(class),
+        instanceid: Some(0),
+        tradable: Some(item.tradable),
+        name: Some(item.market_name.clone()),
+        market_name: Some(item.market_name.clone()),
+        market_hash_name: Some(item.market_hash_name.clone()),
+        marketable: Some(item.marketable),
+        tags: item
+            .tags
+            .iter()
+            .map(|(category, name)| ItemTag {
+                category: Some(category.clone()),
+                internal_name: Some(name.clone()),
+            })
+            .collect(),
+        market_fee_app: i32::try_from(item.market_fee_app).ok(),
     }
 }
 

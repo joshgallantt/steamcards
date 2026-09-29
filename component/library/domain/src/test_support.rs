@@ -1,15 +1,19 @@
 //! Doubles for other crates' tests. A double stands in for the contract, so
 //! no test needs Steam.
 
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use async_trait::async_trait;
 
 use crate::{
-    CardDrops, Game, LibraryError, LibraryRepository, LookAtGame, ReadLibrary, SteamLibrary,
+    CardAsset, CardDrops, DescribeCards, Game, LibraryError, LibraryRepository, LookAtGame,
+    ReadLibrary, SteamLibrary,
 };
 
 /// A game with `received` and `remaining` card drops and `hours` played,
@@ -25,6 +29,20 @@ pub fn game(app_id: u32, hours: f64, received: u32, remaining: u32) -> Game {
         },
         badge_level: 0,
         cards: Vec::new(),
+    }
+}
+
+/// A copy of `name` from `app_id`'s set, held as `asset_id`: not a foil,
+/// marketable and tradable, with the market hash name Steam would give it.
+pub fn card_asset(asset_id: u64, app_id: u32, name: &str) -> CardAsset {
+    CardAsset {
+        asset_id,
+        app_id,
+        name: name.to_owned(),
+        market_hash_name: format!("{app_id}-{name}"),
+        foil: false,
+        marketable: true,
+        tradable: true,
     }
 }
 
@@ -55,11 +73,23 @@ pub fn no_look(library: SteamLibrary) -> LookAtGame {
     })
 }
 
-/// A library held in memory.
+/// Describes items as `held` says: an ID among them is that card, and any
+/// other is unknown.
+pub fn fixed_cards(held: Vec<CardAsset>) -> DescribeCards {
+    Arc::new(move |asset_ids| {
+        let found = among(&held, &asset_ids);
+        tokio::spawn(async move { Ok(found) })
+    })
+}
+
+/// A library held in memory, and the cards the account holds.
 #[derive(Default)]
 pub struct InMemoryLibraryRepository {
     pub library: Mutex<SteamLibrary>,
-    /// Reads fail, as if steamcommunity.com were down.
+    /// The copies of cards the account holds. Anything else it holds isn't
+    /// a card, so it's never described.
+    pub assets: Mutex<Vec<CardAsset>>,
+    /// Everything fails, as if Steam were down.
     pub down: AtomicBool,
 }
 
@@ -67,8 +97,15 @@ impl InMemoryLibraryRepository {
     pub fn with(games: Vec<Game>) -> Self {
         Self {
             library: Mutex::new(SteamLibrary::new(games)),
+            assets: Mutex::default(),
             down: AtomicBool::new(false),
         }
+    }
+
+    /// Holding `assets` as well.
+    pub fn holding(self, assets: Vec<CardAsset>) -> Self {
+        *self.assets.lock().unwrap() = assets;
+        self
     }
 }
 
@@ -92,4 +129,21 @@ impl LibraryRepository for InMemoryLibraryRepository {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("no game {app_id}"))
     }
+
+    async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
+        if self.down.load(Ordering::Relaxed) {
+            anyhow::bail!("Steam didn't answer in time");
+        }
+        Ok(among(&self.assets.lock().unwrap(), asset_ids))
+    }
+}
+
+/// The cards in `held` with these asset IDs, each once, in the order asked.
+fn among(held: &[CardAsset], asset_ids: &[u64]) -> Vec<CardAsset> {
+    let mut seen = HashSet::new();
+    asset_ids
+        .iter()
+        .filter(|id| seen.insert(**id))
+        .filter_map(|id| held.iter().find(|a| a.asset_id == *id).cloned())
+        .collect()
 }

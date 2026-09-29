@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{Game, SteamLibrary};
+use crate::{CardAsset, Game, SteamLibrary};
 
 /// Where the library comes from. Declared here, beside the use cases that
 /// need it; the data layer is written to fit.
@@ -14,4 +14,9 @@ pub trait LibraryRepository: Send + Sync {
 
     /// One game looked at afresh: its drops, hours and card set.
     async fn game(&self, app_id: u32) -> anyhow::Result<Game>;
+
+    /// The trading cards among the account's items with these asset IDs,
+    /// each once, in the order asked. Other items (emoticons, backgrounds,
+    /// gems, booster packs) are left out, and so are IDs Steam doesn't know.
+    async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>>;
 }

@@ -102,7 +102,7 @@ The dashboard, top to bottom. At the large size the Now panel, the chosen game a
 | App 960910 · no badge yet | `Game.app_id`, `Game.badge_level` | exists |
 | The set · 2 of 5 cards · 1 spare | `Game::cards_collected()`, `Game::spares()`, `Game.cards.len()` | exists; `spares()` new |
 | Madison ×2, Scott ×1, Ethan — | `Card.owned` | exists (shown as a count, never a tick) |
-| NORMAL, FOIL | `SetPrices.normal`, `SetPrices.foil`, matched by `Card.market_hash_name` | new: market |
+| NORMAL, FOIL | `SetPrices.normal`, `SetPrices.foil`, matched to the set by the card's name | new: market |
 | 3 short of a badge: ≈ £0.15 to buy them | the cards with none owned, at their list prices | derived |
 | SELL NOW (details, L) | the order book of the chosen game's cards, fetched when its details open | new: market |
 | The set · not read yet | `Game.cards` is empty until the game's card page is read (`LookAtGame`) | exists |
@@ -1666,13 +1666,14 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `Game::cards_collected()`, `has_full_set()` | distinct cards owned; a badge can be crafted | "2 of 5 cards" | exists |
 | `Game::spares()`, `Game::missing()` | copies beyond one of each; cards with none | "1 spare", "3 short of a badge" | new (derived) |
 | `Card { name, owned }` | a card in a game's set, and how many the account has | the set: a count per card | exists |
-| `Card.market_hash_name: Option<String>` | the card's market name, read from `search/render` (research D1) | matching prices to the set | new |
 | `Card::spares()` | `owned` beyond one | the set's spare count | new (derived) |
-| `CardAsset { asset_id, context_id, app_id, name, market_hash_name, market_fee_app, foil, marketable, tradable, gained_at }` | one copy of a card the account holds (research §4.6) | which card dropped; later, exactly what `sellitem` needs | new |
+| `CardAsset { asset_id, app_id, name, market_hash_name, foil, marketable, tradable }` | one copy of a card the account holds (research §4.6) | which card dropped; later, exactly what `sellitem` needs | new |
 | `ReadLibrary`, `LookAtGame` | read the library; look at one game afresh, its set included | the queue; the set when a game's details open | exists |
 | `DescribeCards(asset_ids) -> Vec<CardAsset>` | describe new items with one CM call, `Econ.GetInventoryItemsWithDescriptions#1` (research §2.2) | identifying drops | new |
 
 `CardAsset` lives in `library`, beside `Card`: it's the account's own copy of a card. Both `farming` and `market` already depend on `library`, so neither needs the other.
+
+`Card` has no market hash name. Matching a set's cards to market prices is `market`'s job, by the card's name; a dropped copy's `CardAsset` carries its exact hash name.
 
 ### 6.2 farming (exists; gains the session)
 
@@ -1831,7 +1832,7 @@ Before listing, the checks Valve's page makes (research §4.1): a wallet currenc
 ### 8.1 Build order
 
 1. **Formatting and ladders, pure.** `tui/format.rs`: money per currency, durations, the estimate steps, clock forms. `tui/layout.rs`: `size_class(w, h)`, `right_width`, `queue_cols(inner)`, `header_ladder(state)`, the footer's hints, the chosen game's forms, `popup_area(kind, layout)`. Unit-tested on their own, as `hints` and `rule` are today.
-2. **library.** `Card.market_hash_name`, the derived methods (`drops_received`, `drops_total`, `games_done`, `spares`, `missing`), `CardAsset`, `DescribeCards`. `steam-api`: `unseen_items` in `ClientItemAnnouncements` (research §2.5), the Econ describe call.
+2. **library.** The derived methods (`drops_received`, `drops_total`, `games_done`, `spares`, `missing`), `CardAsset`, `DescribeCards`. `steam-api`: `unseen_items` in `ClientItemAnnouncements` (research §2.5), the Econ describe call.
 3. **farming.** `FarmingSession`, `Stretch`, `Drop` with `copy`, `DropCard`, `forecast()`, `hours_to_go()`, `set_aside` and `look_every` in `FarmingStatus`, `EventKind::Identified`. The session kept across runs of `FarmCards`.
 4. **market.** `Money`, `Currency`, `Wallet`, fees, `PriceQuote`, `Price`, `SetPrices`, `PriceBook`, `Basis`, `MarketSettings`, `MarketPause`, `Held`, `Estimate`, the pure valuations, and `test_support` doubles: fixed prices, pending prices, a paused queue, stale sets. Then `market-data`: the one market queue in `steam-api` (5 s gaps, the pause and its doubling, kept across restarts), `search/render`, `orderbook`, the wallet from CM message 5528.
 5. **View models** (below), each built fresh from domain state on every frame, as `Queue` is today.

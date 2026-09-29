@@ -1,13 +1,13 @@
 //! Steam, in Steam's own terms: a CM server connection, sign-in with a QR code
-//! the Steam app approves, playing games, and the badge pages on
-//! steamcommunity.com.
+//! the Steam app approves, playing games, the badge pages on
+//! steamcommunity.com, and the items in the account's inventory.
 //!
-//! No domain knowledge. The `account` and `farming` data crates map what this
-//! returns onto their domains; this crate never sees a domain type.
+//! No domain knowledge. The data crates map what this returns onto their
+//! domains; this crate never sees a domain type.
 //!
 //! Written from what the Steam client, SteamKit and ASF do (see
-//! docs/research/steam-card-farming.md); the messages are Valve's own, as
-//! SteamDatabase publishes them.
+//! docs/research/steam-card-farming.md and market-and-session.md); the
+//! messages are Valve's own, as SteamDatabase publishes them.
 
 pub mod auth;
 pub mod badges;
@@ -15,6 +15,7 @@ pub mod cm;
 mod community;
 mod directory;
 mod eresult;
+pub mod inventory;
 mod packet;
 mod proto;
 mod session;

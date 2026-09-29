@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tokio::task::JoinHandle;
 
-use crate::{Game, LibraryError, LibraryRepository, SteamLibrary};
+use crate::{CardAsset, Game, LibraryError, LibraryRepository, SteamLibrary};
 
 /// Reads the library in the background: games with drops left first, most
 /// played first, then finished ones, by name.
@@ -16,6 +16,13 @@ pub type ReadLibrary =
 /// Looks at one game afresh, in the background: its drops, hours and card
 /// set.
 pub type LookAtGame = Arc<dyn Fn(u32) -> JoinHandle<Result<Game, LibraryError>> + Send + Sync>;
+
+/// Says which cards new items are, in the background, by their asset IDs:
+/// each copy on its own, so a card that dropped twice comes back twice.
+/// Items that aren't trading cards are left out, and so are IDs Steam
+/// doesn't know.
+pub type DescribeCards =
+    Arc<dyn Fn(Vec<u64>) -> JoinHandle<Result<Vec<CardAsset>, LibraryError>> + Send + Sync>;
 
 pub fn read_library(repo: Arc<dyn LibraryRepository>) -> ReadLibrary {
     Arc::new(move || {
@@ -42,6 +49,17 @@ pub fn look_at_game(repo: Arc<dyn LibraryRepository>) -> LookAtGame {
         let repo = Arc::clone(&repo);
         tokio::spawn(async move {
             repo.game(app_id)
+                .await
+                .map_err(|e| LibraryError::Unavailable(e.to_string()))
+        })
+    })
+}
+
+pub fn describe_cards(repo: Arc<dyn LibraryRepository>) -> DescribeCards {
+    Arc::new(move |asset_ids| {
+        let repo = Arc::clone(&repo);
+        tokio::spawn(async move {
+            repo.describe(&asset_ids)
                 .await
                 .map_err(|e| LibraryError::Unavailable(e.to_string()))
         })

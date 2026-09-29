@@ -288,12 +288,98 @@ pub(crate) struct RevokeTokenRequest {
 #[derive(Clone, PartialEq, Message)]
 pub(crate) struct RevokeTokenResponse {}
 
+/// `CEcon_GetInventoryItemsWithDescriptions_Request`: items in an
+/// inventory, and what they are.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct GetInventoryItemsRequest {
+    #[prost(fixed64, optional, tag = "1")]
+    pub(crate) steamid: Option<u64>,
+    #[prost(uint32, optional, tag = "2")]
+    pub(crate) appid: Option<u32>,
+    #[prost(uint64, optional, tag = "3")]
+    pub(crate) contextid: Option<u64>,
+    #[prost(bool, optional, tag = "4")]
+    pub(crate) get_descriptions: Option<bool>,
+    #[prost(string, optional, tag = "5")]
+    pub(crate) language: Option<String>,
+    #[prost(message, optional, tag = "6")]
+    pub(crate) filters: Option<FilterOptions>,
+}
+
+/// `CEcon_GetInventoryItemsWithDescriptions_Request.FilterOptions`: which
+/// items. With no asset IDs, every one.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct FilterOptions {
+    /// Valve's files are proto2, where a repeated number isn't packed.
+    #[prost(uint64, repeated, packed = "false", tag = "1")]
+    pub(crate) assetids: Vec<u64>,
+}
+
+/// `CEcon_GetInventoryItemsWithDescriptions_Response`.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct GetInventoryItemsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub(crate) assets: Vec<Asset>,
+    /// One per class and instance of item, however many assets share it.
+    #[prost(message, repeated, tag = "2")]
+    pub(crate) descriptions: Vec<ItemDescription>,
+    /// Items asked for that Steam doesn't have.
+    #[prost(message, repeated, tag = "3")]
+    pub(crate) missing_assets: Vec<Asset>,
+}
+
+/// `CEcon_Asset`: one item in an inventory.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct Asset {
+    #[prost(uint64, optional, tag = "3")]
+    pub(crate) assetid: Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub(crate) classid: Option<u64>,
+    #[prost(uint64, optional, tag = "5")]
+    pub(crate) instanceid: Option<u64>,
+}
+
+/// `CEconItem_Description`: what items of one class and instance are.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ItemDescription {
+    #[prost(uint64, optional, tag = "2")]
+    pub(crate) classid: Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub(crate) instanceid: Option<u64>,
+    #[prost(bool, optional, tag = "9")]
+    pub(crate) tradable: Option<bool>,
+    #[prost(string, optional, tag = "14")]
+    pub(crate) name: Option<String>,
+    #[prost(string, optional, tag = "17")]
+    pub(crate) market_name: Option<String>,
+    #[prost(string, optional, tag = "18")]
+    pub(crate) market_hash_name: Option<String>,
+    #[prost(bool, optional, tag = "25")]
+    pub(crate) marketable: Option<bool>,
+    #[prost(message, repeated, tag = "26")]
+    pub(crate) tags: Vec<ItemTag>,
+    /// The app the publisher's share of a sale goes to: the game.
+    #[prost(int32, optional, tag = "28")]
+    pub(crate) market_fee_app: Option<i32>,
+}
+
+/// `CEconItem_Tag`: one of an item's tags, such as `item_class_2` in the
+/// category `item_class`.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ItemTag {
+    #[prost(string, optional, tag = "2")]
+    pub(crate) category: Option<String>,
+    #[prost(string, optional, tag = "3")]
+    pub(crate) internal_name: Option<String>,
+}
+
 /// The service methods steamcards calls, as Steam names them.
 pub(crate) mod method {
     pub(crate) const BEGIN_QR: &str = "Authentication.BeginAuthSessionViaQR#1";
     pub(crate) const POLL: &str = "Authentication.PollAuthSessionStatus#1";
     pub(crate) const GENERATE_ACCESS_TOKEN: &str = "Authentication.GenerateAccessTokenForApp#1";
     pub(crate) const REVOKE_TOKEN: &str = "Authentication.RevokeToken#1";
+    pub(crate) const GET_INVENTORY_ITEMS: &str = "Econ.GetInventoryItemsWithDescriptions#1";
 }
 
 /// Decodes a message body, saying which message didn't read.

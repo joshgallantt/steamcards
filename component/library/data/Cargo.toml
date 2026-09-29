@@ -1,6 +1,6 @@
 [package]
 name = "library-data"
-description = "The Steam library as the badge and card pages show it, written to fit the library domain's LibraryRepository."
+description = "The Steam library as the badge and card pages and the inventory show it, written to fit the library domain's LibraryRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,15 +1,15 @@
-//! The library as steamcommunity.com shows it, against stand-ins for Steam
-//! and the site.
+//! The library as steamcommunity.com and the inventory show it, against
+//! stand-ins for Steam and the site.
 
 use std::sync::Arc;
 
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use library::{Card, CardDrops, Game, LibraryRepository};
+use library::{Card, CardAsset, CardDrops, Game, LibraryRepository};
 use library_data::SteamLibraryRepository;
 use steam_api::{
     Session,
-    test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
+    test_support::{ACCOUNT, FakeSteam, HeldItem, STEAM_ID, token},
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -127,4 +127,50 @@ async fn a_games_own_page_has_its_card_set() {
         }
     );
     assert_eq!(cs.cards_collected(), 2);
+}
+
+#[tokio::test]
+async fn new_items_are_described_as_the_cards_they_are() {
+    let steam = FakeSteam::start().await;
+    steam.hold(vec![
+        HeldItem::card(31_001, 960_910, "Madison"),
+        HeldItem::card(31_002, 960_910, "Madison"),
+        HeldItem::foil(31_003, 960_910, "Scott (Foil)"),
+        HeldItem::other(31_004, 960_910, 4, ":origami:"),
+    ]);
+    let site = MockServer::start().await;
+    let repo = repository(&steam, &site, "describe").await;
+
+    let cards = repo
+        .describe(&[31_001, 31_002, 31_003, 31_004])
+        .await
+        .unwrap();
+
+    let madison = |asset_id| CardAsset {
+        asset_id,
+        app_id: 960_910,
+        name: "Madison".into(),
+        market_hash_name: "960910-Madison".into(),
+        foil: false,
+        marketable: true,
+        tradable: true,
+    };
+    let scott = CardAsset {
+        asset_id: 31_003,
+        app_id: 960_910,
+        name: "Scott".into(),
+        market_hash_name: "960910-Scott (Foil)".into(),
+        foil: true,
+        marketable: true,
+        tradable: true,
+    };
+    assert_eq!(
+        cards,
+        [madison(31_001), madison(31_002), scott],
+        "each copy on its own, and the emoticon left out"
+    );
+    assert!(
+        site.received_requests().await.unwrap().is_empty(),
+        "asked over the CM connection, not of the site"
+    );
 }

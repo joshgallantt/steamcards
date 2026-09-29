@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use library::{CardDrops, Game, LibraryRepository, SteamLibrary};
+use library::{CardAsset, CardDrops, Game, LibraryRepository, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 
 use crate::{FarmCards, PlayRepository, Signal};
@@ -235,6 +235,11 @@ impl LibraryRepository for InMemorySteam {
             .get(&app_id)
             .map(|f| f.game.clone())
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
+    }
+
+    /// Its drops are counts, not items: it holds no asset to describe.
+    async fn describe(&self, _asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
+        Ok(Vec::new())
     }
 }
 

@@ -4,11 +4,12 @@
 //! rejects the sign-in, both know at once.
 
 use std::{
+    collections::HashSet,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{anyhow, bail};
@@ -22,7 +23,9 @@ use crate::{
     badges::{BadgeGame, Seen, read_badge_page, read_game_cards_page, seen_by},
     cm::{Connection, LogOn, Refused},
     community::{Community, WebLogin},
-    directory, token,
+    directory,
+    inventory::{self, Described, InventoryItem},
+    token,
 };
 
 /// Badge pages read at most: 150 games each, so a very large library.
@@ -31,6 +34,10 @@ const MAX_PAGES: u32 = 100;
 const WEB_TOKEN_MARGIN: i64 = 5 * 60;
 /// CM servers tried, best first, before giving up on connecting.
 const SERVERS_TRIED: usize = 3;
+/// How long to wait before asking again about items Steam didn't describe:
+/// it can tell of a new item a moment before it can describe it. ASF waits
+/// as long before asking for its inventory again.
+const ASK_AGAIN_AFTER: Duration = Duration::from_secs(2);
 
 pub struct Session {
     store: Arc<dyn CredentialStore>,
@@ -59,7 +66,7 @@ impl Session {
     ) -> Self {
         let log = log.tagged("steam");
         let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap_or_default();
         Self {
@@ -234,7 +241,7 @@ impl Session {
             games.extend(read_badge_page(&html).games);
         }
         // A game can move to the next page while they're read.
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         games.retain(|g| seen.insert(g.app_id));
         for game in games.iter_mut().filter(|g| g.unsure) {
             let own = self.game_cards_as(&who, game.app_id).await;
@@ -253,6 +260,48 @@ impl Session {
         let path = |id: u64| format!("/profiles/{id}/gamecards/{app_id}?l=english");
         let (html, _) = self.page_as_owner(path).await?;
         Ok(read_game_cards_page(app_id, &html).game)
+    }
+
+    /// The account's community items with these asset IDs, as Steam
+    /// describes them over the CM connection: each once, in the order asked.
+    /// IDs Steam doesn't know are left out. Signs on first if need be.
+    ///
+    /// Any not described at first are asked about once more, a moment
+    /// later. If that fails, what the first ask found still stands.
+    pub async fn describe_items(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<InventoryItem>> {
+        let mut seen = HashSet::new();
+        let wanted: Vec<u64> = asset_ids
+            .iter()
+            .copied()
+            .filter(|id| seen.insert(*id))
+            .collect();
+        // An ask naming no items isn't filtered: it's the whole inventory.
+        if wanted.is_empty() {
+            return Ok(Vec::new());
+        }
+        let first = self.describe_once(&wanted).await?;
+        let mut found = first.items;
+        let late: Vec<u64> = wanted
+            .iter()
+            .copied()
+            .filter(|id| !found.contains_key(id))
+            .collect();
+        if !late.is_empty() {
+            self.log.line(&format!(
+                "items not described yet: {late:?} (missing: {:?}); asking again",
+                first.missing
+            ));
+            tokio::time::sleep(ASK_AGAIN_AFTER).await;
+            match self.describe_once(&late).await {
+                Ok(again) => found.extend(again.items),
+                Err(e) => self.log.line(&format!("describing {late:?} again: {e}")),
+            }
+        }
+        Ok(wanted.iter().filter_map(|id| found.remove(id)).collect())
+    }
+
+    async fn describe_once(&self, asset_ids: &[u64]) -> anyhow::Result<Described> {
+        inventory::describe(&*self.connection().await?, asset_ids).await
     }
 
     async fn game_cards_as(
