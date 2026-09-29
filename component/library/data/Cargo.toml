@@ -1,6 +1,6 @@
 [package]
-name = "farming-data"
-description = "Playing games on Steam's CM servers, written to fit the farming domain's PlayRepository."
+name = "library-data"
+description = "The Steam library as the badge and card pages show it, written to fit the library domain's LibraryRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,13 +12,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-farming.workspace = true
+library.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
-tokio.workspace = true
 
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
+tokio.workspace = true
+wiremock.workspace = true

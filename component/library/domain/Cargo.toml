@@ -1,0 +1,24 @@
+[package]
+name = "library"
+description = "The user's Steam library, as far as trading cards go: the games with cards, the cards in their sets, and the drops still to come."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Doubles for other crates' tests. Never depends on library-data.
+test-support = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+library = { path = ".", features = ["test-support"] }

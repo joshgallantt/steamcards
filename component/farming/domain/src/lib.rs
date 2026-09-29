@@ -1,17 +1,23 @@
-//! Farming: which of the user's games still drop cards, and playing them
-//! until they don't.
+//! Farming: playing the user's games so their trading cards drop — which
+//! games, in what order, one at a time or together to build hours, and
+//! stepping aside while another device plays.
 //!
-//! The rules of what gets played — ordering, playing several games at once
-//! to build hours, one at a time for cards, waiting while another device
-//! plays — live here once. How Steam is asked is the data layer's business,
-//! behind [`CardsRepository`] and [`PlayRepository`]. What the user wants
-//! comes from the `preferences` component, through its use case rather than
-//! its storage.
+//! It works through the [`library`] component's use cases (what can still
+//! drop) and the [`preferences`] component's (what the user wants first),
+//! never their storage. Playing is the data layer's business, behind
+//! [`PlayRepository`]. The numbers it runs on, and where each comes from,
+//! are in `rules.rs`.
 
-mod listing;
 mod model;
+mod ranking;
+mod reporter;
 mod repository;
+mod rules;
+mod use_cases;
 
-pub use listing::{ListGames, list_games};
-pub use model::{EventKind, FarmingEvent, FarmingStatus, Game, Library, Mode, Signal, Status};
-pub use repository::{CardsRepository, PlayRepository};
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
+pub use model::{EventKind, FarmingEvent, FarmingStatus, Mode, Signal, Status};
+pub use repository::PlayRepository;
+pub use use_cases::{FarmCards, farm_cards};

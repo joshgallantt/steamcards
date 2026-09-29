@@ -1,0 +1,14 @@
+steamcards
+Copyright (c) 2026 Josh Gallant
+Licensed under the MIT License (see LICENSE).
+
+How steamcards farms trading cards follows ArchiSteamFarm
+(https://github.com/JustArchiNET/ArchiSteamFarm), Copyright 2015-2026
+Łukasz "JustArchi" Domeradzki, licensed under the Apache License 2.0:
+the badge-page selectors (library/steam-api/src/badges.rs), and the farming
+rules and timings (component/farming/domain/src/rules.rs), including its list
+of sale-event app IDs. They were rewritten in Rust for steamcards; no ASF
+source code is included.
+
+Steam's message definitions follow Valve's own .proto files, as published by
+SteamDatabase (https://github.com/SteamDatabase/Protobufs).

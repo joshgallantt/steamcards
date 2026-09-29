@@ -23,8 +23,16 @@ done, and move it into a numbered section if it grows.
       phone, approves steamcards. No password is ever typed in. "Sign in
       with Steam" in a browser only tells a site who you are, so it can't
       sign steamcards on to Steam.
-- [ ] Appear offline while farming, as an option, on by default. Steam
+- [x] Appear offline while farming, as an option, on by default. Steam
       counts the games either way; offline, friends don't see them.
+- [x] Cross-check ASF's farming against the other farmers and Steam's own
+      pages (2026-09-29): see the research doc. Agreed on one game at a time
+      for drops, 3 hours, 32 together only to build hours.
+- [x] Build the domain from its entities: `SteamLibrary`, `Game`, `Card`, in a
+      `library` component that farming works through.
+- [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
+      steamctl): disputed, ASF calls it a glitch. Maybe later, opt-in, if
+      measured.
 
 ---
 
@@ -51,20 +59,21 @@ done, and move it into a numbered section if it grows.
 - [x] Tests against a fake CM server and a local stand-in for the community
       site. No test talks to Steam.
 
-## 3. Components `[~]`
+## 3. Components `[x]`
 
 - [x] `account`: get, refresh, link (QR) and unlink the one Steam account.
 - [x] `preferences`: priority games (ranked), skipped games, "only priority",
       "appear online".
-- [~] `farming`: model, contracts, listing and the Steam data layer are
-      done; the algorithm waits on cross-checking ASF against the other
-      farmers. Starting point, ASF's algorithm. Games past the hours threshold farm one at
-      a time. Below it, up to 32 play together to build hours. Re-check every
-      15 minutes, or sooner when an item arrives. Pause while you're playing
-      elsewhere, and resume 60 seconds after you stop. Give up on a game after
-      10 hours without a drop. Plus `ListGames` for onboarding and the games
-      pop-up.
-- [ ] Acceptance tests on paused time, as streamdrops' mining tests do.
+- [x] `library`: the Steam library's games, their card drops and card sets,
+      read from the badge and card pages.
+- [x] `farming`: one game at a time for its cards once it has 3 hours;
+      below that, up to 32 together to build hours (counted locally, as the
+      badge pages lag). Look every 15 minutes, 5 with one drop left, and at
+      once when Steam says new items arrived. Wait while another device
+      plays, then a minute more. A game that drops nothing for 10 hours goes
+      behind the others. Sale-event badges are never played. Another session
+      taking over stops farming rather than fighting it.
+- [x] Acceptance tests on paused time, as streamdrops' mining tests do.
 
 ## 4. The TUI and headless mode `[ ]`
 

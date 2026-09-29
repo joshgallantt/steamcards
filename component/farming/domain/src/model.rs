@@ -1,41 +1,17 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
-
-/// A game with trading cards, as its badge shows it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Game {
-    pub app_id: u32,
-    pub name: String,
-    /// Hours on record.
-    pub hours: f64,
-    /// Card drops still to come from playing it.
-    pub cards_left: u32,
-    /// Card drops so far.
-    pub cards_dropped: u32,
-}
-
-impl Game {
-    /// Every card that playing it drops has dropped.
-    pub fn is_done(&self) -> bool {
-        self.cards_left == 0
-    }
-
-    /// Every card playing it drops, dropped or not.
-    pub fn cards_total(&self) -> u32 {
-        self.cards_left + self.cards_dropped
-    }
-}
+use library::SteamLibrary;
 
 /// What the farmer is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Status {
     #[default]
     Idle,
-    /// Reading the badges, or connecting.
+    /// Reading the library, or connecting.
     Checking,
     Farming,
-    /// Another device is playing on this account; farming waits for it.
+    /// Another device is playing on the account; farming waits for it.
     Blocked,
     Error,
 }
@@ -55,26 +31,28 @@ impl fmt::Display for Status {
 /// How the games being played are farmed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// One game at a time, until its cards have dropped.
+    /// One game on its own, until its cards have dropped.
     Cards,
-    /// Several at once, building up hours before their cards start to drop.
+    /// Several together, building up hours until their cards can drop.
     Hours,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FarmingStatus {
     pub status: Status,
+    /// The library as the farmer sees it: hours counted as they're played,
+    /// drops as they land.
+    pub library: SteamLibrary,
+    /// The games the farmer means to farm, by app ID, in the order it will.
+    pub order: Vec<u32>,
     /// What's being played now.
     pub playing: Vec<u32>,
     /// How what's being played is farmed; `None` when nothing is.
     pub mode: Option<Mode>,
-    /// Every game with cards, in the order they'll be farmed; finished and
-    /// unwanted ones after.
-    pub games: Vec<Game>,
     /// While blocked: what the other device is playing, when Steam says.
     pub blocked_by: Option<u32>,
     /// When the farmer next looks at the cards.
-    pub next_check: Option<DateTime<Utc>>,
+    pub next_look: Option<DateTime<Utc>>,
     pub note: String,
 }
 
@@ -83,11 +61,11 @@ pub struct FarmingStatus {
 pub enum EventKind {
     #[default]
     Info,
-    /// Routine checks.
+    /// Routine looks at the cards.
     Progress,
     /// Started playing something.
     Playing,
-    /// Moved on to something else.
+    /// Moved on to something else before it was done.
     Switched,
     /// A card dropped.
     Dropped,
@@ -105,21 +83,16 @@ pub struct FarmingEvent {
 /// Something Steam said that the farmer acts on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Signal {
-    /// Another device started playing on this account (what, when Steam
-    /// says): nothing here counts as played until it stops.
+    /// Another device started playing on the account (what, when Steam
+    /// says): nothing played here counts until it stops.
     Blocked(Option<u32>),
     /// It stopped.
     Unblocked,
     /// New items arrived: a card may have dropped.
     NewItems,
+    /// Another session signed on in this one's place. Signing on again would
+    /// knock that one off in turn.
+    Replaced,
     /// The connection to Steam went, for this reason.
     Lost(String),
-}
-
-/// Every game with cards, for browsing, whether farming has started or not.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Library {
-    pub games: Vec<Game>,
-    /// Why they couldn't be listed, when they couldn't.
-    pub failed: Option<String>,
 }

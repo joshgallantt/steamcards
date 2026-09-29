@@ -13,8 +13,12 @@ members = [
     "component/preferences/domain",
     "component/preferences/data",
     "component/preferences/di",
+    "component/library/domain",
+    "component/library/data",
+    "component/library/di",
     "component/farming/domain",
     "component/farming/data",
+    "component/farming/di",
     "library/config-file",
     "library/debug-log",
     "library/steam-api",
@@ -76,16 +80,19 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # Domain
 account = { path = "component/account/domain" }
+library = { path = "component/library/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
+library-data = { path = "component/library/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
 
 # DI
 account-di = { path = "component/account/di" }
+library-di = { path = "component/library/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
 

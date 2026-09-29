@@ -1,112 +1,185 @@
 # Research: farming Steam trading cards
 
-Checked 2026-09-28. What the existing farmers do, which one to learn from,
-and what we build on in Rust.
+What the existing farmers do, what Steam itself says, and what steamcards
+does as a result. First checked 2026-09-28; the farming rules were
+cross-checked against five other farmers and Valve's pages on 2026-09-29.
 
 ---
 
 ## The field
 
-| Project | Stars | Last commit | Last release | Lang | Licence | Verdict |
+| Project | Last active | Licence | How it plays | What we took |
+| --- | --- | --- | --- | --- |
+| [ArchiSteamFarm](https://github.com/JustArchiNET/ArchiSteamFarm) (ASF) | 2026-09-28 | Apache-2.0 | Steam's CM servers, via SteamKit | The badge selectors, the two-phase algorithm, most timings. Credited in NOTICE. |
+| [Steam Game Idler](https://github.com/zevnda/steam-game-idler) (SGI) | 2026-09-25 | Elastic 2.0 (source-available) | CM servers via SteamKit, or Steamworks processes | Behaviour only, no code: the 3-hour default and one game at a time since 6.2.0, and not reconnecting after `LogonSessionReplaced`. |
+| [xPaw/Steam-Card-Farmer](https://github.com/xPaw/Steam-Card-Farmer) | 2026-09-19 | MIT | CM via node-steam-user | Staying offline by never setting a persona state; a distinct login ID. |
+| [steamctl](https://github.com/ValvePython/steamctl) `idle-cards` | 2020-12 | MIT | CM via the Python `steam` lib | Waiting while the account plays elsewhere. |
+| [Steam Tools NG](https://github.com/calendulish/steam-tools-ng) | 2024-11 | GPL-3.0 | Steamworks processes | Nothing new. |
+| [Idle Master](https://github.com/jshackles/idle_master) / [Extended](https://github.com/JonasNilson/idle_master_extended) | archived | GPL-2.0 | Steamworks processes (`steam-idle.exe`) | The 5-minute look when one drop is left. |
+| [SteamKit](https://github.com/SteamRE/SteamKit) | 2026-09-16 | LGPL-2.1 | — | Protocol knowledge: message numbers, `EResult`s, `EOSType`s. |
+| [steam-vent](https://codeberg.org/steam-vent/steam-vent) | 2026-06-28 | MIT | — | A reference for the CM handshake. steamcards has its own client instead of depending on it. |
+| [SteamDatabase/Protobufs](https://github.com/SteamDatabase/Protobufs) | — | — | — | Valve's own `.proto` files: every message's fields and numbers. |
+
+Farmers that run Steamworks processes need the Steam client running and
+signed in. The CM ones, ASF's approach and steamcards', need nothing but a
+sign-in: Steam is simply told which games are being played.
+
+---
+
+## Signing in: a QR code, and nothing else
+
+The Steam app on the user's phone, already signed in, scans a QR code and
+approves steamcards. No password is ever typed in. This is how the Steam
+client's own sign-in screen works (and ASF's `LoginWithQrCode`):
+
+1. On a CM connection that isn't signed on, call
+   `Authentication.BeginAuthSessionViaQR#1` as a Steam client
+   (`platform_type` 1, `website_id` "Client", device name "steamcards").
+2. Show `challenge_url` as a QR code.
+3. Poll `Authentication.PollAuthSessionStatus#1` every `interval` seconds. It
+   may send a `new_challenge_url` (show it instead) and
+   `had_remote_interaction` (it's been scanned). It ends with a refresh
+   token, an access token and the account name.
+4. A code that expires unscanned is replaced; one that was scanned and then
+   ends wasn't approved.
+
+"Sign in with Steam" in a browser (OpenID) was considered and ruled out: it
+only tells a website which account someone has, and hands over nothing that
+can sign on to Steam or read the badges.
+
+**Signing on.** `ClientLogon` takes the refresh token in its `access_token`
+field, with a login ID kept across sign-ins (so Steam sees one computer) and
+the OS as SteamKit's `EOSType` (macOS `-102`, Linux `-203`). Refresh tokens
+last about 200 days.
+
+**steamcommunity.com.** `Authentication.GenerateAccessTokenForApp#1` turns
+the refresh token into a token for the site; Steam may renew the refresh
+token at the same time, and the old one then stops working, so it's saved.
+The site takes it as a cookie, `steamLoginSecure = "{steamid64}||{token}"`,
+with a random `sessionid`. A page shown with `g_steamID = false` means the
+token wasn't taken: make a new one, once.
+
+**Signing out** revokes the refresh token (`Authentication.RevokeToken#1`),
+as signing out of the Steam client does.
+
+---
+
+## The library: games, card drops, cards
+
+**Badge pages** (`/profiles/{id}/badges?l=english&p=N`, ASF's selectors, which
+ASF keeps in step with Steam's site):
+
+- a row is `div.badge_row_inner`; one without `div.card_drop_info_dialog`
+  is a badge that isn't a game's, and is skipped;
+- the app ID is the dialog's id, split on `_`, fifth part;
+- drops left: the number in `span.progress_info_bold` ("No card drops
+  remaining" has none);
+- drops so far: `div.card_drop_info_header` ("Card drops received: 2");
+- hours: `div.badge_title_stats_playtime`;
+- name: the last `div.card_drop_info_body` ("…by playing Portal 2.");
+- the page count: the last `a.pagelink`.
+
+Idle Master reads the app ID from the row's `a.badge_row_overlay` link
+instead, and SGI from its `steam://run/` link: fallbacks if the dialog ever
+goes.
+
+**A game's own card page** (`/gamecards/{appid}?l=english`) has the same
+drop count, and the card set: each child of `div.badge_card_set_cards` whose
+class starts `badge_card_set_card`, marked `unowned` when the account has
+none, with its quantity in `div.badge_card_set_text_qty` (ASF's
+`GetCardCountForGame` uses the same selector). Team Fortress 2, Dota 2 and
+Counter-Strike 2 (440, 570, 730) can show "no drops" on the badge page when
+they have some: look at their own page (ASF's `UntrustedAppIDs`).
+
+**Being polite:** 300 ms between requests (ASF's `WebLimiterDelay`), a 429
+or 5xx asked again with a back-off, and a page that didn't load is never
+taken to mean "no drops left".
+
+---
+
+## What Steam itself says
+
+- **Valve's Trading Cards FAQ:** cards come from playing; about half a set
+  drops; free-to-play games give a drop per roughly $9 spent. Nothing about
+  hours, playing several games at once, or appearing offline.
+- **Steamworks:** each game's developer sets the playtime a card takes. This
+  is the only official timing rule found.
+- **No drops, ever:** limited accounts; games marked private; free
+  promotional copies; free-to-play games without purchases; family-shared
+  games (only the owner gets drops); games Valve hasn't yet enabled cards
+  for.
+- **The "2 hours before drops" rule** was never documented by Valve. It
+  appeared in 2015 around refunds; ASF made it 3 hours in 2017, and every
+  farmer since treats it as an observation.
+
+---
+
+## Farming: where the farmers agree, and where they don't
+
+| | ASF | SGI | xPaw | steamctl | STNG | Idle Master |
 | --- | --- | --- | --- | --- | --- | --- |
-| [JustArchiNET/ArchiSteamFarm](https://github.com/JustArchiNET/ArchiSteamFarm) | 13.7k | 2026-09-28 | 6.3.10.3 (2026-09-26) | C# | Apache-2.0 | **The reference.** Actively maintained. Logic may be ported with attribution. |
-| [zevnda/steam-game-idler](https://github.com/zevnda/steam-game-idler) | 741 | 2026-09-25 | 6.2.7 | TS (Tauri) | Elastic 2.0 | Source-available, not open source. Don't copy from it. |
-| [xPaw/Steam-Card-Farmer](https://github.com/xPaw/Steam-Card-Farmer) | 61 | 2026-09-19 (dependabot) | v3.0.0 (2020) | TS/Node | MIT | Effectively dormant. |
-| [SteamRE/SteamKit](https://github.com/SteamRE/SteamKit) | 3.2k | 2026-09-16 | — | C# | LGPL-2.1 | ASF's protocol layer. Port ideas, not code. |
-| [DoctorMcKay/node-steam-session](https://github.com/DoctorMcKay/node-steam-session) | 198 | 2025-12 | — | JS | MIT | A clean reference for the QR flow. |
-| [steam-vent](https://codeberg.org/steam-vent/steam-vent) | — | 2026-06-28 | 0.5.0 (2026-04) | Rust | MIT | **The only serious Rust CM client.** The GitHub mirror is archived, so use Codeberg. |
+| Hours before a game is farmed alone | 3 | 3 | 3 (180 min) | none | 2 | 2 |
+| Games at once, for drops | 1 | 1 (since 6.2.0) | up to 32 | up to 32 | up to 50 | 1 (default) |
+| Games at once, to build hours | up to 32 | up to 32 | up to 32 | — | — | up to 30 |
+| Stops and restarts games | no ("a glitch") | yes, every 5 min | yes | yes | yes | fast mode |
+| Looks for drops | every 15 min + on new items | every 5–8 min, every page | on new items, every 3 h | on new items | per game | every 15 min, 5 min with one left |
+| Playing elsewhere | stop; 60 s after | stop; 60 s after | stop; at once | wait | — | — |
 
-The `steam-farming` and `card-farming` GitHub topics hold only 0–9-star
-repos, some of which look like malware bait. Ignore them.
+**Agreed, and what steamcards does:**
 
----
+- Cards drop for one game at a time. ASF measures several at once as "close
+  to zero", and SGI switched to one at a time on 2026-08-06 after three weeks
+  of 32 at once.
+- Games short of the hours threshold are played together, up to 32 (Steam's
+  limit), until the one with the most hours gets there. The hours are
+  counted locally: the badge pages lag about half an hour.
+- The threshold is 3 hours (ASF, SGI, xPaw).
+- Look at the game being farmed every 15 minutes, as soon as Steam says new
+  items arrived, and every 5 minutes when one drop is left.
+- Stop while the account plays on another device, and carry on 60 seconds
+  after it stops. Announce nothing while blocked.
+- A session replaced by another with the same login (`LogonSessionReplaced`)
+  doesn't reconnect: SGI found its own clients knocking each other off
+  every couple of seconds.
+- Appear offline by default. ASF recommends it for main accounts, xPaw and
+  steamctl never go online, and all say playtime still counts.
 
-## Signing in with a QR code
+**Disputed, and left out:** stopping and restarting games to shake drops
+loose. SGI, xPaw, steamctl and Idle Master's fast mode do it; ASF calls it
+exploiting a Steam glitch that may break Steam's online conduct rules, and
+refuses. Nobody publishes measurements. It could come later as an opt-in
+experiment.
 
-steam-vent can log in with credentials or a refresh token, but it has no QR
-helper. We add one, as ASF does (`Steam/Bot.cs`, `LoginWithQrCode`):
+**steamcards' own choices:**
 
-1. On the unauthenticated CM connection, call
-   `Authentication.BeginAuthSessionViaQR#1` with a device friendly name and
-   `platform_type = SteamClient`.
-2. Draw `challenge_url` as a QR code, the same way streamdrops draws Twitch's.
-   The user scans it in the Steam mobile app.
-3. Poll `Authentication.PollAuthSessionStatus#1` every `interval` seconds.
-   It may return a `new_challenge_url`: redraw the QR. It finishes with
-   `refresh_token`, `access_token` and `account_name`.
-4. Save the refresh token. It lasts about 200 days.
-5. Log on to the CM with `login_with_refresh_token`. ClientLogon takes the
-   refresh token in its `access_token` field.
+- **Order:** the user's priority games first, then games whose cards can drop
+  now, fewest drops left first (SGI's order: games finish sooner), then games
+  building hours, most hours first. A priority game still short of the
+  threshold leads the group building hours.
+- **A game that drops nothing** for 10 hours (ASF's `MaxFarmingTime`) goes
+  behind the others; the second time, it's left alone until the next run,
+  with a hint at why (family-shared, free-to-play, private).
+- **Sale-event badges** (ASF's `SalesBlacklist`) are never played: those
+  cards come from taking part in a sale.
+- **With nothing to farm,** sign off, and look again every 8 hours (ASF's
+  `IdleFarmingPeriod`) or as soon as the user's choices change.
 
-**Web session, for scraping badges.** Call
-`Authentication.GenerateAccessTokenForApp#1` with the refresh token. Steam
-may rotate the refresh token here, and a rotated one must be saved. Then set
-cookies on `steamcommunity.com`:
+All of these are named, with their sources, in
+`component/farming/domain/src/rules.rs`.
 
-- `steamLoginSecure = "{steamid64}||{access_token}"`
-- a random `sessionid`
-
-There is no separate web login. Refresh the access token about 5 minutes
-before the JWT's `exp`.
-
----
-
-## Finding games with drops left (`Steam/Cards/CardsFarmer.cs`)
-
-- Fetch `https://steamcommunity.com/profiles/{id}/badges?l=english&p=N`. The
-  page count comes from the last `a.pagelink`.
-- For each `div.badge_row_inner`:
-  - **appID:** the id of `div.card_drop_info_dialog`, split on `_`, index 4
-  - **drops remaining:** the digits in `span.progress_info_bold`; missing means 0
-  - **hours:** `div.badge_title_stats_playtime`
-  - **badge level:** `div.badge_info_description > div`
-- Re-check a single game at `/gamecards/{appid}?l=english` after each farming
-  period. AppIDs 440, 570 and 730 are unreliable on the badge page, so always
-  re-check those individually.
-- Rescan every badge page every 8 hours, after each full loop, and when a new
-  item notification arrives.
-
----
-
-## Farming algorithm
-
-Send `CMsgClientGamesPlayed` (ASF uses `EMsg.ClientGamesPlayedWithDataBlob`)
-with up to **32** app IDs. That is Steam's limit.
-
-- **Simple** (no hours threshold): play one game until it has no drops left.
-- **Complex** (ASF's default, with a threshold of 3 hours):
-  1. Play each game already past the threshold, one at a time.
-  2. Play up to 32 below the threshold together, highest hours first, until
-     they cross it.
-  3. Go back to step 1.
-- Re-check every 15 minutes, or sooner when Steam's items notification
-  arrives (`UserNotifications`).
-- Give up on a game after 10 hours with no progress.
-- **Order:** the user's priority list first, then a sort such as most drops
-  left, fewest hours or name. This maps directly onto streamdrops' priority
-  games.
-- **Refund guard:** skip games owned for under 14 days with under 2 hours
-  played, so farming doesn't cost the user their refund.
-- **Playing elsewhere:** `PlayingSessionState { playing_blocked }` means the
-  user is playing on another device. Stop farming. When they finish, wait 60
-  seconds before resuming so we don't kick them off.
-
-## Being polite to Steam
-
-- Leave 300 ms between web requests to a domain.
-- Leave 10 s between logins.
-- Retry with backoff. Treat a 429 as "slow down", not as failure.
-- Stop after repeated `AccessDenied` or an invalid token, and ask the user to
-  sign in again.
-- Use a stable machine name and login ID for the persistent session. Scrape
-  with `l=english`.
+**Later, maybe:** the threshold as a setting (0 for accounts that aren't held
+back); telling such an account apart on its own (a card that drops before 3
+hours); a refund guard (skip games bought in the last 14 days with under 2
+hours played, which needs purchase dates).
 
 ---
 
 ## Licensing
 
-- ASF is Apache-2.0. Porting its logic, such as the selectors and the
-  algorithm, is fine with a NOTICE and credit.
-- SteamKit is LGPL: learn from it, don't copy it.
-- steam-game-idler is Elastic 2.0: don't copy it.
-- steam-vent is MIT, the same as this project.
+- ASF is Apache-2.0: its selectors, rules and timings are ported with
+  credit, in NOTICE.
+- SGI is Elastic 2.0, Idle Master and Steam Tools NG are GPL: read for
+  behaviour and facts, nothing copied.
+- SteamKit is LGPL: message numbers and enum values are facts about Steam's
+  protocol, not its code.
+- steam-vent and xPaw's farmer are MIT, like steamcards.

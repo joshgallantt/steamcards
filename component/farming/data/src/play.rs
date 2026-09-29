@@ -95,6 +95,11 @@ impl PlayRepository for SteamPlayRepository {
                 Ok(Event::PlayingBlocked(_)) => return Signal::Unblocked,
                 Ok(Event::NewItems(n)) if n > 0 => return Signal::NewItems,
                 Ok(Event::NewItems(_)) => {}
+                Ok(Event::LoggedOff(EResult::LOGON_SESSION_REPLACED)) => {
+                    *news = None;
+                    self.on.lock().unwrap().take();
+                    return Signal::Replaced;
+                }
                 Ok(Event::LoggedOff(why)) => {
                     *news = None;
                     self.on.lock().unwrap().take();
@@ -116,9 +121,6 @@ fn signed_off(why: EResult) -> String {
     match why {
         EResult::LOGGED_IN_ELSEWHERE => {
             "Steam signed this session off: the account signed in elsewhere".into()
-        }
-        EResult::LOGON_SESSION_REPLACED => {
-            "Steam signed this session off: another steamcards took its place".into()
         }
         why => format!("Steam signed this session off ({why})"),
     }

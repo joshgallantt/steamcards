@@ -1,0 +1,19 @@
+[package]
+name = "farming-di"
+description = "Builds the farming use case over the Steam session."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+farming.workspace = true
+farming-data.workspace = true
+library.workspace = true
+preferences.workspace = true
+steam-api.workspace = true

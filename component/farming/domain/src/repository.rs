@@ -1,25 +1,13 @@
 use async_trait::async_trait;
 
-use crate::{Game, Signal};
+use crate::Signal;
 
-/// Which games have cards, and how many are left: the badges. Declared here,
-/// beside the use cases that need it; the data layer is written to fit.
-///
-/// Errors carry a reason fit to show the user.
-#[async_trait]
-pub trait CardsRepository: Send + Sync {
-    /// Every game with trading cards the account has, finished ones included.
-    async fn games(&self) -> anyhow::Result<Vec<Game>>;
-
-    /// One game's cards, looked at afresh.
-    async fn game(&self, app_id: u32) -> anyhow::Result<Game>;
-}
-
-/// Playing games on Steam. Declared here, beside the use case that needs it.
+/// Playing games on Steam. Declared here, beside the use case that needs it;
+/// the data layer is written to fit.
 #[async_trait]
 pub trait PlayRepository: Send + Sync {
     /// Plays exactly these games, signing on first if need be, and shows to
-    /// friends as online or not.
+    /// friends as online or not. Errs with a reason fit to show the user.
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()>;
 
     /// Stops playing, and signs off.

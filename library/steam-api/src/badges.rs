@@ -27,6 +27,17 @@ pub struct BadgeGame {
     pub badge_level: u8,
     /// The badge page may be wrong about it: ask the game's own card page.
     pub unsure: bool,
+    /// Its set of cards, and how many of each the account has: only a game's
+    /// own card page shows them, so empty from the badge pages.
+    pub cards: Vec<SetCard>,
+}
+
+/// A card in a game's set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetCard {
+    pub name: String,
+    /// How many the account has.
+    pub owned: u32,
 }
 
 /// One page of badges.
@@ -89,6 +100,7 @@ pub fn read_game_cards_page(app_id: u32, html: &str) -> GameCardsPage {
                 .unwrap_or(0),
             badge_level: level(root),
             unsure: false,
+            cards: set(root),
         }
     });
     GameCardsPage {
@@ -124,6 +136,7 @@ fn read_row(row: ElementRef<'_>) -> Option<BadgeGame> {
         cards_received,
         badge_level: level(row),
         unsure,
+        cards: Vec::new(),
     })
 }
 
@@ -145,6 +158,36 @@ fn name(stats: ElementRef<'_>, row: ElementRef<'_>) -> Option<String> {
         let title = title.trim_end_matches("View details").trim().to_owned();
         (!title.is_empty()).then_some(title)
     })
+}
+
+/// The cards in the set, as ASF finds them (`GetCardCountForGame`): each a
+/// child of the set whose class starts `badge_card_set_card`, marked
+/// `unowned` when the account has none. A card's name follows its quantity:
+/// `<div class="badge_card_set_text_qty">(2)</div>Atlas`.
+fn set(scope: ElementRef<'_>) -> Vec<SetCard> {
+    scope
+        .select(&sel(
+            "div[class='badge_card_set_cards'] > div[class^='badge_card_set_card']",
+        ))
+        .filter_map(|card| {
+            let label = first(card, "div[class^='badge_card_set_text']")?;
+            let qty = first(label, "div[class='badge_card_set_text_qty']").map(text);
+            let name = text(label);
+            let name = qty
+                .as_deref()
+                .and_then(|q| name.strip_prefix(q))
+                .unwrap_or(&name)
+                .trim()
+                .to_owned();
+            let unowned = card.value().classes().any(|c| c == "unowned");
+            let owned = if unowned {
+                0
+            } else {
+                qty.as_deref().and_then(digits).unwrap_or(1)
+            };
+            (!name.is_empty()).then_some(SetCard { name, owned })
+        })
+        .collect()
 }
 
 /// "Level 3, 300 XP" under the badge: 0 until one is crafted.

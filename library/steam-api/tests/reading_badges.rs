@@ -47,6 +47,7 @@ fn a_page_lists_each_games_cards_and_hours() {
     assert_eq!(portal.cards_received, 1);
     assert_eq!(portal.badge_level, 1);
     assert!(!portal.unsure);
+    assert!(portal.cards.is_empty(), "sets are on the games' own pages");
 
     let unplayed = game(&page.games, 413150);
     assert_eq!((unplayed.hours, unplayed.cards_left), (0.0, 4));
@@ -87,6 +88,22 @@ fn a_games_own_page_reads_the_same() {
     assert_eq!(cs.name, "Counter-Strike 2");
     assert_eq!((cs.hours, cs.cards_left), (350.1, 2));
     assert_eq!(cards.viewer, Some(STEAM_ID));
+    let set: Vec<(&str, u32)> = cs
+        .cards
+        .iter()
+        .map(|c| (c.name.as_str(), c.owned))
+        .collect();
+    assert_eq!(
+        set,
+        [
+            ("Anarchist", 2),
+            ("Balkan", 1),
+            ("FBI", 0),
+            ("Phoenix", 0),
+            ("SAS", 0)
+        ],
+        "the set, and how many of each"
+    );
     assert!(read_game_cards_page(1, "<html></html>").game.is_none());
 }
 
