@@ -19,7 +19,7 @@ use rand::Rng;
 use crate::{
     Endpoints,
     auth::{self, Approved},
-    badges::{BadgeGame, read_badge_page, read_game_cards_page, viewer},
+    badges::{BadgeGame, Seen, read_badge_page, read_game_cards_page, seen_by},
     cm::{Connection, LogOn, Refused},
     community::{Community, WebLogin},
     directory, token,
@@ -274,11 +274,12 @@ impl Session {
         for fresh in [false, true] {
             let who = self.web_login(fresh).await?;
             let html = self.community.page(&path(who.steam_id), &who).await?;
-            if viewer(&html) == Some(who.steam_id) {
-                return Ok((html, who));
+            match seen_by(&html) {
+                Seen::By(id) if id == who.steam_id => return Ok((html, who)),
+                seen => self.log.line(&format!(
+                    "steamcommunity.com didn't show the page as the account ({seen:?}); making a new token"
+                )),
             }
-            self.log
-                .line("steamcommunity.com showed the page signed out; making a new token");
         }
         bail!("steamcommunity.com wouldn't take the sign-in — it'll be tried again")
     }

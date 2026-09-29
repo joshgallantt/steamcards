@@ -205,13 +205,46 @@ fn level(scope: ElementRef<'_>) -> u8 {
 }
 
 /// The account the page was shown to, from the site's own script:
-/// `g_steamID = "7656…";`, or `g_steamID = false;` when signed out.
+/// `g_steamID = "7656…";`, or `g_steamID = false;` when signed out (xPaw's
+/// farmer checks for the same).
 pub(crate) fn viewer(html: &str) -> Option<u64> {
-    let at = html.find("g_steamID")?;
-    let rest = html[at + "g_steamID".len()..].trim_start();
-    let rest = rest.strip_prefix('=')?.trim_start().strip_prefix('"')?;
-    let id = &rest[..rest.find('"')?];
-    id.parse().ok().filter(|&id| id != 0)
+    match seen_by(html) {
+        Seen::By(id) => Some(id),
+        Seen::SignedOut | Seen::Unknown => None,
+    }
+}
+
+/// Who a page says it was shown to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Seen {
+    By(u64),
+    SignedOut,
+    /// The page doesn't say: not one of the site's usual pages.
+    Unknown,
+}
+
+pub(crate) fn seen_by(html: &str) -> Seen {
+    let Some(at) = html.find("g_steamID") else {
+        return Seen::Unknown;
+    };
+    let Some(rest) = html[at + "g_steamID".len()..]
+        .trim_start()
+        .strip_prefix('=')
+    else {
+        return Seen::Unknown;
+    };
+    let rest = rest.trim_start();
+    if rest.starts_with("false") {
+        return Seen::SignedOut;
+    }
+    let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+        return Seen::Unknown;
+    };
+    let rest = &rest[1..];
+    rest.find(quote)
+        .and_then(|end| rest[..end].parse().ok())
+        .filter(|&id| id != 0)
+        .map_or(Seen::Unknown, Seen::By)
 }
 
 fn sel(css: &str) -> Selector {
@@ -270,7 +303,15 @@ mod tests {
             viewer(r#"<script>g_steamID = "76561197960287930";</script>"#),
             Some(76_561_197_960_287_930)
         );
+        assert_eq!(
+            seen_by("<script>g_steamID='76561197960287930';</script>"),
+            Seen::By(76_561_197_960_287_930)
+        );
+        assert_eq!(
+            seen_by("<script>g_steamID = false;</script>"),
+            Seen::SignedOut
+        );
+        assert_eq!(seen_by("<html></html>"), Seen::Unknown);
         assert_eq!(viewer("<script>g_steamID = false;</script>"), None);
-        assert_eq!(viewer("<html></html>"), None);
     }
 }
