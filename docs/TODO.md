@@ -151,6 +151,11 @@ done, and move it into a numbered section if it grows.
 - [ ] The new screens, drawn on the foundations, each held to its mockup,
       and a check that nothing is cut off at any size (`docs/design/ui.md`,
       §8).
+- [x] The pop-ups and onboarding (2026-09-30): the game's details, this
+      session's cards, the market, games & settings, the account, signing
+      in, the log, help and quitting, each over whole panels with what's
+      behind faded; the Start step sizing up the job; the Welcome whole at
+      60 × 16. Each mocked one held to its mockup.
 - [x] Review the domain and data adversarially (2026-09-30): three
       reviewers, on fidelity to the spec, Steam's own behaviour and the
       engineering. Fixed: each drop is checked against its game's counts,

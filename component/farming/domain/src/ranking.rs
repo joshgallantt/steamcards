@@ -42,11 +42,10 @@ pub(crate) fn can_drop(game: &Game) -> bool {
 /// Left out: finished games; games the user doesn't want (skipped, or not a
 /// priority with "only priority" on); sale-event badges, which playing never
 /// drops; and games set aside too often this run.
-pub(crate) fn farm_order(
-    library: &SteamLibrary,
-    prefs: &Preferences,
-    set_aside: &[SetAside],
-) -> Vec<u32> {
+///
+/// Public so a screen can size up the job before farming starts, in the
+/// order the farmer will take it.
+pub fn farm_order(library: &SteamLibrary, prefs: &Preferences, set_aside: &[SetAside]) -> Vec<u32> {
     let aside = |g: &Game| {
         set_aside
             .iter()

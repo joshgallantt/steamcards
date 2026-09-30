@@ -199,6 +199,10 @@ pub(crate) struct Placed {
     pub(crate) keys: Option<ratatui::text::Line<'static>>,
     /// Lines below, out of sight: "15 more ↓ [PgDn]".
     pub(crate) below: usize,
+    /// How far down it's scrolled, kept within its lines, and how many lines
+    /// a page shows.
+    pub(crate) offset: usize,
+    pub(crate) page: usize,
 }
 
 /// Lays `lines` out in a pop-up over `area`, with its `keys`, scrolled
@@ -277,6 +281,8 @@ pub(crate) fn place(
         lines: shown,
         keys: keys_line,
         below,
+        offset,
+        page: avail,
     })
 }
 

@@ -503,7 +503,7 @@ fn facts_lines(g: &ChosenGame) -> Vec<Line<'static>> {
 
 /// The farm priority as radio buttons, each with its key, described as
 /// fully as the width allows: all three the same way.
-fn radio_rows(g: &ChosenGame, w: usize) -> Fits<Vec<Line<'static>>> {
+pub(crate) fn radio_rows(g: &ChosenGame, w: usize) -> Fits<Vec<Line<'static>>> {
     let priority = match g.tier {
         Tier::Priority(n) => format!("Priority #{n}"),
         _ => "Priority".to_owned(),
