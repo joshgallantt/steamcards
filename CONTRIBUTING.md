@@ -65,7 +65,7 @@ steamcards --headless --duration 3600  # stop after an hour (in seconds)
 
 ### Where your data is
 
-Your sign-in and choices are in one file, `config.json`, readable by your user only, in a folder of steamcards' own. The market's prices are kept beside it, in `prices.json`, and `STEAMCARDS_DEBUG=1` puts the debug log there too:
+Your sign-in and choices are in one file, `config.json`, in a folder of steamcards' own. The market's prices are kept beside it, in `prices.json`, and `STEAMCARDS_DEBUG=1` puts the debug log there too. All three are readable by your user only:
 
 | OS | Folder |
 | --- | --- |

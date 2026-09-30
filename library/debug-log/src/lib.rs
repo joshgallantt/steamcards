@@ -7,7 +7,7 @@
 //! environment.
 
 use std::{
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io::{self, Write},
     path::Path,
     sync::{Arc, Mutex},
@@ -27,14 +27,11 @@ impl DebugLog {
         Self::default()
     }
 
-    /// Appends to `path`. A file that can't be opened turns logging off rather
-    /// than stopping the app.
+    /// Appends to `path`, readable by its owner alone: the log holds what
+    /// Steam said about the account. A file that can't be opened turns
+    /// logging off rather than stopping the app.
     pub fn to_file(path: &Path) -> Self {
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .map_or_else(|_| Self::off(), Self::to)
+        open_private(path).map_or_else(|_| Self::off(), Self::to)
     }
 
     /// Standard error, on every OS. Only for when nothing owns the screen,
@@ -66,6 +63,31 @@ impl DebugLog {
             let _ = writeln!(out, "{} {ts} {msg}", self.tag);
         }
     }
+}
+
+/// Opens `path` to append to, readable and writable by its owner alone; one
+/// made before, with looser permissions, is tightened.
+#[cfg(unix)]
+fn open_private(path: &Path) -> io::Result<File> {
+    use std::{
+        fs::Permissions,
+        os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    };
+
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path)?;
+    file.set_permissions(Permissions::from_mode(0o600))?;
+    Ok(file)
+}
+
+/// Opens `path` to append to. Elsewhere than macOS and Linux, the folder's
+/// own permissions decide who can read it.
+#[cfg(not(unix))]
+fn open_private(path: &Path) -> io::Result<File> {
+    OpenOptions::new().create(true).append(true).open(path)
 }
 
 #[cfg(test)]
@@ -123,6 +145,28 @@ mod tests {
         let log = DebugLog::to_file(&nowhere);
         assert!(log.sink.is_none());
         log.line("dropped quietly");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn only_its_owner_can_read_the_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path =
+            std::env::temp_dir().join(format!("steamcards-private-{}.log", std::process::id()));
+        std::fs::write(&path, "from before\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        DebugLog::to_file(&path).line("hello");
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "a log from before is tightened too");
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .starts_with("from before\n")
+        );
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
