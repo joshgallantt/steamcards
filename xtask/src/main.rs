@@ -8,7 +8,7 @@
 //!   their own.
 //!   - `lint`: formatting, spelling and clippy;
 //!   - `test`: the tests (on every OS);
-//!   - `docs`: the docs;
+//!   - `docs`: the docs, and the README's screenshots;
 //!   - `deps`: unused dependencies, and the dependencies themselves.
 //! - `pre-commit`: what the git hook runs before every commit (formatting,
 //!   lints, tests).
@@ -16,6 +16,15 @@
 //! - `hooks`: makes git run this project's hooks, in `.githooks/`.
 //! - `tools [group]`: the tools a group's checks need (all of them, by
 //!   default), as `crate@version`, so CI installs the versions `setup` does.
+//! - `screenshots`: redraws the README's images of the TUI, in `docs/images/`.
+//!   With `--check` (one of the `ci` checks), fails if they're out of date.
+//! - `protect`: puts the rules for `main` and for tags (in `.github/rulesets/`)
+//!   on GitHub.
+//! - `release <patch | minor | major | X.Y.Z>`: publishes a release, from the
+//!   version bump to Homebrew. See `release/mod.rs`.
+//! - `release-notes <tag>`: a release's notes, for the release workflow.
+//! - `homebrew <tag>`: points the Homebrew formula at a published release,
+//!   as the release command does.
 //!
 //! Plain Rust, so it runs the same on Windows, macOS and Linux. A check that
 //! needs a tool that isn't installed is skipped, with a hint, except in CI.
@@ -26,6 +35,10 @@
     reason = "a command-line tool reports on the terminal"
 )]
 
+mod protect;
+mod release;
+mod screenshots;
+
 use std::{
     path::{Path, PathBuf},
     process::{Command, ExitCode},
@@ -35,7 +48,9 @@ use std::{
 /// The cargo that built this tool, so the checks use the same toolchain.
 const CARGO: &str = env!("CARGO");
 
-const USAGE: &str = "usage: cargo xtask <setup | ci | lint | test | docs | deps | pre-commit | fix | hooks | tools [group]>";
+const USAGE: &str = "usage: cargo xtask <setup | ci | lint | test | docs | deps | pre-commit | fix | \
+                     hooks | tools [group] | screenshots [--check] | protect | \
+                     release <patch | minor | major | X.Y.Z> | release-notes <tag> | homebrew <tag>>";
 
 /// A program a check runs that doesn't come with Rust.
 struct Tool {
@@ -125,6 +140,15 @@ const TEST: Step = Step {
     env: &[],
 };
 
+/// The README's images of the TUI are what it draws now. The previews that
+/// draw them run on a fixed clock, so this changes only when the UI does.
+const SCREENSHOTS: Step = Step {
+    name: "README screenshots",
+    tool: None,
+    args: &["xtask", "screenshots", "--check"],
+    env: &[],
+};
+
 const DOC: Step = Step {
     name: "docs",
     tool: None,
@@ -154,11 +178,11 @@ const DENY: Step = Step {
 /// tests on every OS, and the others once.
 const LINT: [Step; 3] = [FMT, TYPOS, CLIPPY];
 const TESTS: [Step; 1] = [TEST];
-const DOCS: [Step; 1] = [DOC];
+const DOCS: [Step; 2] = [DOC, SCREENSHOTS];
 const DEPS: [Step; 2] = [MACHETE, DENY];
 
 /// Everything CI checks, one group after another.
-const CI: [Step; 7] = [FMT, TYPOS, CLIPPY, TEST, DOC, MACHETE, DENY];
+const CI: [Step; 8] = [FMT, TYPOS, CLIPPY, TEST, DOC, SCREENSHOTS, MACHETE, DENY];
 
 /// A group of checks by name, as `cargo xtask <group>` and
 /// `cargo xtask tools <group>` take it.
@@ -211,6 +235,11 @@ fn main() -> ExitCode {
         Some("fix") => run(&FIX),
         Some("hooks") => hooks(),
         Some("tools") => tools(args.get(1).map_or("ci", String::as_str)),
+        Some("screenshots") => task(screenshots::run, &args[1..]),
+        Some("protect") => task(protect::run, &args[1..]),
+        Some("release") => task(release::run, &args[1..]),
+        Some("release-notes") => task(release::print_notes, &args[1..]),
+        Some("homebrew") => task(release::point_homebrew, &args[1..]),
         _ => {
             eprintln!("{USAGE}");
             false
@@ -433,6 +462,17 @@ fn tools(name: &str) -> bool {
         .collect();
     println!("{}", tools.join(","));
     true
+}
+
+/// Runs a task on the checkout, and reports what went wrong.
+fn task(run: fn(&Path, &[String]) -> Result<(), String>, args: &[String]) -> bool {
+    match workspace_root().and_then(|root| run(&root, args)) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("\n✗ {e}");
+            false
+        }
+    }
 }
 
 /// The checkout, as cargo gives it when it runs xtask: read when run rather

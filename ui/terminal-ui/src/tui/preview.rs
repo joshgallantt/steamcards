@@ -2,6 +2,10 @@
 // layouts can be checked (and eyeballed) without touching a real account:
 //
 //   cargo test -p terminal-ui previews -- --nocapture
+//
+// With PREVIEW_DUMP=<dir>, each screen's cells (symbol, colours, modifiers)
+// are also written there as JSON, for turning into the README's images
+// (`cargo xtask screenshots`).
 
 use std::sync::Arc;
 
@@ -23,7 +27,7 @@ use preferences::{
     Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
     test_support::InMemoryPreferencesRepository,
 };
-use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 
 use super::{App, Clock, LogView, LoginView, Overlay};
 use crate::viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding, Step};
@@ -291,7 +295,12 @@ fn render(app: &mut App, w: u16, h: u16) -> Buffer {
     t.backend().buffer().clone()
 }
 
-/// Prints the screen as text; returns the text for assertions.
+/// Prints the screen as text, and with PREVIEW_DUMP set writes its cells as
+/// JSON; returns the text for assertions.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "PREVIEW_DUMP switches a test harness, not the app"
+)]
 fn show(name: &str, buf: Buffer) -> String {
     let area = buf.area;
     let mut text = String::new();
@@ -303,6 +312,32 @@ fn show(name: &str, buf: Buffer) -> String {
         text.push('\n');
     }
     println!("\n━━━━ {name} ━━━━\n{text}");
+
+    if let Ok(dir) = std::env::var("PREVIEW_DUMP") {
+        let cells: Vec<Vec<serde_json::Value>> = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| {
+                        let c = &buf[(x, y)];
+                        serde_json::json!([
+                            c.symbol(),
+                            format!("{:?}", c.fg),
+                            format!("{:?}", c.bg),
+                            c.modifier.contains(Modifier::BOLD),
+                            c.modifier.contains(Modifier::REVERSED),
+                            c.modifier.contains(Modifier::DIM),
+                        ])
+                    })
+                    .collect()
+            })
+            .collect();
+        let slug: String = name
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        let json = serde_json::json!({ "name": name, "width": area.width, "height": area.height, "cells": cells });
+        std::fs::write(format!("{dir}/{slug}.json"), json.to_string()).unwrap();
+    }
     text
 }
 
@@ -682,4 +717,260 @@ async fn nothing_is_cut_off_at_any_size() {
             "details at {w}×{h}: what doesn't fit must say so"
         );
     }
+}
+
+// ── The README's screenshots ─────────────────────────────────────────────────
+//
+// A fuller library than the previews above, so the images look like a real
+// afternoon's farming. Made-up account; real games, with made-up prices.
+
+/// (app ID, name, hours, drops received, drops to come, a set's price in
+/// pence).
+const SHOWCASE: [(u32, &str, f64, u32, u32, i64); 27] = [
+    (960_910, "Heavy Rain", 4.0, 3, 1, 5),
+    (48_000, "LIMBO", 3.4, 3, 2, 6),
+    (457_140, "Oxygen Not Included", 3.4, 3, 2, 7),
+    (916_440, "Anno 1800", 3.5, 5, 3, 9),
+    (247_080, "Crypt of the NecroDancer", 3.4, 4, 3, 5),
+    (220_200, "Kerbal Space Program", 3.4, 4, 3, 6),
+    (414_700, "Outlast 2", 3.4, 4, 3, 5),
+    (1_118_200, "People Playground", 3.4, 4, 3, 4),
+    (
+        1_889_620,
+        "We Were Here Expeditions: The FriendShip",
+        8.7,
+        3,
+        3,
+        4,
+    ),
+    (610_370, "Desperados III", 3.4, 5, 4, 7),
+    (599_140, "Graveyard Keeper", 3.4, 5, 4, 5),
+    (1_446_780, "MONSTER HUNTER RISE", 3.4, 5, 4, 8),
+    (2_218_750, "Halls of Torment", 3.4, 6, 5, 4),
+    (1_313_140, "Cult of the Lamb", 3.4, 7, 6, 6),
+    (1_259_420, "Days Gone", 3.4, 7, 6, 9),
+    (860_510, "Little Nightmares II", 3.4, 8, 7, 6),
+    (1_102_190, "Monster Train", 3.4, 8, 7, 5),
+    (3_070_070, "TCG Card Shop Simulator", 2.2, 4, 2, 4),
+    (304_390, "FOR HONOR", 2.1, 6, 5, 5),
+    (1_336_490, "Against the Storm", 1.6, 6, 3, 6),
+    (1_332_010, "Stray", 1.4, 3, 1, 14),
+    (391_540, "Undertale", 0.7, 3, 3, 12),
+    (367_520, "Hollow Knight", 6.1, 4, 0, 9),
+    (1_092_790, "Inscryption", 6.5, 4, 0, 5),
+    (1_145_360, "Hades", 8.3, 4, 0, 8),
+    (504_230, "Celeste", 6.2, 4, 0, 6),
+    (557_600, "Gorogoa", 5.1, 3, 0, 4),
+];
+
+fn showcase_library() -> SteamLibrary {
+    SteamLibrary::new(
+        SHOWCASE
+            .iter()
+            .map(|&(app_id, name, hours, received, remaining, _)| {
+                let mut g = game(app_id, name, hours, received, remaining);
+                if app_id == 960_910 {
+                    g.cards = vec![
+                        card("Ethan", 0),
+                        card("Carter", 0),
+                        card("Madison", 2),
+                        card("Norman", 0),
+                        card("Scott", 1),
+                    ];
+                }
+                g
+            })
+            .collect(),
+    )
+}
+
+fn showcase_prices() -> PriceBook {
+    let mut book = PriceBook::default();
+    for &(app_id, _, _, _, _, pence) in &SHOWCASE {
+        let set = match app_id {
+            960_910 => set_prices(
+                app_id,
+                &[
+                    ("Ethan", 5),
+                    ("Carter", 4),
+                    ("Madison", 5),
+                    ("Norman", 6),
+                    ("Scott", 4),
+                ],
+                &[("Madison", 60)],
+                at(13, 0),
+            ),
+            1_145_360 => set_prices(
+                app_id,
+                &[("Zagreus", 8), ("Megaera", 7), ("Thanatos", 9), ("Nyx", 9)],
+                &[("Thanatos", 62)],
+                at(13, 0),
+            ),
+            367_520 => set_prices(
+                app_id,
+                &[("Hornet", 9), ("Zote", 7), ("The Knight", 11)],
+                &[],
+                at(13, 0),
+            ),
+            1_092_790 => set_prices(
+                app_id,
+                &[("Leshy", 6), ("Stoat", 5), ("Stinkbug", 5)],
+                &[],
+                at(13, 0),
+            ),
+            504_230 => set_prices(app_id, &[("Badeline", 6)], &[], at(13, 0)),
+            557_600 => set_prices(app_id, &[("The Boy", 4)], &[], at(13, 0)),
+            _ => set_prices(
+                app_id,
+                &[("A", pence), ("B", pence + 1), ("C", pence - 1)],
+                &[],
+                at(13, 0),
+            ),
+        };
+        book.sets.insert(app_id, set);
+    }
+    book
+}
+
+fn showcase_session() -> FarmingSession {
+    let named = |name: &str| DropCard::NameOnly {
+        name: name.into(),
+        foil: false,
+    };
+    let drop = |(h, m): (u32, u32), app_id: u32, card: DropCard, copy: Option<u32>| Drop {
+        at: at(h, m),
+        app_id,
+        card,
+        copy,
+    };
+    let stretch = |app_id: u32, from: (u32, u32), to: Option<(u32, u32)>| Stretch {
+        app_ids: vec![app_id],
+        mode: Mode::Cards,
+        from: at(from.0, from.1),
+        to: to.map(|(h, m)| at(h, m)),
+    };
+    FarmingSession {
+        started_at: at(7, 10),
+        drops: vec![
+            drop((7, 40), 367_520, named("Hornet"), Some(1)),
+            drop((8, 8), 367_520, named("Zote"), Some(1)),
+            drop((8, 37), 367_520, named("The Knight"), Some(1)),
+            drop((9, 11), 1_092_790, named("Leshy"), Some(1)),
+            drop((9, 39), 1_092_790, named("Stoat"), Some(1)),
+            drop((10, 16), 1_092_790, named("Stinkbug"), Some(1)),
+            drop(
+                (10, 54),
+                1_145_360,
+                hades_card(21, "Zagreus", false),
+                Some(1),
+            ),
+            drop(
+                (11, 26),
+                1_145_360,
+                hades_card(22, "Zagreus", false),
+                Some(2),
+            ),
+            drop(
+                (11, 58),
+                1_145_360,
+                hades_card(23, "Thanatos", true),
+                Some(1),
+            ),
+            drop((12, 31), 1_145_360, hades_card(24, "Nyx", false), Some(1)),
+            drop((12, 49), 504_230, named("Madeline"), Some(1)),
+            drop((13, 12), 504_230, named("Badeline"), Some(1)),
+            drop((13, 24), 557_600, named("The Boy"), Some(1)),
+            drop((13, 38), 557_600, named("The Fruit"), Some(1)),
+            drop((13, 57), 960_910, named("Madison"), Some(2)),
+            drop((14, 3), 960_910, DropCard::Identifying, None),
+        ],
+        stretches: vec![
+            stretch(367_520, (7, 10), Some((8, 37))),
+            stretch(1_092_790, (8, 38), Some((10, 16))),
+            stretch(1_145_360, (10, 17), Some((12, 31))),
+            stretch(504_230, (12, 32), Some((13, 12))),
+            stretch(557_600, (13, 13), Some((13, 38))),
+            stretch(960_910, (13, 39), None),
+        ],
+        ..Default::default()
+    }
+}
+
+/// Farming Heavy Rain, ranked first, with LIMBO next.
+fn showcase_app() -> App {
+    let prefs = Preferences {
+        priority_games: vec![960_910, 48_000],
+        ..Default::default()
+    };
+    let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
+    let get = get_preferences(repo.clone());
+    let accounts = fixed_account(cardfarmer());
+    let mut a = App::new(
+        Account::new(accounts.clone(), no_refresh(), recording_unlink().0),
+        Login::new(refusing_link()),
+        Farming::new(
+            idle_farmer(),
+            Arc::new(|| {}),
+            accounts.clone(),
+            get.clone(),
+            set_game_tier(repo.clone()),
+        ),
+        Games::new(
+            get,
+            set_game_tier(repo.clone()),
+            set_only_priority(repo.clone()),
+            set_appear_online(repo),
+        ),
+        Library::new(fixed_library(showcase_library())),
+        Onboarding::new(accounts),
+        Market::new(
+            fixed_prices(showcase_prices()),
+            Arc::new(|_| {}),
+            Arc::new(|_, _| tokio::spawn(async {})),
+            Arc::new(|_| tokio::spawn(async { Ok(()) })),
+            Arc::new(|| Some(pounds())),
+        ),
+    );
+    a.clock = CLOCK;
+    a.farming.start();
+    let library = showcase_library();
+    let order: Vec<u32> = library
+        .games()
+        .iter()
+        .filter(|g| g.has_drops_left())
+        .map(|g| g.app_id)
+        .collect();
+    a.status = Some(FarmingStatus {
+        status: Status::Farming,
+        library,
+        order,
+        playing: vec![960_910],
+        mode: Some(Mode::Cards),
+        next_look: Some(now() + chrono::Duration::minutes(4)),
+        session: showcase_session(),
+        ..Default::default()
+    });
+    a.push_log(
+        EventKind::Identified,
+        "Madison dropped for Heavy Rain (a 2nd copy)".into(),
+    );
+    a.push_log(
+        EventKind::Dropped,
+        "A card dropped for Heavy Rain — 1 to go".into(),
+    );
+    a.selected = Some(960_910);
+    a
+}
+
+/// The README's images: `cargo xtask screenshots` draws them from these.
+#[tokio::test]
+async fn readme_previews() {
+    let mut a = showcase_app();
+    let dashboard = show("readme: dashboard 146×31", render(&mut a, 146, 31));
+    assert!(dashboard.contains("farming Heavy Rain") && dashboard.contains("Zagreus, 2nd"));
+    assert!(dashboard.contains("★ Thanatos"));
+
+    a.overlay = Some(Overlay::Detail { scroll: 0 });
+    let details = show("readme: a game's details 120×34", render(&mut a, 120, 34));
+    assert!(details.contains("Madison") && details.contains("×2"));
 }

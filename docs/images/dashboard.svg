@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="585" viewBox="0 0 1254.4 585.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve">
+<rect width="1254.4" height="585.0" rx="10" fill="#1a1b26"/>
+<path d="M0 10a10 10 0 0 1 10-10h1234.4a10 10 0 0 1 10 10v20.0h-1254.4z" fill="#16161e"/>
+<circle cx="20.0" cy="15.0" r="6" fill="#ff5f56"/>
+<circle cx="40.0" cy="15.0" r="6" fill="#ffbd2e"/>
+<circle cx="60.0" cy="15.0" r="6" fill="#27c93f"/>
+<text x="627.2" y="20.0" text-anchor="middle" fill="#565f89">steamcards</text>
+<g shape-rendering="crispEdges">
+<rect x="14.0" y="44.0" width="100.8" height="17" fill="#bb9af7"/>
+<rect x="1164.8" y="44.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="30.8" y="129.0" width="705.6" height="17" fill="#89b4fa"/>
+<rect x="22.4" y="554.0" width="33.6" height="17" fill="#a9b1d6"/>
+<rect x="140.0" y="554.0" width="58.8" height="17" fill="#a9b1d6"/>
+<rect x="291.2" y="554.0" width="42.0" height="17" fill="#a9b1d6"/>
+<rect x="400.4" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="492.8" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="660.8" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="778.4" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="879.2" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="963.2" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="1064.0" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+<rect x="1156.4" y="554.0" width="25.2" height="17" fill="#a9b1d6"/>
+</g>
+<path d="M22.40 103.50Q18.20 103.50 18.20 107.70V112.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M744.80 103.50Q749.00 103.50 749.00 107.70V112.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M761.60 103.50Q757.40 103.50 757.40 107.70V112.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M1232.00 103.50Q1236.20 103.50 1236.20 107.70V112.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M22.40 528.50Q18.20 528.50 18.20 524.30V520.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M744.80 528.50Q749.00 528.50 749.00 524.30V520.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M761.60 528.50Q757.40 528.50 757.40 524.30V520.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<path d="M1232.00 528.50Q1236.20 528.50 1236.20 524.30V520.00" fill="none" stroke="#565f89" stroke-width="1.3"/>
+<rect x="140.00" y="85.20" width="310.80" height="2.60" fill="#9ece6a"/>
+<rect x="450.80" y="85.85" width="193.20" height="1.30" fill="#565f89"/>
+<rect x="81.20" y="102.85" width="579.60" height="1.30" fill="#565f89"/>
+<rect x="879.20" y="102.85" width="193.20" height="1.30" fill="#565f89"/>
+<rect x="22.40" y="527.85" width="722.40" height="1.30" fill="#565f89"/>
+<rect x="761.60" y="527.85" width="470.40" height="1.30" fill="#565f89"/>
+<rect x="17.55" y="112.00" width="1.30" height="408.00" fill="#565f89"/>
+<rect x="630.75" y="554.00" width="1.30" height="17.00" fill="#565f89"/>
+<rect x="748.35" y="112.00" width="1.30" height="408.00" fill="#565f89"/>
+<rect x="756.75" y="112.00" width="1.30" height="408.00" fill="#565f89"/>
+<rect x="1235.55" y="112.00" width="1.30" height="408.00" fill="#565f89"/>
+<text x="22.4" y="57.0" textLength="84.0" lengthAdjust="spacing" fill="#1a1b26" font-weight="bold">steamcards</text>
+<text x="131.6" y="57.0" textLength="75.6" lengthAdjust="spacing" fill="#9ece6a">● farming</text>
+<text x="215.6" y="57.0" textLength="84.0" lengthAdjust="spacing" fill="#9ece6a" font-weight="bold">Heavy Rain</text>
+<text x="308.0" y="57.0" textLength="151.2" lengthAdjust="spacing" fill="#565f89">· next check in 4m</text>
+<text x="904.4" y="57.0" textLength="84.0" lengthAdjust="spacing" fill="#c0caf5">cardfarmer</text>
+<text x="996.8" y="57.0" textLength="142.8" lengthAdjust="spacing" fill="#565f89">· appears offline</text>
+<text x="1173.2" y="57.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">?</text>
+<text x="1198.4" y="57.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">help</text>
+<text x="22.4" y="74.0" textLength="100.8" lengthAdjust="spacing" fill="#565f89">This session</text>
+<text x="140.0" y="74.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5" font-weight="bold">16 cards</text>
+<text x="215.6" y="74.0" textLength="8.4" lengthAdjust="spacing" fill="#565f89">·</text>
+<text x="232.4" y="74.0" textLength="50.4" lengthAdjust="spacing" fill="#9ece6a" font-weight="bold">£1.45+</text>
+<text x="324.8" y="74.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">To go</text>
+<text x="383.6" y="74.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5" font-weight="bold">80 cards</text>
+<text x="459.2" y="74.0" textLength="210.0" lengthAdjust="spacing" fill="#565f89">· 22 games · about 2 days</text>
+<text x="22.4" y="91.0" textLength="75.6" lengthAdjust="spacing" fill="#565f89">All games</text>
+<text x="660.8" y="91.0" textLength="84.0" lengthAdjust="spacing" fill="#c0caf5">125 of 205</text>
+<text x="753.2" y="91.0" textLength="109.2" lengthAdjust="spacing" fill="#565f89">· when done ≈</text>
+<text x="870.8" y="91.0" textLength="50.4" lengthAdjust="spacing" fill="#9ece6a" font-weight="bold">£6.43+</text>
+<text x="30.8" y="108.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5" font-weight="bold">Games</text>
+<text x="669.2" y="108.0" textLength="67.2" lengthAdjust="spacing" fill="#565f89">22 to go</text>
+<text x="770.0" y="108.0" textLength="100.8" lengthAdjust="spacing" fill="#c0caf5" font-weight="bold">This session</text>
+<text x="1080.8" y="108.0" textLength="142.8" lengthAdjust="spacing" fill="#565f89">16 cards · £1.45+</text>
+<text x="81.2" y="125.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">GAME</text>
+<text x="610.4" y="125.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">CARDS</text>
+<text x="677.6" y="125.0" textLength="58.8" lengthAdjust="spacing" fill="#565f89">TO COME</text>
+<text x="770.0" y="125.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">14:03</text>
+<text x="820.4" y="125.0" textLength="84.0" lengthAdjust="spacing" fill="#c0caf5">Heavy Rain</text>
+<text x="946.4" y="125.0" textLength="8.4" lengthAdjust="spacing" fill="#e0af68">⠋</text>
+<text x="963.2" y="125.0" textLength="92.4" lengthAdjust="spacing" fill="#565f89">which card?</text>
+<text x="1215.2" y="125.0" textLength="8.4" lengthAdjust="spacing" fill="#565f89">…</text>
+<text x="30.8" y="142.0" textLength="33.6" lengthAdjust="spacing" fill="#1a1b26" font-weight="bold">▶ #1</text>
+<text x="81.2" y="142.0" textLength="84.0" lengthAdjust="spacing" fill="#1a1b26" font-weight="bold">Heavy Rain</text>
+<text x="627.2" y="142.0" textLength="25.2" lengthAdjust="spacing" fill="#1a1b26" font-weight="bold">3/4</text>
+<text x="694.4" y="142.0" textLength="42.0" lengthAdjust="spacing" fill="#1a1b26" font-weight="bold">£0.05</text>
+<text x="770.0" y="142.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">13:57</text>
+<text x="820.4" y="142.0" textLength="84.0" lengthAdjust="spacing" fill="#c0caf5">Heavy Rain</text>
+<text x="946.4" y="142.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Madison</text>
+<text x="1005.2" y="142.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">, 2nd</text>
+<text x="1181.6" y="142.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.05</text>
+<text x="47.6" y="159.0" textLength="16.8" lengthAdjust="spacing" fill="#e0af68" font-weight="bold">#2</text>
+<text x="81.2" y="159.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">LIMBO</text>
+<text x="627.2" y="159.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">3/5</text>
+<text x="694.4" y="159.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.12</text>
+<text x="770.0" y="159.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">13:38</text>
+<text x="820.4" y="159.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Gorogoa</text>
+<text x="946.4" y="159.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">The Fruit</text>
+<text x="1215.2" y="159.0" textLength="8.4" lengthAdjust="spacing" fill="#565f89">—</text>
+<text x="81.2" y="176.0" textLength="159.6" lengthAdjust="spacing" fill="#c0caf5">Oxygen Not Included</text>
+<text x="627.2" y="176.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">3/5</text>
+<text x="694.4" y="176.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.14</text>
+<text x="770.0" y="176.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">13:24</text>
+<text x="820.4" y="176.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Gorogoa</text>
+<text x="946.4" y="176.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">The Boy</text>
+<text x="1181.6" y="176.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.04</text>
+<text x="81.2" y="193.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">Anno 1800</text>
+<text x="627.2" y="193.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">5/8</text>
+<text x="694.4" y="193.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.27</text>
+<text x="770.0" y="193.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">13:12</text>
+<text x="820.4" y="193.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Celeste</text>
+<text x="946.4" y="193.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5">Badeline</text>
+<text x="1181.6" y="193.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.06</text>
+<text x="81.2" y="210.0" textLength="201.6" lengthAdjust="spacing" fill="#c0caf5">Crypt of the NecroDancer</text>
+<text x="627.2" y="210.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">4/7</text>
+<text x="694.4" y="210.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.15</text>
+<text x="770.0" y="210.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">12:49</text>
+<text x="820.4" y="210.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Celeste</text>
+<text x="946.4" y="210.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5">Madeline</text>
+<text x="1215.2" y="210.0" textLength="8.4" lengthAdjust="spacing" fill="#565f89">—</text>
+<text x="81.2" y="227.0" textLength="168.0" lengthAdjust="spacing" fill="#c0caf5">Kerbal Space Program</text>
+<text x="627.2" y="227.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">4/7</text>
+<text x="694.4" y="227.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.18</text>
+<text x="770.0" y="227.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">12:31</text>
+<text x="820.4" y="227.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Hades</text>
+<text x="946.4" y="227.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">Nyx</text>
+<text x="1181.6" y="227.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.09</text>
+<text x="81.2" y="244.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">Outlast 2</text>
+<text x="627.2" y="244.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">4/7</text>
+<text x="694.4" y="244.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.15</text>
+<text x="770.0" y="244.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">11:58</text>
+<text x="820.4" y="244.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Hades</text>
+<text x="946.4" y="244.0" textLength="8.4" lengthAdjust="spacing" fill="#bb9af7">★</text>
+<text x="963.2" y="244.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5">Thanatos</text>
+<text x="1181.6" y="244.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.62</text>
+<text x="81.2" y="261.0" textLength="142.8" lengthAdjust="spacing" fill="#c0caf5">People Playground</text>
+<text x="627.2" y="261.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">4/7</text>
+<text x="694.4" y="261.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.12</text>
+<text x="770.0" y="261.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">11:26</text>
+<text x="820.4" y="261.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Hades</text>
+<text x="946.4" y="261.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Zagreus</text>
+<text x="1005.2" y="261.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">, 2nd</text>
+<text x="1181.6" y="261.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.08</text>
+<text x="81.2" y="278.0" textLength="336.0" lengthAdjust="spacing" fill="#c0caf5">We Were Here Expeditions: The FriendShip</text>
+<text x="627.2" y="278.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">3/6</text>
+<text x="694.4" y="278.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.12</text>
+<text x="770.0" y="278.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">10:54</text>
+<text x="820.4" y="278.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Hades</text>
+<text x="946.4" y="278.0" textLength="58.8" lengthAdjust="spacing" fill="#c0caf5">Zagreus</text>
+<text x="1181.6" y="278.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.08</text>
+<text x="81.2" y="295.0" textLength="117.6" lengthAdjust="spacing" fill="#c0caf5">Desperados III</text>
+<text x="627.2" y="295.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">5/9</text>
+<text x="694.4" y="295.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.28</text>
+<text x="770.0" y="295.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">10:16</text>
+<text x="820.4" y="295.0" textLength="92.4" lengthAdjust="spacing" fill="#c0caf5">Inscryption</text>
+<text x="946.4" y="295.0" textLength="67.2" lengthAdjust="spacing" fill="#c0caf5">Stinkbug</text>
+<text x="1181.6" y="295.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.05</text>
+<text x="81.2" y="312.0" textLength="134.4" lengthAdjust="spacing" fill="#c0caf5">Graveyard Keeper</text>
+<text x="627.2" y="312.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">5/9</text>
+<text x="694.4" y="312.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.20</text>
+<text x="770.0" y="312.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">09:39</text>
+<text x="820.4" y="312.0" textLength="92.4" lengthAdjust="spacing" fill="#c0caf5">Inscryption</text>
+<text x="946.4" y="312.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Stoat</text>
+<text x="1181.6" y="312.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.05</text>
+<text x="81.2" y="329.0" textLength="159.6" lengthAdjust="spacing" fill="#c0caf5">MONSTER HUNTER RISE</text>
+<text x="627.2" y="329.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">5/9</text>
+<text x="694.4" y="329.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.32</text>
+<text x="770.0" y="329.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">09:11</text>
+<text x="820.4" y="329.0" textLength="92.4" lengthAdjust="spacing" fill="#c0caf5">Inscryption</text>
+<text x="946.4" y="329.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Leshy</text>
+<text x="1181.6" y="329.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.06</text>
+<text x="81.2" y="346.0" textLength="134.4" lengthAdjust="spacing" fill="#c0caf5">Halls of Torment</text>
+<text x="618.8" y="346.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">6/11</text>
+<text x="694.4" y="346.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.20</text>
+<text x="770.0" y="346.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">08:37</text>
+<text x="820.4" y="346.0" textLength="109.2" lengthAdjust="spacing" fill="#c0caf5">Hollow Knight</text>
+<text x="946.4" y="346.0" textLength="84.0" lengthAdjust="spacing" fill="#c0caf5">The Knight</text>
+<text x="1181.6" y="346.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.11</text>
+<text x="81.2" y="363.0" textLength="134.4" lengthAdjust="spacing" fill="#c0caf5">Cult of the Lamb</text>
+<text x="618.8" y="363.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">7/13</text>
+<text x="694.4" y="363.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.36</text>
+<text x="770.0" y="363.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">08:08</text>
+<text x="820.4" y="363.0" textLength="109.2" lengthAdjust="spacing" fill="#c0caf5">Hollow Knight</text>
+<text x="946.4" y="363.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">Zote</text>
+<text x="1181.6" y="363.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.07</text>
+<text x="81.2" y="380.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">Days Gone</text>
+<text x="618.8" y="380.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">7/13</text>
+<text x="694.4" y="380.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.54</text>
+<text x="770.0" y="380.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">07:40</text>
+<text x="820.4" y="380.0" textLength="109.2" lengthAdjust="spacing" fill="#c0caf5">Hollow Knight</text>
+<text x="946.4" y="380.0" textLength="50.4" lengthAdjust="spacing" fill="#c0caf5">Hornet</text>
+<text x="1181.6" y="380.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.09</text>
+<text x="81.2" y="397.0" textLength="168.0" lengthAdjust="spacing" fill="#c0caf5">Little Nightmares II</text>
+<text x="618.8" y="397.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">8/15</text>
+<text x="694.4" y="397.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.42</text>
+<text x="81.2" y="414.0" textLength="109.2" lengthAdjust="spacing" fill="#c0caf5">Monster Train</text>
+<text x="618.8" y="414.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">8/15</text>
+<text x="694.4" y="414.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.35</text>
+<text x="81.2" y="431.0" textLength="193.2" lengthAdjust="spacing" fill="#c0caf5">TCG Card Shop Simulator</text>
+<text x="627.2" y="431.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">4/6</text>
+<text x="694.4" y="431.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.08</text>
+<text x="81.2" y="448.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">FOR HONOR</text>
+<text x="618.8" y="448.0" textLength="33.6" lengthAdjust="spacing" fill="#c0caf5">6/11</text>
+<text x="694.4" y="448.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.25</text>
+<text x="81.2" y="465.0" textLength="142.8" lengthAdjust="spacing" fill="#c0caf5">Against the Storm</text>
+<text x="627.2" y="465.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">6/9</text>
+<text x="694.4" y="465.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.18</text>
+<text x="81.2" y="482.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">Stray</text>
+<text x="627.2" y="482.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">3/4</text>
+<text x="694.4" y="482.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.14</text>
+<text x="81.2" y="499.0" textLength="75.6" lengthAdjust="spacing" fill="#c0caf5">Undertale</text>
+<text x="627.2" y="499.0" textLength="25.2" lengthAdjust="spacing" fill="#c0caf5">3/6</text>
+<text x="694.4" y="499.0" textLength="42.0" lengthAdjust="spacing" fill="#c0caf5">£0.36</text>
+<text x="22.4" y="550.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">14:05</text>
+<text x="81.2" y="550.0" textLength="344.4" lengthAdjust="spacing" fill="#9ece6a">✓ A card dropped for Heavy Rain — 1 to go</text>
+<text x="30.8" y="567.0" textLength="16.8" lengthAdjust="spacing" fill="#15161e">↑↓</text>
+<text x="64.4" y="567.0" textLength="50.4" lengthAdjust="spacing" fill="#565f89">choose</text>
+<text x="148.4" y="567.0" textLength="42.0" lengthAdjust="spacing" fill="#15161e">enter</text>
+<text x="207.2" y="567.0" textLength="58.8" lengthAdjust="spacing" fill="#565f89">details</text>
+<text x="299.6" y="567.0" textLength="25.2" lengthAdjust="spacing" fill="#15161e">1-9</text>
+<text x="341.6" y="567.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">rank</text>
+<text x="408.8" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">x</text>
+<text x="434.0" y="567.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">skip</text>
+<text x="501.2" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">c</text>
+<text x="526.4" y="567.0" textLength="75.6" lengthAdjust="spacing" fill="#565f89">show done</text>
+<text x="669.2" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">a</text>
+<text x="694.4" y="567.0" textLength="58.8" lengthAdjust="spacing" fill="#565f89">account</text>
+<text x="786.8" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">g</text>
+<text x="812.0" y="567.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">games</text>
+<text x="887.6" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">l</text>
+<text x="912.8" y="567.0" textLength="25.2" lengthAdjust="spacing" fill="#565f89">log</text>
+<text x="971.6" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">p</text>
+<text x="996.8" y="567.0" textLength="42.0" lengthAdjust="spacing" fill="#565f89">pause</text>
+<text x="1072.4" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">?</text>
+<text x="1097.6" y="567.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">help</text>
+<text x="1164.8" y="567.0" textLength="8.4" lengthAdjust="spacing" fill="#15161e">q</text>
+<text x="1190.0" y="567.0" textLength="33.6" lengthAdjust="spacing" fill="#565f89">quit</text>
+</svg>
