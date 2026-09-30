@@ -22,7 +22,6 @@ pub(super) const HOURS: &str = "▷";
 pub(super) const SIGNED_IN: &str = "●";
 pub(super) const IDLE: &str = "○";
 pub(super) const FAILED: &str = "✕";
-pub(super) const PAUSED: &str = "‖";
 pub(super) const DONE: &str = "✓";
 pub(super) const SKIPPED: &str = "✕";
 pub(super) const RADIO_ON: &str = "◉";

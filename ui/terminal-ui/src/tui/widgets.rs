@@ -1,50 +1,12 @@
 // Small rendering building blocks shared by the dashboard and the pop-ups.
 
-use std::time::Duration;
-
 use ratatui::{
     layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Padding},
 };
 
 use super::theme;
-
-const PARTIAL: [char; 8] = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-
-/// Progress bar with eighth-of-a-cell resolution on a dim track.
-pub(super) fn bar(current: i32, required: i32, width: usize, fill: Style) -> Vec<Span<'static>> {
-    if width == 0 {
-        return Vec::new();
-    }
-    let frac = if required > 0 {
-        (current.max(0) as f64 / required as f64).min(1.0)
-    } else {
-        0.0
-    };
-    let eighths = (frac * (width * 8) as f64).round() as usize;
-    let mut filled = "█".repeat(eighths / 8);
-    let mut used = eighths / 8;
-    if !eighths.is_multiple_of(8) && used < width {
-        filled.push(PARTIAL[eighths % 8]);
-        used += 1;
-    }
-    vec![
-        Span::styled(filled, fill),
-        Span::styled("░".repeat(width - used), theme::dim()),
-    ]
-}
-
-/// "1h 12m", "12m", "<1m".
-pub(super) fn elapsed(d: Duration) -> String {
-    let m = d.as_secs() / 60;
-    match m {
-        0 => "<1m".to_owned(),
-        m if m < 60 => format!("{m}m"),
-        m => format!("{}h {}m", m / 60, m % 60),
-    }
-}
 
 /// Cuts to `n` characters, ending in "…" when shortened.
 pub(super) fn truncate(s: &str, n: usize) -> String {
@@ -62,11 +24,6 @@ pub(super) fn truncate(s: &str, n: usize) -> String {
 /// Truncates or pads to exactly `n` characters.
 pub(super) fn fit(s: &str, n: usize) -> String {
     format!("{:<n$}", truncate(s, n))
-}
-
-/// Truncates or left-pads to exactly `n` characters.
-pub(super) fn fit_right(s: &str, n: usize) -> String {
-    format!("{:>n$}", truncate(s, n))
 }
 
 pub(super) fn width(spans: &[Span<'_>]) -> usize {
@@ -167,15 +124,6 @@ pub(super) fn centered(area: Rect, w: u16, h: u16) -> Rect {
         width: w,
         height: h,
     }
-}
-
-/// Rounded panel with a bold title.
-pub(super) fn panel(title: Line<'static>) -> Block<'static> {
-    Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme::border())
-        .title(title)
-        .padding(Padding::horizontal(1))
 }
 
 /// A key drawn as a keycap, e.g. " q " on a grey key.
@@ -365,21 +313,6 @@ mod tests {
         assert_eq!(truncate("Rust Isles Boonie", 8), "Rust Is…");
         assert_eq!(truncate("abc", 8), "abc");
         assert_eq!(fit("abc", 5), "abc  ");
-        assert_eq!(fit_right("abc", 5), "  abc");
-    }
-
-    #[test]
-    fn bar_fills_proportionally() {
-        let text = |spans: Vec<Span<'_>>| {
-            spans
-                .iter()
-                .map(|s| s.content.to_string())
-                .collect::<String>()
-        };
-        assert_eq!(text(bar(0, 60, 4, Style::new())), "░░░░");
-        assert_eq!(text(bar(60, 60, 4, Style::new())), "████");
-        assert_eq!(text(bar(30, 60, 4, Style::new())), "██░░");
-        assert_eq!(text(bar(15, 60, 2, Style::new())), "▌░");
     }
 
     #[test]

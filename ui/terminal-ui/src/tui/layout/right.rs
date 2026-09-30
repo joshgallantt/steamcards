@@ -123,6 +123,19 @@ pub(crate) fn price_words(cell: Option<Cell>) -> Line<'static> {
     }
 }
 
+/// A price in the chosen game's set: as `price_words` says it, but a stale
+/// one without its age, which the set's rule says for all of them ("8h
+/// old"), so the prices under it are never only dimmed.
+fn set_price_words(cell: Cell) -> Line<'static> {
+    match cell {
+        Cell::Value {
+            value,
+            stale: Some(_),
+        } => Line::styled(format::money(value), theme::dim()),
+        other => price_words(Some(other)),
+    }
+}
+
 // ── Now, at L ────────────────────────────────────────────────────────────────
 
 /// The Now panel's inside at L, `w` wide, and what its borders say: since
@@ -167,7 +180,10 @@ pub(crate) fn now_panel(
                 format::hours(last.hours)
             )));
         }
-        return Ok((rows, None, None));
+        let since = group
+            .since
+            .map(|t| format!("since {}", format::clock(t, p.now, p.zone)));
+        return Ok((rows, since, None));
     }
     let Some(g) = &now.game else {
         let rows = match message_rows(p, now, spinner, w) {
@@ -372,7 +388,7 @@ pub(crate) fn chosen_forms(g: &ChosenGame, w: usize) -> Fits<Vec<Vec<Line<'stati
     } else {
         String::new()
     };
-    let title = format!("The set · {} of {size} cards{spares}", set.have);
+    let title = format!("The set · {}", format::the_set(set.have, size, set.spares));
     let short_title = format!("Set · {} of {size}{spares}", set.have);
     let mut forms = Vec::new();
     if let Ok(table) = table_rows(g, set, w) {
@@ -575,12 +591,22 @@ fn count_words(owned: u32) -> Line<'static> {
     }
 }
 
+/// How many columns the widest of `cells` takes.
+fn widest(cells: impl Iterator<Item = Line<'static>>) -> usize {
+    cells.map(|l| l.width()).max().unwrap_or(0)
+}
+
 /// The set as a table: CARD, OWNED, NORMAL, FOIL, and a mark for a card
-/// that dropped today where there's room for it.
+/// that dropped today where there's room for it. A card's name is never
+/// shortened, and a price's column is as wide as its widest ("no market"),
+/// two columns clear of the one before.
 fn table_rows(g: &ChosenGame, set: &TheSet, w: usize) -> Fits<Vec<Line<'static>>> {
+    let name_w = widest(set.cards.iter().map(|c| plain(c.name.clone()))).max(14);
+    let normal_w = (widest(set.cards.iter().map(|c| set_price_words(c.normal))) + 2).max(9);
+    let foil_w = (widest(set.cards.iter().map(|c| set_price_words(c.foil))) + 2).max(8);
     let head = Line::styled(
         format!(
-            "   {:<14}{:>6}{:>9}{:>8}",
+            "   {:<name_w$}{:>6}{:>normal_w$}{:>foil_w$}",
             "CARD", "OWNED", "NORMAL", "FOIL"
         ),
         theme::dim(),
@@ -589,10 +615,10 @@ fn table_rows(g: &ChosenGame, set: &TheSet, w: usize) -> Fits<Vec<Line<'static>>
     for c in &set.cards {
         let mut row = join([
             plain("   "),
-            fit(plain(c.name.clone()), 14)?,
+            fit(plain(c.name.clone()), name_w)?,
             rfit(count_words(c.owned), 6)?,
-            rfit(price_words(Some(c.normal)), 9)?,
-            rfit(price_words(Some(c.foil)), 8)?,
+            rfit(set_price_words(c.normal), normal_w)?,
+            rfit(set_price_words(c.foil), foil_w)?,
         ]);
         if let Some(first) = c.today.first() {
             let many = match c.today.len() {
@@ -641,23 +667,26 @@ fn short_line(set: &TheSet, w: usize) -> Fits<Line<'static>> {
     )
 }
 
+/// Each card of the set as a cell: its name, never shortened, how many are
+/// held, and its price, each column as wide as its widest.
+fn cells(set: &TheSet) -> Fits<Vec<Line<'static>>> {
+    let name_w = widest(set.cards.iter().map(|c| plain(c.name.clone())));
+    let price_w = (widest(set.cards.iter().map(|c| set_price_words(c.normal))) + 2).max(7);
+    set.cards
+        .iter()
+        .map(|c| {
+            Ok(join([
+                fit(plain(c.name.clone()), name_w)?,
+                rfit(count_words(c.owned), 3)?,
+                rfit(set_price_words(c.normal), price_w)?,
+            ]))
+        })
+        .collect()
+}
+
 /// The set two cards a row, its foils' range after the last.
 fn two_a_row(set: &TheSet, w: usize) -> Fits<Vec<Line<'static>>> {
-    let cw = set
-        .cards
-        .iter()
-        .map(|c| super::super::text::width(&c.name))
-        .max()
-        .unwrap_or(0)
-        .min(12);
-    let cell = |c: &crate::viewmodel::SetCard| -> Fits<Line<'static>> {
-        Ok(join([
-            fit(plain(shorten(&c.name, cw)?), cw)?,
-            rfit(count_words(c.owned), 3)?,
-            rfit(price_words(Some(c.normal)), 7)?,
-        ]))
-    };
-    let cells: Vec<Line<'static>> = set.cards.iter().map(cell).collect::<Fits<_>>()?;
+    let cells = cells(set)?;
     let foils = foil_range(set);
     let n = cells.len();
     let half = n.div_ceil(2);
@@ -680,24 +709,7 @@ fn two_a_row(set: &TheSet, w: usize) -> Fits<Vec<Line<'static>>> {
 
 /// The set one card a row, then its foils' range.
 fn one_a_row(set: &TheSet, w: usize) -> Fits<Vec<Line<'static>>> {
-    let cw = set
-        .cards
-        .iter()
-        .map(|c| super::super::text::width(&c.name))
-        .max()
-        .unwrap_or(0)
-        .min(12);
-    let mut rows: Vec<Line<'static>> = set
-        .cards
-        .iter()
-        .map(|c| {
-            Ok(join([
-                fit(plain(shorten(&c.name, cw)?), cw)?,
-                rfit(count_words(c.owned), 3)?,
-                rfit(price_words(Some(c.normal)), 7)?,
-            ]))
-        })
-        .collect::<Fits<_>>()?;
+    let mut rows = cells(set)?;
     rows.push(foil_range(set));
     if rows.iter().any(|r| r.width() > w) {
         return Err(super::super::text::Overflow("one card a row".into()));
@@ -756,10 +768,22 @@ pub(crate) fn split_m(forms: &[Vec<Line<'static>>], rows: usize) -> (usize, usiz
     }
 }
 
+/// How the right-hand column at M is shared once nothing is left to farm
+/// (mockup e): this session's cards are what's left to look at, so the
+/// chosen game takes its richest form that leaves them 6, its set folding
+/// to one line if need be; when none does, as `split_m` shares it.
+pub(crate) fn split_summary(forms: &[Vec<Line<'static>>], rows: usize) -> (usize, usize, bool) {
+    match forms.iter().position(|f| f.len() + 2 + 8 <= rows) {
+        Some(i) => (i, forms[i].len() + 2, true),
+        None => split_m(forms, rows),
+    }
+}
+
 // ── This session's cards ─────────────────────────────────────────────────────
 
 /// The haul's rows at M, the newest `n`, `w` wide: time, card · game, and
-/// price; and how many are earlier.
+/// price; and how many are earlier. A time on another day has its day, so
+/// the times take as many columns as the widest shown.
 pub(crate) fn haul_rows_m(
     h: &Haul,
     n: usize,
@@ -767,20 +791,23 @@ pub(crate) fn haul_rows_m(
     w: usize,
 ) -> Fits<(Vec<Line<'static>>, usize)> {
     let start = h.rows.len().saturating_sub(n);
+    let shown = &h.rows[start..];
+    let (times, tw) = times(h, shown);
     let mut out = Vec::new();
-    for r in &h.rows[start..] {
+    for (r, time) in shown.iter().zip(times) {
         let price = price_words(r.price.or(Some(Cell::Pending)));
-        let room = w.saturating_sub(6 + 1 + price.width());
+        let room = w.saturating_sub(tw + 1 + 1 + price.width());
         let what = match &r.card {
             Told::Identifying => first_fit(
                 [
                     Line::from(vec![
                         Span::styled(spinner.to_owned(), theme::fg(theme::BUSY)),
-                        raw(format!(" which card? · {}", r.game)),
+                        dim(" which card?"),
+                        raw(format!(" · {}", r.game)),
                     ]),
                     Line::from(vec![
                         Span::styled(spinner.to_owned(), theme::fg(theme::BUSY)),
-                        raw(" which card?"),
+                        dim(" which card?"),
                     ]),
                 ],
                 room,
@@ -805,15 +832,31 @@ pub(crate) fn haul_rows_m(
                 )?
             }
         };
-        let rest = w - 6 - what.width();
-        out.push(join(
-            [dim(format::clock(r.at, h.now, h.zone)), raw(" ")]
-                .map(Line::from)
-                .into_iter()
-                .chain([what, rfit(price, rest)?]),
-        ));
+        let rest = w.saturating_sub(tw + 1 + what.width());
+        out.push(join([
+            fit(Line::styled(time, theme::dim()), tw)?,
+            plain(" "),
+            what,
+            rfit(price, rest)?,
+        ]));
     }
     Ok((out, start))
+}
+
+/// The times `rows` dropped at, on the local clock, with the day when it
+/// isn't today; and the columns the widest takes, 5 at least.
+fn times(h: &Haul, rows: &[HaulRow]) -> (Vec<String>, usize) {
+    let times: Vec<String> = rows
+        .iter()
+        .map(|r| format::clock(r.at, h.now, h.zone))
+        .collect();
+    let widest = times
+        .iter()
+        .map(|t| super::super::text::width(t))
+        .max()
+        .unwrap_or(0)
+        .max(5);
+    (times, widest)
 }
 
 /// The running total after a row: "£0.27", "≥ £1.30".
@@ -838,14 +881,25 @@ pub(crate) fn haul_rows_l(
     spinner: &str,
     w: usize,
 ) -> Fits<(Vec<Line<'static>>, usize)> {
-    const TIME: usize = 5;
     const GAME: usize = 16;
     const PRICE: usize = 9;
     const TOTAL: usize = 9;
-    let cw = w.saturating_sub(TIME + 2 + GAME + 2 + 2 + PRICE + 2 + TOTAL);
+    let n = h.rows.len();
+    let top = if rows >= n + 1 + 3 {
+        progress::track(&h.track, w, 2, h.zone).unwrap_or_default()
+    } else if rows > n + 1 {
+        progress::track(&h.track, w, 0, h.zone).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let room = rows.saturating_sub(top.len() + 1);
+    let start = n.saturating_sub(room);
+    let shown = &h.rows[start..];
+    let (times, tw) = times(h, shown);
+    let cw = w.saturating_sub(tw + 2 + GAME + 2 + 2 + PRICE + 2 + TOTAL);
     let head = Line::styled(
         format!(
-            "{:<TIME$}  {:<GAME$}  {:<cw$}  {:>PRICE$}  {:>TOTAL$}",
+            "{:<tw$}  {:<GAME$}  {:<cw$}  {:>PRICE$}  {:>TOTAL$}",
             "TIME",
             "GAME",
             "CARD",
@@ -854,12 +908,12 @@ pub(crate) fn haul_rows_l(
         ),
         theme::dim(),
     );
-    let body: Vec<Line<'static>> = h
-        .rows
+    let body: Vec<Line<'static>> = shown
         .iter()
-        .map(|r| {
+        .zip(times)
+        .map(|(r, time)| {
             Ok(join([
-                fit(plain(format::clock(r.at, h.now, h.zone)), TIME)?,
+                fit(plain(time), tw)?,
                 plain("  "),
                 fit(plain(shorten(&r.game, GAME)?), GAME)?,
                 plain("  "),
@@ -871,19 +925,9 @@ pub(crate) fn haul_rows_l(
             ]))
         })
         .collect::<Fits<_>>()?;
-    let n = body.len();
-    let top = if rows >= n + 1 + 3 {
-        progress::track(&h.track, w, 2, h.zone).unwrap_or_default()
-    } else if rows > n + 1 {
-        progress::track(&h.track, w, 0, h.zone).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let room = rows.saturating_sub(top.len() + 1);
-    let start = n.saturating_sub(room);
     let mut lines = top;
     lines.push(head);
-    lines.extend(body.into_iter().skip(start));
+    lines.extend(body);
     if let Some(other) = other_bases(h, w) {
         if rows.saturating_sub(lines.len()) >= 2 {
             lines.push(Line::default());
@@ -1010,6 +1054,63 @@ mod tests {
         assert_eq!(
             texts(&forms[0]),
             inside("building hours with the 12-game group", 8..17, 76, 42)
+        );
+    }
+
+    #[test]
+    fn once_nothing_is_left_the_haul_keeps_six_cards() {
+        let data = fixtures::nothing_to_farm();
+        let g = ChosenGame::build(&data.snapshot(), fixtures::VAMPIRE_SURVIVORS).unwrap();
+        let forms = chosen_forms(&g, 42).unwrap();
+        let (i, h, haul) = split_summary(&forms, 18);
+        assert_eq!(
+            (forms[i].len(), h, haul),
+            (7, 9, true),
+            "the set in one line"
+        );
+        assert_eq!(
+            texts(&forms[i]),
+            inside(
+                "nothing left to farm, with the session's summary",
+                11..18,
+                76,
+                42
+            )
+        );
+        assert_eq!(
+            split_summary(&forms, 12),
+            split_m(&forms, 12),
+            "no form leaves 6 cards: as ever"
+        );
+    }
+
+    #[test]
+    fn a_sets_cells_are_as_wide_as_what_they_hold() {
+        let data = fixtures::nothing_to_farm();
+        let mut g = ChosenGame::build(&data.snapshot(), fixtures::VAMPIRE_SURVIVORS).unwrap();
+        let forms = chosen_forms(&g, 72).unwrap();
+        assert_eq!(
+            texts(&forms[0][3..5]),
+            [
+                "   CARD           OWNED   NORMAL       FOIL",
+                "   Antonio           ×2    £0.05  no market   ◆ 2 today, 15:49"
+            ],
+            "nobody sells its foils: the column makes room"
+        );
+        let set = g.set.as_mut().unwrap();
+        set.cards[0].name = "Antonio, the Whip Master".into();
+        let forms = chosen_forms(&g, 72).unwrap();
+        let two = forms
+            .iter()
+            .find(|f| {
+                texts(f)
+                    .iter()
+                    .any(|l| l.starts_with("Antonio, the Whip Master ×2"))
+            })
+            .expect("a card's name whole");
+        assert!(
+            texts(two).iter().all(|l| !l.contains('…')),
+            "a card's name is never shortened"
         );
     }
 

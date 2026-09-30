@@ -231,7 +231,8 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
   business rule. `tui/text.rs` is how text reaches the screen: padded to
   its area, wrapped whole, never cut, a test failing on anything wider;
   `tui/format.rs` writes numbers, money and time as the spec does;
-  `tui/layout/` holds the size classes and every region's ladder.
+  `tui/layout/` holds the size classes and every region's ladder, and
+  `tui/dashboard.rs` puts the regions together at the window's size class.
   `tui/golden.rs` holds each screen to its mockup in `docs/design/ui.md`,
   and `tui/preview.rs` renders every screen into an in-memory terminal from
   the spec's data set.

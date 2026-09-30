@@ -148,9 +148,11 @@ done, and move it into a numbered section if it grows.
       screen to its mockup. The market is in the app: the composition root
       builds `MarketComponent`, with `prices.json` beside the config, and
       the keys b, t, h and m.
-- [ ] The new screens, drawn on the foundations, each held to its mockup,
+- [~] The new screens, drawn on the foundations, each held to its mockup,
       and a check that nothing is cut off at any size (`docs/design/ui.md`,
-      §8).
+      §8). The dashboard (2026-09-30): every region, in every state, at
+      every size class, and each of its mockups held to the spec by a
+      golden test. The pop-ups and onboarding are next.
 - [x] Review the domain and data adversarially (2026-09-30): three
       reviewers, on fidelity to the spec, Steam's own behaviour and the
       engineering. Fixed: each drop is checked against its game's counts,

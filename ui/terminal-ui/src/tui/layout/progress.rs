@@ -9,12 +9,15 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use super::super::{
-    format,
-    text::{Fits, big, first_fit, fit, gauge, join, key, rfit, spread, wrap},
-    theme,
+use super::{
+    super::{
+        format,
+        text::{Fits, big, first_fit, fit, gauge, glue, join, key, rfit, spread, wrap},
+        theme,
+    },
+    SizeClass,
 };
-use crate::viewmodel::{Activity, Now, Progress, Track};
+use crate::viewmodel::{Activity, Now, Progress, Summary, Track};
 use market::Basis;
 
 fn raw(s: impl Into<String>) -> Span<'static> {
@@ -193,6 +196,8 @@ fn message(p: &Progress, now: &Now, spinner: &str) -> Option<Message> {
             ],
         },
         Activity::NothingToFarm { why, next_look } => {
+            // The session's summary says why in its own words.
+            let why = p.summary.as_ref().map_or(why, |s| &s.why);
             let when =
                 next_look.map_or_else(String::new, |t| format!(" It looks again at {}.", at(t)));
             Message {
@@ -448,11 +453,10 @@ fn gauges(p: &Progress, w: usize) -> Fits<[Line<'static>; 2]> {
     Ok([session, library])
 }
 
-/// The value column, five rows: its heading, this session's value, what's
-/// still to drop and the value on completion (or how pricing goes), and
-/// the spares. While Steam has paused lookups, the pause takes a row.
-fn value_rows(p: &Progress, spinner: &str, at_l: bool) -> Vec<Line<'static>> {
-    let heading = line(vec![
+/// The value column's heading, with the key that changes the basis: "VALUE ·
+/// list prices  [b]".
+fn value_heading(p: &Progress) -> Line<'static> {
+    line(vec![
         Span::styled(
             format!(
                 "VALUE · {}",
@@ -464,7 +468,14 @@ fn value_rows(p: &Progress, spinner: &str, at_l: bool) -> Vec<Line<'static>> {
         ),
         raw("  "),
         key("b"),
-    ]);
+    ])
+}
+
+/// The value column, five rows: its heading, this session's value, what's
+/// still to drop and the value on completion (or how pricing goes), and
+/// the spares. While Steam has paused lookups, the pause takes a row.
+fn value_rows(p: &Progress, spinner: &str, at_l: bool) -> Vec<Line<'static>> {
+    let heading = value_heading(p);
     let none_yet = || line(vec![dim("no cards yet this session")]);
     if matches!(p.activity, Activity::Reading) {
         return vec![
@@ -1061,6 +1072,335 @@ pub(crate) fn progress_xs(
     ])
 }
 
+/// Progress's rows at a size class, `w` wide and `rows` tall: the session
+/// summed up once nothing is left to farm, why nothing is when nothing
+/// dropped, else the class's own ladder. `track` is the session's, at M and
+/// L.
+pub(crate) fn panel_rows(
+    p: &Progress,
+    now: &Now,
+    track: Option<&Track>,
+    spinner: &str,
+    class: SizeClass,
+    w: usize,
+    rows: usize,
+) -> Fits<Vec<Line<'static>>> {
+    if p.summary.is_some() {
+        return summary_rows(p, track, w, rows);
+    }
+    if matches!(p.activity, Activity::NothingToFarm { .. }) {
+        return idle_rows(p, now, spinner, w, rows);
+    }
+    match class {
+        SizeClass::L => progress_l(p, now, spinner, w),
+        SizeClass::M => progress_m(p, now, track, spinner, w, rows),
+        SizeClass::S => progress_s(p, now, spinner, w),
+        SizeClass::Xs | SizeClass::TooSmall => progress_xs(p, now, spinner, w),
+    }
+}
+
+/// Progress's title, for its top border, in `w` columns: the session's span
+/// once it's summed up; at S the state's word and the library, which the
+/// panel has no row for; above S what the rate was learnt from.
+pub(crate) fn panel_title(p: &Progress, class: SizeClass, w: usize) -> Option<Line<'static>> {
+    let options = if class == SizeClass::S && p.summary.is_none() {
+        progress_title_s(p)
+    } else {
+        progress_title(p)
+    };
+    first_fit(options, w).ok()
+}
+
+/// The summary's three columns' widths at M and L: what the session did and
+/// how its first estimate did; its value takes the rest.
+const SESSION_COLUMN: usize = 38;
+const ESTIMATE_COLUMN: usize = 40;
+
+/// Progress once nothing is left to farm (mockup e): the session summed up.
+/// At M, seven rows: why nothing is left and when the farmer looks again;
+/// three columns, what the session did, how its first estimate did against
+/// what happened, and what its cards are worth; and the session's track. At
+/// L, five: the columns and the track, the Now panel saying why. At S and
+/// XS, three: why, the drops, the value.
+pub(crate) fn summary_rows(
+    p: &Progress,
+    track: Option<&Track>,
+    w: usize,
+    rows: usize,
+) -> Fits<Vec<Line<'static>>> {
+    let Some(sm) = &p.summary else {
+        return Ok(vec![Line::default(); rows]);
+    };
+    let of = p.session.drops_at_start.unwrap_or(sm.drops);
+    let took = format::duration((sm.to - sm.from).to_std().unwrap_or_default());
+    let rate = sm
+        .rate
+        .map_or_else(String::new, |r| format!(" · {}", format::rate(r)));
+    if rows <= 3 {
+        let value = sm.value.as_ref().map_or_else(String::new, format::held);
+        let foils = match sm.foils.len() {
+            0 => String::new(),
+            1 => " · ★ 1 foil".to_owned(),
+            n => format!(" · ★ {n} foils"),
+        };
+        let estimated = sm.estimated.map_or_else(String::new, |m| {
+            format!(" · estimated {}", format::about(m))
+        });
+        let mut out = vec![
+            first_fit(summary_sentence(p, sm), w)?,
+            first_fit(
+                [
+                    format!(
+                        "{} of {of} drops from {} in {took}{rate}",
+                        sm.drops,
+                        format::games(sm.games)
+                    ),
+                    format!("{} of {of} drops in {took}", sm.drops),
+                    format!("{} of {of} drops", sm.drops),
+                ],
+                w,
+            )?,
+            first_fit(
+                [
+                    format!("{value}{foils}{estimated}"),
+                    format!("{value}{foils}"),
+                    value,
+                ],
+                w,
+            )?,
+        ];
+        out.truncate(rows);
+        return Ok(out);
+    }
+    let session = [
+        Line::styled("THIS SESSION", theme::heading()),
+        Line::from(format!(
+            "{} of {of} drops, from {}",
+            sm.drops,
+            format::games(sm.games)
+        )),
+        Line::from(format!("in {took}{rate}")),
+        Line::from(format!(
+            "Your library: {} of {} drops",
+            p.library.received, p.library.total
+        )),
+    ];
+    // The columns at their own widths when there's room; narrower, each as
+    // wide as its words, the estimate's taking what's left; narrower still,
+    // without the estimate.
+    let needs = value_width(p, sm);
+    let (session_w, estimate) = if w >= SESSION_COLUMN + ESTIMATE_COLUMN + needs + 4 {
+        (
+            SESSION_COLUMN,
+            Some((ESTIMATE_COLUMN, estimate_column(p, sm, ESTIMATE_COLUMN)?)),
+        )
+    } else {
+        let session_w = session.iter().map(Line::width).max().unwrap_or(0);
+        let room = w.saturating_sub(session_w + needs + 4);
+        let estimate = (room >= 24)
+            .then(|| estimate_column(p, sm, room).ok())
+            .flatten()
+            .map(|lines| (room, lines));
+        (session_w, estimate)
+    };
+    let value_w = match &estimate {
+        Some((ew, _)) => w.saturating_sub(session_w + ew + 4),
+        None => w.saturating_sub(session_w + 2),
+    };
+    let value = value_column(p, sm, value_w)?;
+    let mut columns = Vec::new();
+    for (i, said) in session.iter().enumerate() {
+        let mut row = vec![fit(said.clone(), session_w)?, Line::from("  ")];
+        if let Some((ew, lines)) = &estimate {
+            row.push(fit(lines[i].clone(), *ew)?);
+            row.push(Line::from("  "));
+        }
+        row.push(fit(value[i].clone(), value_w)?);
+        columns.push(join(row));
+    }
+    let days = match track {
+        Some(t) => self::track(t, w, 1, p.zone)?,
+        None => Vec::new(),
+    };
+    let mut out = Vec::new();
+    if rows >= 7 {
+        out.push(first_fit(summary_sentence(p, sm), w)?);
+        out.extend(columns);
+        out.extend(days);
+    } else {
+        out.extend(columns);
+        out.extend(days.into_iter().take(1));
+    }
+    out.resize(rows, Line::default());
+    Ok(out)
+}
+
+/// Why nothing is left to farm, and when the farmer looks again, longest
+/// first: "○ Nothing left to farm: all done or skipped. It looks again at
+/// Mon 01:44, or as soon as you rank or unskip a game."
+fn summary_sentence(p: &Progress, sm: &Summary) -> Vec<Line<'static>> {
+    let lead = format!(" Nothing left to farm: {}.", sm.why);
+    let mut out = Vec::new();
+    if let Some(at) = sm.next_look {
+        let at = format::clock(at, p.now, p.zone);
+        out.push(format!(
+            "{lead} It looks again at {at}, or as soon as you rank or unskip a game."
+        ));
+        out.push(format!("{lead} It looks again at {at}."));
+    }
+    out.push(lead);
+    out.push(" Nothing left to farm".to_owned());
+    out.into_iter()
+        .map(|t| line(vec![dim("○"), raw(t)]))
+        .collect()
+}
+
+/// The summary's estimate column, four rows `w` wide: its heading, then what
+/// the first estimate with a likely range said, made after the second card,
+/// against what it took from then, wrapped.
+fn estimate_column(p: &Progress, sm: &Summary, w: usize) -> Fits<Vec<Line<'static>>> {
+    let options: Vec<String> = match sm.estimate {
+        Some(c) => {
+            let made = c.made_at.with_timezone(&p.zone);
+            let said = format!(
+                "said {} at {} on {}, after the second card",
+                glue(&format::eta(c.said)),
+                made.format("%H:%M"),
+                made.format("%a")
+            );
+            let took = format!("it took {} from then", glue(&format::duration(c.took)));
+            let mut options = Vec::new();
+            if let Some((low, high)) = c.band {
+                let within = if c.inside { "inside" } else { "outside" };
+                options.push(format!(
+                    "{said}; {took}, {within} its 80% band, {}",
+                    glue(&format!(
+                        "{} – {}",
+                        format::duration(low),
+                        format::duration(high)
+                    ))
+                ));
+            }
+            options.push(format!("{said}; {took}"));
+            options.push(format!("said {}; {took}", glue(&format::eta(c.said))));
+            options
+        }
+        None => vec!["no first estimate: it takes two cards farmed alone".to_owned()],
+    };
+    let body = options
+        .into_iter()
+        .filter_map(|o| wrap(o, w, 0).ok())
+        .find(|lines| lines.len() <= 3)
+        .ok_or_else(|| {
+            super::super::text::Overflow(format!("the estimate's words over 3 rows of {w}"))
+        })?;
+    let mut out = vec![Line::styled("THE ESTIMATE", theme::heading())];
+    out.extend(body);
+    out.resize(4, Line::default());
+    Ok(out)
+}
+
+/// How wide the summary's value column needs to be: as wide as its widest
+/// row, its foils named or only counted.
+fn value_width(p: &Progress, sm: &Summary) -> usize {
+    value_column(p, sm, usize::MAX)
+        .map(|rows| {
+            let foils_counted = match sm.foils.len() {
+                0 => 0,
+                1 => super::super::text::width("★ 1 foil"),
+                n => super::super::text::width(&format!("★ {n} foils")),
+            };
+            rows.iter()
+                .enumerate()
+                .map(|(i, r)| if i == 2 { foils_counted } else { r.width() })
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0)
+}
+
+/// The summary's value column, four rows `w` wide: its heading, this
+/// session's cards and how many aren't priced, its foils, and what the
+/// first estimate said they'd be worth.
+fn value_column(p: &Progress, sm: &Summary, w: usize) -> Fits<Vec<Line<'static>>> {
+    let held = match &sm.value {
+        Some(h) if h.unpriced > 0 => line(vec![
+            Span::styled(format::at_least(h), theme::bold()),
+            raw(" · "),
+            Span::styled(
+                match h.unpriced {
+                    1 => "1 card not priced".to_owned(),
+                    n => format!("{n} cards not priced"),
+                },
+                theme::fg(theme::BUSY),
+            ),
+        ]),
+        Some(h) => line(vec![Span::styled(format::at_least(h), theme::bold())]),
+        None => Line::default(),
+    };
+    let star = || Span::styled("★", theme::fg(theme::ACCENT));
+    let foils = match sm.foils.len() {
+        0 => Line::default(),
+        n => {
+            let count = if n == 1 {
+                "1 foil".to_owned()
+            } else {
+                format!("{n} foils")
+            };
+            first_fit(
+                [
+                    line(vec![
+                        star(),
+                        raw(format!(" {count}: {}", sm.foils.join(", "))),
+                    ]),
+                    line(vec![star(), raw(format!(" {count}"))]),
+                ],
+                w,
+            )?
+        }
+    };
+    let estimated = sm.estimated.map_or_else(Line::default, |m| {
+        line(vec![
+            raw(format!("estimated {}", format::about(m))),
+            dim(", excl. foils"),
+        ])
+    });
+    Ok(vec![value_heading(p), held, foils, estimated])
+}
+
+/// Progress when nothing is left to farm and nothing dropped this session:
+/// why, and when the farmer looks again, then the library's drops and games.
+fn idle_rows(
+    p: &Progress,
+    now: &Now,
+    spinner: &str,
+    w: usize,
+    rows: usize,
+) -> Fits<Vec<Line<'static>>> {
+    let mut why = Vec::new();
+    if let Some(m) = message(p, now, spinner) {
+        why.push(m.sentence);
+        why.extend(m.lines);
+    }
+    let l = &p.library;
+    let mut out = vec![
+        first_fit(why, w)?,
+        first_fit(
+            [
+                format!(
+                    "Your library: {} of {} drops · {} of {} games",
+                    l.received, l.total, l.games_done, l.games
+                ),
+                format!("Your library: {} of {} drops", l.received, l.total),
+                format!("library {} of {}", l.received, l.total),
+            ],
+            w,
+        )?,
+    ];
+    out.resize(rows, Line::default());
+    Ok(out)
+}
+
 /// The glance the too-small screen keeps: what's farming and its next look,
 /// the drops and the time to finish, and the value so far.
 pub(crate) fn glance(p: &Progress, now: &Now, spinner: &str, w: usize) -> Vec<Line<'static>> {
@@ -1464,6 +1804,94 @@ mod tests {
                 "≥ £1.45 so far · 3 unpriced"
             ],
             "what fits"
+        );
+    }
+
+    #[test]
+    fn the_session_summed_up_at_every_size() {
+        let data = fixtures::nothing_to_farm();
+        let s = data.snapshot();
+        let estimated = market::Money::new(1_679, market::Currency::GBP);
+        let p = Progress::build(&s, Some(estimated));
+        let now = Now::build(&s);
+        let track = Haul::build(&s).track;
+        let at = |class, w, rows| {
+            texts(&panel_rows(&p, &now, Some(&track), SPIN, class, w, rows).unwrap())
+        };
+        assert_eq!(
+            at(SizeClass::M, 116, 7),
+            inside(
+                "nothing left to farm, with the session's summary",
+                2..9,
+                2,
+                116
+            )
+        );
+        let l = at(SizeClass::L, 120, 5);
+        assert!(l[0].starts_with("THIS SESSION"), "{l:?}");
+        assert!(
+            l[4].starts_with("Tue 09:14 ─"),
+            "the track, its days unnamed"
+        );
+        assert_eq!(
+            at(SizeClass::S, 76, 3),
+            [
+                "○ Nothing left to farm: all done or skipped. It looks again at Mon 01:44.",
+                "252 of 252 drops from 62 games in 5d 8h · 2.1 drops an hour",
+                "≥ £17.31 · 4 unpriced · ★ 2 foils · estimated ≈ £16.79"
+            ]
+        );
+        assert_eq!(
+            at(SizeClass::Xs, 58, 3),
+            [
+                "○ Nothing left to farm: all done or skipped.",
+                "252 of 252 drops in 5d 8h",
+                "≥ £17.31 · 4 unpriced · ★ 2 foils · estimated ≈ £16.79"
+            ]
+        );
+        // Each column as wide as its words, the estimate's in what's left.
+        let narrow = at(SizeClass::M, 96, 7);
+        let columns = |a: &str, b: &str, c: &str| format!("{a:<31}  {b:<30}  {c}");
+        assert_eq!(
+            narrow[1..5],
+            [
+                columns("THIS SESSION", "THE ESTIMATE", "VALUE · list prices  [b]"),
+                columns(
+                    "252 of 252 drops, from 62 games",
+                    "said ≈ 5d 6h at 10:12 on Tue,",
+                    "≥ £17.31 · 4 cards not priced"
+                ),
+                columns(
+                    "in 5d 8h · 2.1 drops an hour",
+                    "after the second card; it took",
+                    "★ 2 foils: Thanatos, The Lamb"
+                ),
+                columns(
+                    "Your library: 419 of 421 drops",
+                    "5d 8h from then",
+                    "estimated ≈ £16.79, excl. foils"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn nothing_left_to_farm_with_no_cards_says_why() {
+        let mut data = fixtures::nothing_to_farm();
+        data.status.session.drops.clear();
+        let s = data.snapshot();
+        let p = Progress::build(&s, None);
+        assert_eq!(p.summary, None, "nothing to sum up");
+        let rows = panel_rows(&p, &Now::build(&s), None, SPIN, SizeClass::M, 116, 4).unwrap();
+        assert_eq!(
+            texts(&rows),
+            [
+                "○ Nothing left to farm: every game with cards left is skipped. It looks again at \
+                 Mon 01:44.",
+                "Your library: 419 of 421 drops · 62 of 63 games",
+                "",
+                ""
+            ]
         );
     }
 

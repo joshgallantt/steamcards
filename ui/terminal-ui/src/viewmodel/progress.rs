@@ -7,6 +7,7 @@ use std::time::Duration;
 use chrono::{DateTime, FixedOffset, Utc};
 use farming::{Drop, FarmingSession, Mode};
 use market::{Held, MarketPause, Money};
+use preferences::Tier;
 
 use super::screen::{Activity, Snapshot, Values, session_value};
 
@@ -109,6 +110,9 @@ pub struct Summary {
     pub estimated: Option<Money>,
     /// When the farmer looks again.
     pub next_look: Option<DateTime<Utc>>,
+    /// Why nothing is left: "all done", "all done or skipped", or the
+    /// farmer's own reason.
+    pub why: String,
 }
 
 /// The first estimate with a likely range, against what happened.
@@ -161,10 +165,13 @@ impl Progress {
             holds_still: activity.holds_still(),
         });
         let summary = match (&activity, session) {
-            (Activity::NothingToFarm { next_look, .. }, Some(session))
+            (Activity::NothingToFarm { why, next_look }, Some(session))
                 if !session.drops.is_empty() =>
             {
-                Some(summary(s, session, estimated, *next_look))
+                Some(Summary {
+                    why: why_nothing(s, why),
+                    ..summary(s, session, estimated, *next_look)
+                })
             }
             _ => None,
         };
@@ -253,6 +260,20 @@ fn summary(
             .collect(),
         estimated,
         next_look,
+        why: String::new(),
+    }
+}
+
+/// Why nothing is left to farm, in the summary's words: every game is done,
+/// or done or skipped; otherwise the farmer's own reason, `note`.
+fn why_nothing(s: &Snapshot<'_>, note: &str) -> String {
+    let mut left = s.library().with_drops_left().peekable();
+    if left.peek().is_none() {
+        "all done".to_owned()
+    } else if left.all(|g| s.prefs.tier(g.app_id) == Tier::Skip) {
+        "all done or skipped".to_owned()
+    } else {
+        note.to_owned()
     }
 }
 
@@ -430,5 +451,21 @@ mod tests {
         );
         assert_eq!(p.library.received, 419);
         assert_eq!(p.to_go.games, 0);
+        assert_eq!(
+            summary.why, "all done or skipped",
+            "Counter-Strike 2, skipped, has cards left"
+        );
+    }
+
+    #[test]
+    fn nothing_left_says_why_in_its_own_words() {
+        let mut data = fixtures::nothing_to_farm();
+        data.prefs.skipped_games.clear();
+        let p = Progress::build(&data.snapshot(), None);
+        assert_eq!(
+            p.summary.unwrap().why,
+            "every game with cards left is skipped",
+            "the farmer's reason, when it isn't that everything is done or skipped"
+        );
     }
 }

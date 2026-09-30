@@ -141,7 +141,29 @@ pub(crate) fn regions(w: u16, h: u16) -> Option<Regions> {
     })
 }
 
+/// Rows inside Progress at M for the session's summary (mockup e).
+const SUMMARY_ROWS: u16 = 7;
+
 impl Regions {
+    /// The same regions with room at M for the session's summary: seven rows
+    /// inside Progress, rather than four or five, taken from the queue and
+    /// the right-hand column. The other classes keep theirs.
+    pub(crate) fn with_summary(mut self) -> Self {
+        if self.class != SizeClass::M {
+            return self;
+        }
+        let grow = SUMMARY_ROWS.saturating_sub(self.progress_rows);
+        self.progress.height += grow;
+        self.progress_rows += grow;
+        self.queue.y += grow;
+        self.queue.height -= grow;
+        if let Some(right) = &mut self.right {
+            right.y += grow;
+            right.height -= grow;
+        }
+        self
+    }
+
     /// Whether the queue has its column header: not below 18 rows, and not
     /// at XS, whose columns are named in the border.
     pub(crate) fn queue_header(&self) -> bool {
@@ -156,6 +178,7 @@ impl Regions {
 
 /// Where a pop-up can go: the right-hand column (below Now at L) when its
 /// content fits there, or the whole body.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Place {
     Right,
@@ -163,6 +186,7 @@ pub(crate) enum Place {
 }
 
 /// The pop-ups, for where each goes at each size (§2.5).
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Popup {
     Details,
@@ -176,6 +200,7 @@ pub(crate) enum Popup {
 /// Where a pop-up goes: the right-hand column where the spec's table puts
 /// it there, and the size has one; otherwise the whole body. A pop-up
 /// covers whole panels, never part of one.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn popup_area(popup: Popup, regions: &Regions) -> Rect {
     let place = match (popup, regions.class) {
         (Popup::Details | Popup::SignIn, SizeClass::L) => Place::Right,
@@ -192,6 +217,7 @@ pub(crate) fn popup_area(popup: Popup, regions: &Regions) -> Rect {
 /// the keys in the border when they all fit there or on its last lines when
 /// they don't, and how much more is below when the text is longer than its
 /// area.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Placed {
     pub(crate) lines: Vec<ratatui::text::Line<'static>>,
@@ -203,6 +229,7 @@ pub(crate) struct Placed {
 
 /// Lays `lines` out in a pop-up over `area`, with its `keys`, scrolled
 /// `offset` lines down. Inside, text keeps 2 columns from each side.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn place(
     area: Rect,
     lines: &[ratatui::text::Line<'static>],
@@ -368,6 +395,18 @@ mod tests {
         assert!(!xs.queue_header());
         assert!(!regions(72, 17).unwrap().queue_header(), "below 18 rows");
         assert_eq!(regions(59, 16), None);
+    }
+
+    #[test]
+    fn the_sessions_summary_takes_seven_rows_at_m() {
+        let m = regions(120, 30).unwrap().with_summary();
+        assert_eq!((m.progress.height, m.progress_rows), (9, 7));
+        assert_eq!(m.queue, Rect::new(0, 10, 74, 18), "from the queue");
+        assert_eq!(m.right, Some(Rect::new(74, 10, 46, 18)), "and the right");
+        let tall = regions(146, 40).unwrap().with_summary();
+        assert_eq!((tall.progress_rows, tall.queue.y), (7, 10));
+        let l = regions(200, 50).unwrap();
+        assert_eq!(l.with_summary(), l, "L keeps its own");
     }
 
     #[test]

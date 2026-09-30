@@ -134,6 +134,8 @@ pub struct Group {
     pub games: Vec<GroupGame>,
     /// When the lead reaches 3 hours.
     pub lead_ready: DateTime<Utc>,
+    /// Played together since: when the stretch going on began.
+    pub since: Option<DateTime<Utc>>,
 }
 
 /// A game of the group, and the hours it still needs.
@@ -253,7 +255,16 @@ fn group(s: &Snapshot<'_>, app_ids: &[u32]) -> Option<Group> {
         .collect();
     let lead = games.first()?;
     let lead_ready = s.now + Duration::from_secs_f64(lead.to_go * 3600.0);
-    Some(Group { games, lead_ready })
+    let since = s
+        .session()
+        .and_then(|ss| ss.stretches.last())
+        .filter(|st| st.to.is_none() && st.app_ids.iter().any(|id| app_ids.contains(id)))
+        .map(|st| st.from);
+    Some(Group {
+        games,
+        lead_ready,
+        since,
+    })
 }
 
 #[cfg(test)]
@@ -376,6 +387,7 @@ mod tests {
             "19:00",
             "Stray has 3h ≈ 19:00"
         );
+        assert_eq!(group.since, Some(fixtures::at(17, 24)), "since 17:24");
         assert_eq!(now.game, None);
         assert_eq!(now.look_every, None);
     }
