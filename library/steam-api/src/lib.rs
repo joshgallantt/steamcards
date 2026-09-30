@@ -1,7 +1,8 @@
 //! Steam, in Steam's own terms: a CM server connection, sign-in with a QR code
-//! the Steam app approves, playing games, the badge pages on
-//! steamcommunity.com, the items in the account's inventory, the account's
-//! wallet, and the market's prices, through one queue at the market's pace.
+//! the Steam app approves, playing games, the pages of steamcommunity.com as
+//! the account's owner sees them, and each game's card page, the items in the
+//! account's inventory, the account's wallet, and the market's prices,
+//! through one queue at the market's pace.
 //!
 //! No domain knowledge. The data crates map what this returns onto their
 //! domains; this crate never sees a domain type.
@@ -19,6 +20,7 @@ mod eresult;
 pub mod inventory;
 pub mod market;
 mod packet;
+pub mod page;
 mod proto;
 mod steam_client;
 pub mod token;
@@ -26,6 +28,7 @@ pub mod token;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
+pub use community::WebLogin;
 pub use eresult::EResult;
 pub use steam_client::SteamClient;
 

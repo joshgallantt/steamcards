@@ -1021,6 +1021,7 @@ dependencies = [
  "config-file",
  "debug-log",
  "game",
+ "scraper",
  "steam-api",
  "tokio",
  "wiremock",

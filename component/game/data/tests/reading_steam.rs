@@ -6,7 +6,7 @@ use std::sync::Arc;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use game::{AppId, CardDrops, Game, GameRepository};
-use game_data::SteamGameRepository;
+use game_data::{DefaultGameRepository, SteamGameClient};
 use steam_api::{
     SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
@@ -16,7 +16,13 @@ use wiremock::{
     matchers::{method, path, query_param},
 };
 
+/// A page of this crate's own: the badge pages it reads.
 fn fixture(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/tests/pages/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+/// A game's card page, which steam-api reads.
+fn card_page(name: &str) -> String {
     let at = format!(
         "{}/../../../library/steam-api/tests/pages/{name}",
         env!("CARGO_MANIFEST_DIR")
@@ -35,7 +41,7 @@ async fn serving(site: &MockServer, at: String, page: String, query: Option<(&st
         .await;
 }
 
-async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamGameRepository {
+async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> DefaultGameRepository {
     let dir = std::env::temp_dir().join(format!("steamcards-game-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -49,7 +55,7 @@ async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamGa
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
     let session = SteamClient::with_endpoints(file, &DebugLog::off(), endpoints);
-    SteamGameRepository::new(Arc::new(session))
+    DefaultGameRepository::new(Arc::new(SteamGameClient::new(Arc::new(session))))
 }
 
 #[tokio::test]
@@ -68,7 +74,7 @@ async fn the_badges_are_the_library() {
     serving(
         &site,
         format!("/profiles/{STEAM_ID}/gamecards/730"),
-        fixture("gamecards-730.html"),
+        card_page("gamecards-730.html"),
         None,
     )
     .await;
@@ -82,6 +88,23 @@ async fn the_badges_are_the_library() {
     let repo = repository(&steam, &site, "badges").await;
 
     let library = repo.library().await.unwrap();
+
+    let ids: Vec<u32> = library.games().iter().map(|g| g.app_id.0).collect();
+    assert_eq!(
+        ids,
+        [620, 440, 220, 1_086_940, 413_150, 730, 1_145_360],
+        "every page, each game once"
+    );
+    assert_eq!(
+        library.game(AppId(730)).unwrap().drops.remaining,
+        2,
+        "its own page knew better"
+    );
+    assert_eq!(
+        library.game(AppId(1_145_360)).unwrap().drops.remaining,
+        1,
+        "\"1 card drop remaining\""
+    );
 
     assert_eq!(
         library.game(AppId(620)),

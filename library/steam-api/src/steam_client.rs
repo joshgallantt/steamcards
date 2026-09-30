@@ -20,10 +20,7 @@ use debug_log::DebugLog;
 use crate::{
     Endpoints,
     auth::{self, Approved},
-    badges::{
-        BadgeGame, Seen, SetCard, read_badge_page, read_foil_cards_page, read_game_cards_page,
-        seen_by,
-    },
+    badges::{BadgeGame, SetCard, read_foil_cards_page, read_game_cards_page},
     cm::{self, Connection, LogOn, NoAnswer, Refused, WalletInfo},
     community::{Community, WebLogin},
     directory,
@@ -32,11 +29,10 @@ use crate::{
         self, Listed, MAX_SET_PAGES, Market, MarketPace, MarketPause, MarketQueue, OrderBook,
         QUERY_ACTION,
     },
+    page::{Seen, seen_by},
     token,
 };
 
-/// Badge pages read at most: 150 games each, so a very large library.
-const MAX_PAGES: u32 = 100;
 /// A site token with less life left than this is replaced first.
 const WEB_TOKEN_MARGIN: i64 = 5 * 60;
 /// CM servers tried, best first, before giving up on connecting.
@@ -296,31 +292,6 @@ impl SteamClient {
         }
     }
 
-    /// Every game with trading cards the account has, from its badge pages.
-    /// Games the badge pages may be wrong about are checked on their own page.
-    pub async fn badges(&self) -> anyhow::Result<Vec<BadgeGame>> {
-        let path = |id: u64, page: u32| format!("/profiles/{id}/badges?l=english&p={page}");
-        let (first, who) = self.page_as_owner(|id| path(id, 1)).await?;
-        let first = read_badge_page(&first);
-        let mut games = first.games;
-        for page in 2..=first.pages.min(MAX_PAGES) {
-            let html = self.community.page(&path(who.steam_id, page), &who).await?;
-            games.extend(read_badge_page(&html).games);
-        }
-        // A game can move to the next page while they're read.
-        let mut seen = HashSet::new();
-        games.retain(|g| seen.insert(g.app_id));
-        for game in games.iter_mut().filter(|g| g.unsure) {
-            let own = self.game_cards_as(&who, game.app_id).await;
-            match own {
-                Ok(Some(checked)) => *game = checked,
-                Ok(None) => game.unsure = false,
-                Err(e) => self.log.line(&format!("checking {}: {e}", game.app_id)),
-            }
-        }
-        Ok(games)
-    }
-
     /// One game's cards, from its own card page; `None` when the page has no
     /// card drops on it.
     pub async fn game_cards(&self, app_id: u32) -> anyhow::Result<Option<BadgeGame>> {
@@ -496,19 +467,11 @@ impl SteamClient {
         inventory::describe(&*self.connection().await?, asset_ids).await
     }
 
-    async fn game_cards_as(
-        &self,
-        who: &WebLogin,
-        app_id: u32,
-    ) -> anyhow::Result<Option<BadgeGame>> {
-        let path = format!("/profiles/{}/gamecards/{app_id}?l=english", who.steam_id);
-        let html = self.community.page(&path, who).await?;
-        Ok(read_game_cards_page(app_id, &html).game)
-    }
-
-    /// A page as the account's owner sees it. A page shown signed out means
-    /// the site token is no good: a new one is made, once.
-    async fn page_as_owner(
+    /// A page of steamcommunity.com as the account's owner sees it, and who
+    /// it was fetched as, to fetch more as. `path` is given the account's
+    /// Steam ID. A page shown signed out means the site token is no good: a
+    /// new one is made, once.
+    pub async fn page_as_owner(
         &self,
         path: impl Fn(u64) -> String,
     ) -> anyhow::Result<(String, WebLogin)> {
@@ -523,6 +486,11 @@ impl SteamClient {
             }
         }
         bail!("steamcommunity.com wouldn't take the sign-in — it'll be tried again")
+    }
+
+    /// A page of steamcommunity.com, fetched as `who`.
+    pub async fn page(&self, path: &str, who: &WebLogin) -> anyhow::Result<String> {
+        self.community.page(path, who).await
     }
 
     /// Who to fetch pages as: the token at hand while it has life left, or a

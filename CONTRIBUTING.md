@@ -186,7 +186,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── price/         What cards are worth: prices and the wallet.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
-│   ├── steam-api/     The CM connection, QR sign-in, badge pages, the market.
+│   ├── steam-api/     The CM connection, QR sign-in, the site's pages, the market.
 │   ├── config-file/   The one JSON file: the saved sign-in and preferences.
 │   ├── debug-log/     The opt-in debug log.
 │   └── keep-awake/    Keeping the computer awake while games play.
@@ -350,7 +350,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferencesU
 ### What that buys
 
 - **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
-- **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
+- **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `game-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the acceptance tests drive the real `DefaultFarmCardsUseCase` over an in-memory Steam, and the farmer can't tell the difference.
 

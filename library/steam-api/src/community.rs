@@ -7,7 +7,7 @@
 //! couple of times before giving up. The market's requests are asked once
 //! only: its queue decides what a busy answer means (see `market`).
 
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use anyhow::{anyhow, bail};
 use debug_log::DebugLog;
@@ -20,11 +20,27 @@ const TRIES: u32 = 3;
 /// How long to wait before asking a busy site again, times the attempt.
 const BACK_OFF: Duration = Duration::from_millis(500);
 
-/// Who pages are fetched as.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WebLogin {
+/// Who pages are fetched as: the account, and a token for the site.
+#[derive(Clone, PartialEq, Eq)]
+pub struct WebLogin {
     pub(crate) steam_id: u64,
     pub(crate) access_token: String,
+}
+
+impl WebLogin {
+    /// The account's 64-bit Steam ID.
+    pub fn steam_id(&self) -> u64 {
+        self.steam_id
+    }
+}
+
+/// The account, never the token.
+impl fmt::Debug for WebLogin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WebLogin")
+            .field("steam_id", &self.steam_id)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What the site answered, whatever it was.

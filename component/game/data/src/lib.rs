@@ -1,41 +1,13 @@
-//! The game domain's contract, satisfied by Steam: the badge pages from
-//! steamcommunity.com in, the library out. Imports `game` because the
-//! contract is declared there; `game` imports nothing back.
+//! The game domain's contract, satisfied by Steam: the repository reads the
+//! library through a client, and the client is Steam's, reading the badge
+//! pages on steamcommunity.com, and a game's own card page when they may be
+//! wrong about it. Imports `game` because the contract is declared there;
+//! `game` imports nothing back.
 
-use std::sync::Arc;
+mod badge_page;
+mod default_game_repository;
+mod dto;
+mod game_client;
 
-use async_trait::async_trait;
-use game::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
-use steam_api::{SteamClient, badges::BadgeGame};
-
-/// The account's badges, read signed in.
-pub struct SteamGameRepository {
-    steam: Arc<SteamClient>,
-}
-
-impl SteamGameRepository {
-    pub fn new(steam: Arc<SteamClient>) -> Self {
-        Self { steam }
-    }
-}
-
-#[async_trait]
-impl GameRepository for SteamGameRepository {
-    async fn library(&self) -> anyhow::Result<SteamLibrary> {
-        let games = self.steam.badges().await?;
-        Ok(SteamLibrary::new(games.into_iter().map(to_game).collect()))
-    }
-}
-
-fn to_game(b: BadgeGame) -> Game {
-    Game {
-        app_id: AppId(b.app_id),
-        name: b.name,
-        hours: b.hours,
-        drops: CardDrops {
-            received: b.cards_received,
-            remaining: b.cards_left,
-        },
-        badge_level: b.badge_level,
-    }
-}
+pub use default_game_repository::DefaultGameRepository;
+pub use game_client::{GameClient, SteamGameClient};

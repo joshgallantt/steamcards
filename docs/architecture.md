@@ -230,7 +230,7 @@ cards joins the two.
 | Contract | Declared in | Implemented by |
 | --- | --- | --- |
 | `AccountRepository` | `account` | `DefaultAccountRepository` in `account-data`, through a `SteamAccountClient` |
-| `GameRepository` | `game` | `SteamGameRepository` in `game-data` |
+| `GameRepository` | `game` | `DefaultGameRepository` in `game-data`, through a `SteamGameClient` |
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
 | `FarmingRepository` | `farming` | `SteamFarmingRepository` in `farming-data` |
@@ -271,7 +271,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages (foils' too), the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `PriceCache`, the market's prices in a file of their own beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
