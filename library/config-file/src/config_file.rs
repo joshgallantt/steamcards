@@ -48,60 +48,6 @@ impl ConfigFile {
         *fields = next;
         Ok(())
     }
-
-    pub fn market(&self) -> StoredMarket {
-        let market = self.read::<MarketFields>().unwrap_or_default().market;
-        StoredMarket {
-            basis: market.basis,
-            pause: market.pause,
-        }
-    }
-
-    /// Writes first, then keeps, as every field is.
-    pub fn save_market_basis(&self, basis: String) -> anyhow::Result<()> {
-        let mut fields = self.read::<MarketFields>().unwrap_or_default();
-        fields.market.basis = basis;
-        self.write(&fields)
-    }
-
-    /// Writes first, then keeps. `None` once there's no pause.
-    pub fn save_market_pause(&self, pause: Option<StoredPause>) -> anyhow::Result<()> {
-        let mut fields = self.read::<MarketFields>().unwrap_or_default();
-        fields.market.pause = pause;
-        self.write(&fields)
-    }
-}
-
-/// The market's settings, and Steam's pause on market requests, as stored.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct StoredMarket {
-    /// The value basis: "list", "net" or "instant". Empty for the default.
-    pub basis: String,
-    /// Steam's pause on market requests, when there is one.
-    pub pause: Option<StoredPause>,
-}
-
-/// Steam's pause on market requests, as stored.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StoredPause {
-    /// When it ends, in seconds since the epoch.
-    pub until: i64,
-    /// How long it is, in seconds.
-    pub step: u64,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct MarketFields {
-    #[serde(default)]
-    market: MarketDto,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct MarketDto {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    basis: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pause: Option<StoredPause>,
 }
 
 /// The saved sign-in's fields in the file.
@@ -243,52 +189,6 @@ mod tests {
                 priority_games: vec![620],
                 only_priority: true,
             }
-        );
-    }
-
-    #[test]
-    fn the_market_settings_and_steams_pause_are_kept_with_the_rest() {
-        let path = temp("market");
-        let file = ConfigFile::open(path.clone()).unwrap();
-        file.save_credentials(signed_in()).unwrap();
-        file.save_market_basis("net".into()).unwrap();
-        let pause = StoredPause {
-            until: 1_790_712_345,
-            step: 1_200,
-        };
-        file.save_market_pause(Some(pause)).unwrap();
-
-        let reopened = ConfigFile::open(path.clone()).unwrap();
-        assert_eq!(
-            reopened.market(),
-            StoredMarket {
-                basis: "net".into(),
-                pause: Some(pause),
-            }
-        );
-        assert_eq!(
-            reopened.credentials(),
-            Some(signed_in()),
-            "and nothing else changed"
-        );
-        let json: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(
-            json["market"],
-            serde_json::json!({"basis": "net", "pause": {"until": 1_790_712_345, "step": 1_200}})
-        );
-
-        reopened.save_market_pause(None).unwrap();
-        assert_eq!(ConfigFile::open(path).unwrap().market().pause, None);
-    }
-
-    #[test]
-    fn a_file_from_before_the_market_reads_with_its_defaults() {
-        let path = temp("before-market");
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, r#"{"priority_games":[620]}"#).unwrap();
-        assert_eq!(
-            ConfigFile::open(path).unwrap().market(),
-            StoredMarket::default()
         );
     }
 

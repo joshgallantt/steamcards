@@ -4,9 +4,13 @@
 //! runs at a quick pace here; its real one is tested on paused time in
 //! steam-api.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
-use config_file::{ConfigFile, CredentialStore, Credentials, PriceCache};
+use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use game::AppId;
 use money::{Currency, Money};
@@ -15,7 +19,7 @@ use price::{
     KeepPricesUpToDateUseCase, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository,
     PriceSettings, QuoteSource, SetGamesToPriceUseCase, SetPrices, Wallet, system_clock,
 };
-use price_data::SteamPriceRepository;
+use price_data::{DefaultPriceRepository, FilePriceStore, SteamMarketClient};
 use steam_api::{
     EResult, SteamClient,
     market::MarketPace,
@@ -27,6 +31,11 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path, query_param},
 };
+
+/// What a file holds, as JSON.
+fn on_disk(path: &Path) -> serde_json::Value {
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
 
 /// Where a test keeps its config file and its prices.
 struct Disk {
@@ -61,7 +70,7 @@ impl Disk {
         &self,
         steam: &FakeSteam,
         site: &MockServer,
-    ) -> (SteamPriceRepository, Arc<SteamClient>) {
+    ) -> (DefaultPriceRepository, Arc<SteamClient>) {
         let file = Arc::new(ConfigFile::open(self.config.clone()).unwrap());
         let mut endpoints = steam.endpoints();
         endpoints.community = site.uri();
@@ -76,9 +85,10 @@ impl Disk {
                     after_server_error: Duration::from_millis(10),
                 }),
         );
-        let cache = Arc::new(PriceCache::open(self.prices.clone()));
+        let store = FilePriceStore::open(file, self.prices.clone());
+        let client = SteamMarketClient::new(session.clone());
         (
-            SteamPriceRepository::new(session.clone(), file, cache),
+            DefaultPriceRepository::new(Arc::new(client), Arc::new(store), DebugLog::off()),
             session,
         )
     }
@@ -314,11 +324,9 @@ async fn steams_pause_is_kept_across_a_restart() {
         panic!("paused");
     };
     assert_eq!(pause.step, Duration::from_secs(20 * 60));
-    let kept = ConfigFile::open(disk.config.clone())
-        .unwrap()
-        .market()
-        .pause;
-    assert_eq!(kept.map(|p| p.until), Some(pause.until.timestamp()));
+    let kept = &on_disk(&disk.config)["market"]["pause"];
+    assert_eq!(kept["until"], pause.until.timestamp());
+    assert_eq!(kept["step"], 20 * 60);
 
     // steamcards starts again.
     let (again, _) = disk.market(&steam, &site);
@@ -381,13 +389,7 @@ async fn the_basis_is_kept_in_the_config_file() {
 
     let (again, _) = disk.market(&steam, &site);
     assert_eq!(again.settings().basis, Basis::Net);
-    assert_eq!(
-        ConfigFile::open(disk.config.clone())
-            .unwrap()
-            .market()
-            .basis,
-        "net"
-    );
+    assert_eq!(on_disk(&disk.config)["market"]["basis"], "net");
 }
 
 #[tokio::test]
@@ -483,7 +485,7 @@ async fn the_market_is_priced_end_to_end() {
         Some(Money::new(60, Currency::GBP))
     );
     assert_eq!(
-        PriceCache::open(disk.prices.clone()).sets().len(),
+        on_disk(&disk.prices)["sets"].as_array().unwrap().len(),
         1,
         "kept on disk"
     );

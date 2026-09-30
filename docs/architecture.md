@@ -234,7 +234,7 @@ cards joins the two.
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
 | `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient`, keeping the computer awake while anything plays |
-| `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
+| `PriceRepository` | `price` | `DefaultPriceRepository` in `price-data`, through a `SteamMarketClient` and a `FilePriceStore` |
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,
 `SignOutError::Unavailable`, `PreferencesError::Unavailable`,
@@ -272,7 +272,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 | Crate | Holds |
 | --- | --- |
 | `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
-| `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `PriceCache`, the market's prices in a file of their own beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
+| `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `JsonFile`, a file of its own for what can be lost, like the market's prices beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
 
@@ -318,13 +318,13 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::SteamClient`, `KeepAwake`, `SessionKeeper` | `Settings` |
+| `DataAssembler` | `ConfigFile`, `steam_api::SteamClient`, `KeepAwake`, `SessionKeeper`, and where the prices are kept | `Settings` |
 | `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
-`PriceComponent` takes the `SteamClient`, the `ConfigFile` and a `PriceCache`
-whose file sits beside the config (`prices.json`); `Settings` works out
-where.
+`PriceComponent` takes the `SteamClient`, the `ConfigFile` and where the
+prices are kept, a file beside the config (`prices.json`) that its store
+opens; `Settings` works out where.
 
 ---
 

@@ -1,6 +1,6 @@
 [package]
 name = "price-data"
-description = "Card prices from the Steam market, the wallet from Steam, and the market's settings and prices kept on disk, written to fit the price domain's PriceRepository."
+description = "Card prices from the Steam market and the wallet from Steam, through a client of their own, and the market's settings and prices kept on disk, through a store of their own, written to fit the price domain's PriceRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,14 +16,15 @@ price.workspace = true
 game.workspace = true
 money.workspace = true
 config-file.workspace = true
+debug-log.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+serde.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-debug-log.workspace = true
 serde_json.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
 tokio-util.workspace = true

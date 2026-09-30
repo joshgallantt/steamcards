@@ -1,11 +1,12 @@
-//! Where the price domain meets its data layer: one repository over the
-//! Steam session, the config file and the price cache, handed to every use
-//! case, on the system's clock. The composition root names the Steam client and
-//! the files.
+//! Where the price domain meets its data layer: prices looked up through the
+//! Steam session and kept in the config file and a file of their own, through
+//! one repository handed to every use case, on the system's clock. The
+//! composition root names the Steam client and the files.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use config_file::{ConfigFile, PriceCache};
+use config_file::ConfigFile;
+use debug_log::DebugLog;
 use price::{
     Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
     DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
@@ -13,7 +14,9 @@ use price::{
     GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
     PriceRepository, RefreshPricesUseCase, SetBasisUseCase, SetGamesToPriceUseCase, system_clock,
 };
-use price_data::SteamPriceRepository;
+use price_data::{
+    DefaultPriceRepository, FilePriceStore, MarketClient, PriceStore, SteamMarketClient,
+};
 use steam_api::SteamClient;
 
 pub struct PriceComponent {
@@ -28,14 +31,27 @@ pub struct PriceComponent {
 }
 
 impl PriceComponent {
-    pub fn new(steam: Arc<SteamClient>, file: Arc<ConfigFile>, prices: Arc<PriceCache>) -> Self {
+    /// Keeps the prices in the file at `prices`.
+    pub fn new(steam: Arc<SteamClient>, file: Arc<ConfigFile>, prices: PathBuf) -> Self {
+        let log = steam.log().clone();
         Self::over(
-            Arc::new(SteamPriceRepository::new(steam, file, prices)),
+            Arc::new(SteamMarketClient::new(steam)),
+            Arc::new(FilePriceStore::open(file, prices)),
+            log,
             system_clock(),
         )
     }
 
-    pub fn over(repo: Arc<dyn PriceRepository>, clock: Clock) -> Self {
+    /// Over a client and a store of its own: the repository is built here,
+    /// and never let out.
+    pub fn over(
+        client: Arc<dyn MarketClient>,
+        store: Arc<dyn PriceStore>,
+        log: DebugLog,
+        clock: Clock,
+    ) -> Self {
+        let repo: Arc<dyn PriceRepository> =
+            Arc::new(DefaultPriceRepository::new(client, store, log));
         Self {
             get_prices: Arc::new(DefaultGetPricesUseCase::new(repo.clone())),
             set_games_to_price: Arc::new(DefaultSetGamesToPriceUseCase::new(repo.clone())),

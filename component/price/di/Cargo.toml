@@ -15,4 +15,5 @@ workspace = true
 price.workspace = true
 price-data.workspace = true
 config-file.workspace = true
+debug-log.workspace = true
 steam-api.workspace = true

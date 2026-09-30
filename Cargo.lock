@@ -2185,6 +2185,7 @@ dependencies = [
  "game",
  "money",
  "price",
+ "serde",
  "serde_json",
  "steam-api",
  "tokio",
@@ -2197,6 +2198,7 @@ name = "price-di"
 version = "0.1.0"
 dependencies = [
  "config-file",
+ "debug-log",
  "price",
  "price-data",
  "steam-api",
