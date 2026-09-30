@@ -25,7 +25,6 @@ use std::{
 };
 
 use anyhow::{anyhow, bail};
-use rand::Rng;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use tokio::time::Instant;
@@ -241,7 +240,7 @@ impl MarketQueue {
 
     fn gap(&self, signed_in: bool) -> Duration {
         if signed_in {
-            self.pace.signed_in + rand::thread_rng().gen_range(Duration::ZERO..=self.pace.jitter)
+            self.pace.signed_in + rand::random_range(Duration::ZERO..=self.pace.jitter)
         } else {
             self.pace.signed_out
         }

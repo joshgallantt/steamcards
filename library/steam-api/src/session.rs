@@ -16,7 +16,6 @@ use std::{
 use anyhow::{anyhow, bail};
 use config_file::{CredentialStore, Credentials};
 use debug_log::DebugLog;
-use rand::Rng;
 
 use crate::{
     Endpoints,
@@ -178,7 +177,7 @@ impl Session {
             .credentials()
             .map(|c| c.login_id)
             .filter(|&id| id != 0)
-            .unwrap_or_else(|| rand::thread_rng().gen_range(1..=u32::MAX));
+            .unwrap_or_else(|| rand::random_range(1..=u32::MAX));
         self.store.save_credentials(Credentials {
             refresh_token: approved.refresh_token.clone(),
             account_name: approved.account_name.clone(),

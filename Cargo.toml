@@ -137,7 +137,7 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # WebSocket: the connection to Steam (a CM server)
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 
 # Steam's messages are protobufs. The few steamcards sends and reads are
 # written out by hand with prost's derive, so no build script or protoc.
@@ -166,16 +166,16 @@ qrcode = { version = "0.14", default-features = false }
 webbrowser = "1"
 
 # Encoding
-base64 = "0.22"
+base64 = "0.23"
 flate2 = "1"
-rand = { version = "0.8", features = ["small_rng"] }
+rand = "0.10"
 hex = "0.4"
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive"] }
 
 # Platform config/data directories
-dirs = "5"
+dirs = "7"
 
 # Tests: a local stand-in for steamcommunity.com
 wiremock = "0.6"

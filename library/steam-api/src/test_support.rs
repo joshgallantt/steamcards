@@ -434,7 +434,7 @@ async fn serve(tcp: tokio::net::TcpStream, state: Arc<Mutex<State>>, stop: Cance
             _ = stop.cancelled() => break,
             out = rx.recv() => match out {
                 Some(frame) if !frame.is_empty() => {
-                    if sink.send(Frame::Binary(frame)).await.is_err() {
+                    if sink.send(Frame::Binary(frame.into())).await.is_err() {
                         break;
                     }
                 }

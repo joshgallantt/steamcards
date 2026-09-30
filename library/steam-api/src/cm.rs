@@ -243,7 +243,7 @@ impl Connection {
                     _ = writing.cancelled() => break,
                     frame = outgoing.recv() => match frame {
                         Some(frame) => {
-                            if sink.send(Frame::Binary(frame)).await.is_err() {
+                            if sink.send(Frame::Binary(frame.into())).await.is_err() {
                                 break;
                             }
                         }

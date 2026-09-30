@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use debug_log::DebugLog;
-use rand::RngCore;
 use reqwest::{StatusCode, header};
 use tokio::{sync::Mutex, time::Instant};
 
@@ -50,7 +49,7 @@ pub(crate) struct Community {
 impl Community {
     pub(crate) fn new(http: reqwest::Client, base: String, log: DebugLog) -> Self {
         let mut id = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut id);
+        rand::fill(&mut id);
         Self {
             http,
             base,
