@@ -220,6 +220,29 @@ async fn a_new_connection_passes_on_only_what_is_new_since() {
 }
 
 #[tokio::test]
+async fn an_item_that_arrived_while_signed_off_is_passed_on_when_signed_on_again() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "items-meanwhile");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 960_910).await;
+
+    // Paused: farming stops, and signs off. A card drops meanwhile, on
+    // another device.
+    repo.stop().await;
+    let madison = unseen_card(31_002, 960_910);
+    steam.already_unseen(vec![madison]);
+    plays(&repo, &session, 960_910).await;
+    steam.block(true, 730);
+
+    assert_eq!(
+        signal(&repo).await,
+        Signal::NewItems(vec![heard(madison)]),
+        "what was new at sign-on, since last time"
+    );
+    assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
+}
+
+#[tokio::test]
 async fn another_session_taking_over_is_its_own_signal() {
     let steam = FakeSteam::start().await;
     let repo = SteamPlayRepository::new(session(&steam, "replaced"), Arc::new(KeepAwake::off()));

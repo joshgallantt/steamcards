@@ -30,6 +30,8 @@ pub struct SteamPlayRepository {
 
 struct Played {
     conn: Arc<Connection>,
+    /// The account it signed on as.
+    account: Option<u64>,
     games: Vec<u32>,
     online: bool,
 }
@@ -41,14 +43,21 @@ struct Heard {
     items: HashSet<u64>,
     /// How many new items Steam last counted.
     count: u32,
+    /// The account whose first sign-on here was taken as what was new
+    /// already. Signing on again, it's what's new since.
+    baseline: Option<u64>,
+    /// What a sign-on said was new, heard as a connection was taken up,
+    /// before anything asked: passed on with the next signal.
+    waiting: Option<Vec<NewItem>>,
 }
 
 impl Heard {
-    /// Takes in an announcement: the community items it lists that weren't
-    /// heard of before. When it lists none such but counts more than
-    /// before, none: a card may have dropped all the same. `None` when
-    /// nothing is new, or when it's what was there already at sign-on.
-    fn hear(&mut self, a: &Announcement) -> Option<Vec<NewItem>> {
+    /// Takes in an announcement on a connection signed on as `account`: the
+    /// community items it lists that weren't heard of before. When it lists
+    /// none such but counts more than before, none: a card may have dropped
+    /// all the same. `None` when nothing is new, or when it's what was there
+    /// already when the account first signed on here.
+    fn hear(&mut self, a: &Announcement, account: Option<u64>) -> Option<Vec<NewItem>> {
         let fresh: Vec<NewItem> = a
             .items
             .iter()
@@ -57,10 +66,16 @@ impl Heard {
             .collect();
         let more = a.count > self.count;
         self.count = a.count;
-        if a.at_sign_on {
+        if a.at_sign_on && (account.is_none() || self.baseline != account) {
+            self.baseline = account;
             return None;
         }
         (!fresh.is_empty() || more).then_some(fresh)
+    }
+
+    /// Keeps what a sign-on said was new for the next signal.
+    fn keep(&mut self, items: Vec<NewItem>) {
+        self.waiting.get_or_insert_default().extend(items);
     }
 }
 
@@ -73,6 +88,22 @@ impl SteamPlayRepository {
             news: tokio::sync::Mutex::default(),
             heard: Mutex::default(),
         }
+    }
+
+    /// Lets the connection played on go. If the account's first sign-on
+    /// went unheard, what it said was new is heard first, as what was there
+    /// already: signing on again then says what's new since.
+    fn let_go(&self) -> Option<Played> {
+        let played = self.on.lock().unwrap().take();
+        if let Some(p) = &played
+            && let Some(already) = p.conn.new_at_sign_on()
+        {
+            let mut heard = self.heard.lock().unwrap();
+            if heard.baseline != p.account {
+                heard.hear(&already, p.account);
+            }
+        }
+        played
     }
 }
 
@@ -91,7 +122,10 @@ impl PlayRepository for SteamPlayRepository {
             // new when it signed on included.
             *self.news.lock().await = Some(conn.events());
             if let Some(already) = conn.new_at_sign_on() {
-                self.heard.lock().unwrap().hear(&already);
+                let mut heard = self.heard.lock().unwrap();
+                if let Some(items) = heard.hear(&already, conn.steam_id()) {
+                    heard.keep(items);
+                }
             }
         }
         // A session is offline until it says otherwise.
@@ -103,6 +137,7 @@ impl PlayRepository for SteamPlayRepository {
             conn.play(app_ids)?;
         }
         *self.on.lock().unwrap() = Some(Played {
+            account: conn.steam_id(),
             conn,
             games: app_ids.to_vec(),
             online,
@@ -116,7 +151,7 @@ impl PlayRepository for SteamPlayRepository {
     }
 
     async fn stop(&self) {
-        let played = self.on.lock().unwrap().take();
+        let played = self.let_go();
         if let Some(p) = played.filter(|p| !p.games.is_empty()) {
             let _ = p.conn.play(&[]);
         }
@@ -134,6 +169,9 @@ impl PlayRepository for SteamPlayRepository {
     }
 
     async fn next_signal(&self) -> Signal {
+        if let Some(items) = self.heard.lock().unwrap().waiting.take() {
+            return Signal::NewItems(items);
+        }
         let mut news = self.news.lock().await;
         loop {
             let Some(rx) = news.as_mut() else {
@@ -145,23 +183,24 @@ impl PlayRepository for SteamPlayRepository {
                 Ok(Event::PlayingBlocked(b)) if b.blocked => return Signal::Blocked(b.app_id),
                 Ok(Event::PlayingBlocked(_)) => return Signal::Unblocked,
                 Ok(Event::NewItems(announced)) => {
-                    if let Some(items) = self.heard.lock().unwrap().hear(&announced) {
+                    let account = self.on.lock().unwrap().as_ref().and_then(|p| p.account);
+                    if let Some(items) = self.heard.lock().unwrap().hear(&announced, account) {
                         return Signal::NewItems(items);
                     }
                 }
                 Ok(Event::LoggedOff(EResult::LOGON_SESSION_REPLACED)) => {
                     *news = None;
-                    self.on.lock().unwrap().take();
+                    self.let_go();
                     return Signal::Replaced;
                 }
                 Ok(Event::LoggedOff(why)) => {
                     *news = None;
-                    self.on.lock().unwrap().take();
+                    self.let_go();
                     return Signal::Lost(signed_off(why));
                 }
                 Ok(Event::Closed) | Err(broadcast::error::RecvError::Closed) => {
                     *news = None;
-                    self.on.lock().unwrap().take();
+                    self.let_go();
                     return Signal::Lost("the connection to Steam dropped".into());
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
