@@ -1,0 +1,12 @@
+[package]
+name = "money"
+description = "Money as Steam counts it and writes it: an amount in hundredths of a currency's unit, in the currency Steam names."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

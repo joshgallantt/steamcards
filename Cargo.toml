@@ -8,6 +8,7 @@
 resolver = "2"
 members = [
     "app",
+    "component/money/domain",
     "component/account/domain",
     "component/account/data",
     "component/account/di",
@@ -87,6 +88,7 @@ broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
 # Domain
+money = { path = "component/money/domain" }
 account = { path = "component/account/domain" }
 library = { path = "component/library/domain" }
 preferences = { path = "component/preferences/domain" }

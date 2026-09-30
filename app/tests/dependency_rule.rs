@@ -58,9 +58,9 @@ fn allowed(from: Layer) -> &'static [Layer] {
 /// shows a session's cards joins the two.
 fn components(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
-        "account" | "library" | "preferences" => &[],
+        "money" | "account" | "library" | "preferences" => &[],
         "farming" => &["library", "preferences"],
-        "market" => &["library"],
+        "market" => &["library", "money"],
         _ => return None,
     })
 }
@@ -102,7 +102,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        23,
+        24,
         "a crate was added or removed; place it in a layer above"
     );
 

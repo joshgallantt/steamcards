@@ -181,7 +181,8 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── library/       The games with trading cards, their drops, and their card sets.
 │   ├── preferences/   What you want farmed first.
 │   ├── farming/       What to play, playing it, and this session's drops.
-│   └── market/        What cards are worth: prices, money, the wallet.
+│   ├── market/        What cards are worth: prices and the wallet.
+│   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, badge pages, the market.
 │   ├── config-file/   The one JSON file: the saved sign-in and preferences.

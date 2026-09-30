@@ -14,9 +14,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use config_file::{ConfigFile, PriceCache, StoredCard, StoredPause, StoredPrice, StoredSet};
 use market::{
-    Basis, Currency, Lookup, MarketPause, MarketRepository, MarketSettings, Money, Offers, Price,
-    PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
+    Basis, Lookup, MarketPause, MarketRepository, MarketSettings, Offers, Price, PriceBook,
+    PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
 };
+use money::{Currency, Money};
 use steam_api::{
     Session,
     market::{self as steam, Listed, Market, OrderBook},

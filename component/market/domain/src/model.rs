@@ -2,11 +2,9 @@ use std::{collections::BTreeMap, fmt, time::Duration};
 
 use chrono::{DateTime, Utc};
 use library::CardAsset;
+use money::{Currency, Money};
 
-use crate::{
-    Currency, Money,
-    rules::{FRESH_FOR, RETRY_FAILED, between, later},
-};
+use crate::rules::{FRESH_FOR, RETRY_FAILED, between, later};
 
 /// The account's Steam wallet, as far as the market goes: its currency, and
 /// the fees Steam takes from a sale. Amounts are in hundredths of its

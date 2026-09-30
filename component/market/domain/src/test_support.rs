@@ -12,10 +12,11 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
+use money::{Currency, Money};
 
 use crate::{
-    Clock, Currency, GetPrices, Lookup, MarketPause, MarketRepository, MarketSettings, Money,
-    Offers, Price, PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
+    Clock, GetPrices, Lookup, MarketPause, MarketRepository, MarketSettings, Offers, Price,
+    PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
 };
 
 /// Tuesday 29 September 2026, 09:14: when the session in the design's

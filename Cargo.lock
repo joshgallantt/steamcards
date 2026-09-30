@@ -1627,6 +1627,7 @@ dependencies = [
  "chrono",
  "library",
  "market",
+ "money",
  "tokio",
  "tokio-util",
 ]
@@ -1641,6 +1642,7 @@ dependencies = [
  "config-file",
  "debug-log",
  "market",
+ "money",
  "serde_json",
  "steam-api",
  "tokio",
@@ -1717,6 +1719,10 @@ dependencies = [
  "wasi",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "money"
+version = "0.1.0"
 
 [[package]]
 name = "ndk-context"
@@ -3042,6 +3048,7 @@ dependencies = [
  "futures",
  "library",
  "market",
+ "money",
  "preferences",
  "qrcode",
  "ratatui",

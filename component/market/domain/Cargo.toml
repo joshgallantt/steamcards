@@ -1,6 +1,6 @@
 [package]
 name = "market"
-description = "What the user's cards are worth on the Steam market: money, prices, the wallet, the value basis, and Steam's pause on price lookups."
+description = "What the user's cards are worth on the Steam market: prices, the wallet, the value basis, and Steam's pause on price lookups."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,7 @@ test-support = []
 
 [dependencies]
 library.workspace = true
+money.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true

@@ -9,11 +9,12 @@ use library::{
     test_support::{card_asset, game},
 };
 use market::{
-    Basis, Currency, HeldCard, Money, Offers, Price, PriceBook, SetPrices, expected_per_drop,
-    held_value, on_completion,
+    Basis, HeldCard, Offers, Price, PriceBook, SetPrices, expected_per_drop, held_value,
+    on_completion,
     test_support::{order_book, pounds, session_start, set_prices},
     value_left,
 };
+use money::{Currency, Money};
 
 const HOLLOW_KNIGHT: u32 = 367_520;
 const INSCRYPTION: u32 = 1_092_790;

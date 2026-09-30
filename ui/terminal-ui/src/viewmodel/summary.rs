@@ -4,9 +4,9 @@ use chrono::{DateTime, Utc};
 use farming::{DropCard, FarmingSession, forecast};
 use library::{Game, SteamLibrary};
 use market::{
-    Basis, HeldCard, Money, Price, PriceBook, Wallet, held_value, on_completion, value_left,
-    value_of,
+    Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
 };
+use money::Money;
 
 /// Cards are valued at their market price: what buyers pay, the lowest
 /// listing on the Steam market.
@@ -260,9 +260,10 @@ mod tests {
     use farming::{Drop, Mode, Stretch};
     use library::{Card, CardAsset, CardDrops};
     use market::{
-        Currency, PriceQuote, PricedCard, QuoteSource, SetPrices,
+        PriceQuote, PricedCard, QuoteSource, SetPrices,
         test_support::{listing, pounds},
     };
+    use money::Currency;
 
     use super::*;
 

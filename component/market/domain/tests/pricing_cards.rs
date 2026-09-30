@@ -7,12 +7,13 @@ use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, TimeDelta, Utc};
 use market::{
-    Basis, Clock, Currency, GetPrices, HeldCard, MarketError, MarketEvent, MarketEventKind,
-    MarketPause, Money, Price, PriceOffers, RefreshPrices, WantPrices, get_market_settings,
-    get_prices, get_wallet, held_value, price_offers, refresh_prices, set_basis,
+    Basis, Clock, GetPrices, HeldCard, MarketError, MarketEvent, MarketEventKind, MarketPause,
+    Price, PriceOffers, RefreshPrices, WantPrices, get_market_settings, get_prices, get_wallet,
+    held_value, price_offers, refresh_prices, set_basis,
     test_support::{self, InMemoryMarketRepository},
     want_prices, watch_prices,
 };
+use money::{Currency, Money};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 

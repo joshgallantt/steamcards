@@ -9,10 +9,11 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use config_file::{ConfigFile, CredentialStore, Credentials, PriceCache};
 use debug_log::DebugLog;
 use market::{
-    Basis, Currency, Lookup, MarketEventKind, MarketRepository, MarketSettings, Money, Price,
-    PriceQuote, QuoteSource, SetPrices, Wallet, system_clock, want_prices, watch_prices,
+    Basis, Lookup, MarketEventKind, MarketRepository, MarketSettings, Price, PriceQuote,
+    QuoteSource, SetPrices, Wallet, system_clock, want_prices, watch_prices,
 };
 use market_data::SteamMarketRepository;
+use money::{Currency, Money};
 use steam_api::{
     EResult, Session,
     market::MarketPace,

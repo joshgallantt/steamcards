@@ -1,6 +1,7 @@
-//! Market: what the user's cards are worth on the Steam market. Money in the
-//! wallet's currency, the prices of each game's set and each card's best
-//! offers, the value basis the user picks, and Steam's pause on lookups.
+//! Market: what the user's cards are worth on the Steam market, in the
+//! [`money`] component's amounts. The prices of each game's set and each
+//! card's best offers, the wallet's currency and fees, the value basis the
+//! user picks, and Steam's pause on lookups.
 //!
 //! It values the [`library`] component's cards: the copies held, a game's
 //! set, the drops still to come. It knows nothing of farming: whoever shows
@@ -11,7 +12,6 @@
 //! where each comes from, are in `rules.rs`.
 
 mod model;
-mod money;
 mod repository;
 mod rules;
 mod use_cases;
@@ -25,7 +25,6 @@ pub use model::{
     MarketPause, MarketSettings, Offers, Price, PriceBook, PriceQuote, PricedCard, QuoteSource,
     SetPrices, Wallet,
 };
-pub use money::{Currency, Money};
 pub use repository::MarketRepository;
 pub use use_cases::{
     Clock, GetMarketSettings, GetPrices, GetWallet, PriceOffers, RefreshPrices, SetBasis,

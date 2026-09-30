@@ -12,7 +12,7 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `account`, `library`, `preferences`, `farming`, `market` | Domain |
+| Domain | `money`, `account`, `library`, `preferences`, `farming`, `market` | Domain |
 | Data | `account-data`, `library-data`, `preferences-data`, `farming-data`, `market-data` | Domain, Library |
 | DI | `account-di`, `library-di`, `preferences-di`, `farming-di`, `market-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
@@ -29,7 +29,7 @@ Two things enforce this table:
    table doesn't allow. It also fails if a production dependency enables
    `test-support`, and if a domain crate uses a component its own table
    doesn't name: `farming` may use `library` and `preferences`, `market`
-   only `library`, so farming and the market never meet.
+   `library` and `money`, so farming and the market never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -64,9 +64,10 @@ The domain starts from its entities:
   account's own counts), the `Stretch`es of what was played and how, the
   games finished, and what the games it farms had left at the start. From
   it, `forecast()` learns how long the rest should take.
-- **`Money`**, in `market`: an amount in hundredths of a `Currency`, Steam's
-  `ECurrency` with Valve's own format for it. Amounts in different
-  currencies are never added or converted.
+- **`Money`**, a component of its own: an amount in hundredths of a
+  `Currency`, Steam's `ECurrency` with Valve's own format for it. Amounts in
+  different currencies are never added or converted. Prices, the wallet and
+  the screens all count in it.
 - **`Wallet`**: the account's currency, and the fees Steam takes from a sale,
   with Valve's fee rules (`buyer_pays`, `seller_gets`) in whole numbers.
 - **`Price`** and **`PriceQuote`**: what's known of a card's price (pending,
@@ -95,10 +96,10 @@ component/<name>/domain/src/
 `farming` adds `ranking.rs` (what to play, and how: pure), `forecast.rs`
 (the time to finish: pure), `session.rs` (the session, kept between runs of
 the farmer, and which card each drop was), `rules.rs` (every number it runs
-on, with where it comes from) and `reporter.rs`. `market` adds `money.rs`
-(`Currency`, with Valve's table of currencies as a `match`, and `Money`),
+on, with where it comes from) and `reporter.rs`. `market` adds
 `valuation.rs` (what cards are worth: pure, so every figure can be checked
-by hand) and `rules.rs`.
+by hand) and `rules.rs`. `money` is its models alone, a file each:
+`Currency`, with Valve's table of currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
 (`SteamLibrary::drops_left`, `Game::has_full_set`, `Preferences::wants`,

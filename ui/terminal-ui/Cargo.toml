@@ -18,6 +18,7 @@ account.workspace = true
 farming.workspace = true
 library.workspace = true
 market.workspace = true
+money.workspace = true
 preferences.workspace = true
 anyhow.workspace = true
 chrono.workspace = true

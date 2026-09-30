@@ -5,10 +5,9 @@
 
 use chrono::{DateTime, Utc};
 use library::SteamLibrary;
+use money::Money;
 
-use crate::{
-    Basis, Estimate, Held, HeldCard, Money, Price, PriceBook, QuoteSource, SetPrices, Wallet,
-};
+use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, QuoteSource, SetPrices, Wallet};
 
 /// What a card with this price is worth on `basis`, in the wallet's
 /// currency: its lowest listing (list), what that pays the seller (net), or
@@ -166,7 +165,9 @@ mod tests {
     use library::{CardDrops, Game};
 
     use super::*;
-    use crate::{Currency, PriceQuote, PricedCard};
+    use money::Currency;
+
+    use crate::{PriceQuote, PricedCard};
 
     fn noon() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-09-29T12:00:00Z")
