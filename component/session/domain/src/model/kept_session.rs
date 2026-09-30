@@ -5,7 +5,7 @@
 //!
 //! Which card dropped is told as Steam's own site tells it (research:
 //! market-and-session.md, section 2): the items Steam announced, described
-//! by `DescribeCards`. The game's card page, looked at as its drops are
+//! by `IdentifyCardsUseCase`. The game's card page, looked at as its drops are
 //! found, checks what Steam says: a card is a drop's only if the page's
 //! count of it went up. What Steam doesn't say, the page's counts can, when
 //! they can only be these drops'. Failing that, it isn't known. Which copy

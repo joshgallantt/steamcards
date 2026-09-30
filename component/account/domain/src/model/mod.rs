@@ -1,9 +1,9 @@
 mod account;
-mod link_error;
 mod login_challenge;
-mod unlink_error;
+mod sign_in_error;
+mod sign_out_error;
 
 pub use account::Account;
-pub use link_error::LinkError;
 pub use login_challenge::LoginChallenge;
-pub use unlink_error::UnlinkError;
+pub use sign_in_error::SignInError;
+pub use sign_out_error::SignOutError;

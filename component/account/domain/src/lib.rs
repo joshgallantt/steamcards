@@ -11,9 +11,9 @@ mod use_cases;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use model::{Account, LinkError, LoginChallenge, UnlinkError};
+pub use model::{Account, LoginChallenge, SignInError, SignOutError};
 pub use repository::AccountRepository;
 pub use use_cases::{
-    GetAccount, LinkAccount, RefreshAccount, UnlinkAccount, get_account, link_account,
-    refresh_account, unlink_account,
+    CheckSignInUseCase, DefaultCheckSignInUseCase, DefaultGetAccountUseCase, DefaultSignInUseCase,
+    DefaultSignOutUseCase, GetAccountUseCase, SignInUseCase, SignOutUseCase,
 };

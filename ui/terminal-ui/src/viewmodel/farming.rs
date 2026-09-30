@@ -1,20 +1,23 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use account::GetAccount;
-use farming::{FarmCards, FarmingEvent};
+use account::GetAccountUseCase;
+use farming::{FarmCardsUseCase, FarmingEvent};
 use game::AppId;
-use preferences::{GetPreferences, Preferences, PreferencesError, SetGameTier, Tier};
-use session::EndSession;
+use preferences::{GetPreferencesUseCase, Preferences, PreferencesError, SetGameTierUseCase, Tier};
+use session::EndSessionUseCase;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 /// Runs the farmer, pauses and resumes it, and ends its session.
 pub struct Farming {
-    farm: FarmCards,
-    end_session: EndSession,
-    account: GetAccount,
-    get_preferences: GetPreferences,
-    set_tier: SetGameTier,
+    farm: Arc<dyn FarmCardsUseCase>,
+    end_session: Arc<dyn EndSessionUseCase>,
+    account: Arc<dyn GetAccountUseCase>,
+    get_preferences: Arc<dyn GetPreferencesUseCase>,
+    set_tier: Arc<dyn SetGameTierUseCase>,
     tx: mpsc::Sender<FarmingEvent>,
     events: mpsc::Receiver<FarmingEvent>,
     running: Option<(CancellationToken, JoinHandle<()>)>,
@@ -26,11 +29,11 @@ pub struct Farming {
 
 impl Farming {
     pub fn new(
-        farm: FarmCards,
-        end_session: EndSession,
-        account: GetAccount,
-        get_preferences: GetPreferences,
-        set_tier: SetGameTier,
+        farm: Arc<dyn FarmCardsUseCase>,
+        end_session: Arc<dyn EndSessionUseCase>,
+        account: Arc<dyn GetAccountUseCase>,
+        get_preferences: Arc<dyn GetPreferencesUseCase>,
+        set_tier: Arc<dyn SetGameTierUseCase>,
     ) -> Self {
         let (tx, events) = mpsc::channel(1024);
         Self {
@@ -49,7 +52,7 @@ impl Farming {
 
     /// Starts farming, when signed in and not farming already.
     pub fn start(&mut self) {
-        let Some(account) = (self.account)() else {
+        let Some(account) = self.account.call() else {
             return;
         };
         if self.running.is_some() {
@@ -57,7 +60,7 @@ impl Farming {
         }
         self.session_for.get_or_insert(account.name);
         let token = CancellationToken::new();
-        let task = (self.farm)(token.clone(), self.tx.clone());
+        let task = self.farm.call(token.clone(), self.tx.clone());
         self.running = Some((token, task));
         self.started = Some(Instant::now());
     }
@@ -86,7 +89,7 @@ impl Farming {
 
     /// Ends this session of farming: farming again starts a new one.
     pub fn end_session(&mut self) {
-        (self.end_session)();
+        self.end_session.call();
         self.session_for = None;
     }
 
@@ -97,7 +100,10 @@ impl Farming {
         let Some(farmed_for) = &self.session_for else {
             return;
         };
-        let same = (self.account)().is_some_and(|a| !a.name.is_empty() && a.name == *farmed_for);
+        let same = self
+            .account
+            .call()
+            .is_some_and(|a| !a.name.is_empty() && a.name == *farmed_for);
         if !same {
             self.end_session();
         }
@@ -113,29 +119,25 @@ impl Farming {
     }
 
     pub fn preferences(&self) -> Preferences {
-        (self.get_preferences)()
+        self.get_preferences.call()
     }
 
     /// Takes effect within moments: the farmer looks at the preferences as
     /// it plays.
     pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
-        (self.set_tier)(app_id, tier)
+        self.set_tier.call(app_id, tier)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
-
-    use account::{Account, test_support::fixed_account};
-    use farming::test_support::idle_farmer;
+    use account::{Account, test_support::StubGetAccountUseCase};
+    use farming::test_support::SpyFarmCardsUseCase;
     use preferences::{
-        set_game_tier,
-        test_support::{ChangingPreferences, InMemoryPreferencesRepository},
+        DefaultSetGameTierUseCase,
+        test_support::{InMemoryPreferencesRepository, StubGetPreferencesUseCase},
     };
+    use session::test_support::SpyEndSessionUseCase;
 
     use super::*;
 
@@ -145,11 +147,13 @@ mod tests {
             expired: false,
         });
         Farming::new(
-            idle_farmer(),
-            Arc::new(|| {}),
-            fixed_account(account),
-            ChangingPreferences::default().get(),
-            set_game_tier(Arc::new(InMemoryPreferencesRepository::default())),
+            Arc::new(SpyFarmCardsUseCase::default()),
+            Arc::new(SpyEndSessionUseCase::default()),
+            Arc::new(StubGetAccountUseCase::new(account)),
+            Arc::new(StubGetPreferencesUseCase::default()),
+            Arc::new(DefaultSetGameTierUseCase::new(Arc::new(
+                InMemoryPreferencesRepository::default(),
+            ))),
         )
     }
 
@@ -162,16 +166,15 @@ mod tests {
 
     /// Farming, signed in as whoever `who` says, counting the sessions
     /// ended.
-    fn farming_as(who: &Arc<Mutex<Option<Account>>>, ended: &Arc<AtomicUsize>) -> Farming {
-        let (who, ended) = (who.clone(), ended.clone());
+    fn farming_as(who: &Arc<StubGetAccountUseCase>, ended: &Arc<SpyEndSessionUseCase>) -> Farming {
         Farming::new(
-            idle_farmer(),
-            Arc::new(move || {
-                ended.fetch_add(1, Ordering::Relaxed);
-            }),
-            Arc::new(move || who.lock().unwrap().clone()),
-            ChangingPreferences::default().get(),
-            set_game_tier(Arc::new(InMemoryPreferencesRepository::default())),
+            Arc::new(SpyFarmCardsUseCase::default()),
+            ended.clone(),
+            who.clone(),
+            Arc::new(StubGetPreferencesUseCase::default()),
+            Arc::new(DefaultSetGameTierUseCase::new(Arc::new(
+                InMemoryPreferencesRepository::default(),
+            ))),
         )
     }
 
@@ -184,31 +187,23 @@ mod tests {
 
     #[tokio::test]
     async fn signing_in_as_another_account_ends_the_session() {
-        let who = Arc::new(Mutex::new(account("cardfarmer")));
-        let ended = Arc::new(AtomicUsize::new(0));
+        let who = Arc::new(StubGetAccountUseCase::new(account("cardfarmer")));
+        let ended = Arc::new(SpyEndSessionUseCase::default());
         let mut f = farming_as(&who, &ended);
         f.start();
 
         // The same account again, its sign-in renewed: the session goes on.
         f.signed_in();
-        assert_eq!(ended.load(Ordering::Relaxed), 0);
+        assert_eq!(ended.ended(), 0);
 
-        *who.lock().unwrap() = account("someone_else");
+        who.set(account("someone_else"));
         f.signed_in();
-        assert_eq!(
-            ended.load(Ordering::Relaxed),
-            1,
-            "another account's farming starts afresh"
-        );
+        assert_eq!(ended.ended(), 1, "another account's farming starts afresh");
 
         f.pause();
         f.start();
         f.signed_in();
-        assert_eq!(
-            ended.load(Ordering::Relaxed),
-            1,
-            "and is then its own session"
-        );
+        assert_eq!(ended.ended(), 1, "and is then its own session");
     }
 
     #[tokio::test]

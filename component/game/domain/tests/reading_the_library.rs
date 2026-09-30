@@ -3,7 +3,7 @@
 use std::sync::{Arc, atomic::Ordering};
 
 use game::{
-    GameError, read_library,
+    DefaultReadLibraryUseCase, GameError, ReadLibraryUseCase,
     test_support::{InMemoryGameRepository, game},
 };
 
@@ -21,7 +21,11 @@ async fn games_with_drops_left_come_first_most_played_first() {
         half_life, portal, stardew, hades,
     ]));
 
-    let library = read_library(repo)().await.unwrap().unwrap();
+    let library = DefaultReadLibraryUseCase::new(repo)
+        .call()
+        .await
+        .unwrap()
+        .unwrap();
 
     let names: Vec<&str> = library.games().iter().map(|g| g.name.as_str()).collect();
     assert_eq!(
@@ -36,7 +40,7 @@ async fn a_library_that_cant_be_read_says_why() {
     let repo = Arc::new(InMemoryGameRepository::with(Vec::new()));
     repo.down.store(true, Ordering::Relaxed);
 
-    let read = read_library(repo)().await.unwrap();
+    let read = DefaultReadLibraryUseCase::new(repo).call().await.unwrap();
 
     assert_eq!(
         read,

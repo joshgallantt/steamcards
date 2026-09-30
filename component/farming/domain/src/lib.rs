@@ -9,6 +9,7 @@
 //! storage. Playing is the data layer's business, behind [`FarmingRepository`].
 //! The numbers it runs on, and where each comes from, are in `rules.rs`.
 
+mod farmer;
 mod model;
 mod ranking;
 mod reporter;
@@ -22,4 +23,4 @@ pub mod test_support;
 pub use model::{EventKind, FarmingEvent, FarmingStatus, Signal, Status};
 pub use ranking::farm_order;
 pub use repository::FarmingRepository;
-pub use use_cases::{FarmCards, farm_cards};
+pub use use_cases::{DefaultFarmCardsUseCase, FarmCardsUseCase};

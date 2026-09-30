@@ -29,11 +29,11 @@ impl DomainAssembler {
         let farming = FarmingComponent::new(
             data.steam.clone(),
             data.awake.clone(),
-            game.read.clone(),
-            card.look_at.clone(),
+            game.read_library.clone(),
+            card.look_at_cards.clone(),
             card.look_at_foils.clone(),
-            card.describe.clone(),
-            preferences.get.clone(),
+            card.identify_cards.clone(),
+            preferences.get_preferences.clone(),
             data.sessions.clone(),
         );
         let price =

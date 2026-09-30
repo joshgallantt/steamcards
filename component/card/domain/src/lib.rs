@@ -18,5 +18,6 @@ pub mod test_support;
 pub use model::{AssetId, Card, CardAsset, CardError, CardSet, CardSets, GameCards};
 pub use repository::CardRepository;
 pub use use_cases::{
-    DescribeCards, LookAtCards, LookAtFoils, describe_cards, look_at_cards, look_at_foils,
+    DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
+    IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase,
 };

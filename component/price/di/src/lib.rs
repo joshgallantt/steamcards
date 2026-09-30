@@ -1,4 +1,4 @@
-//! Where the market domain meets its data layer: one repository over the
+//! Where the price domain meets its data layer: one repository over the
 //! Steam session, the config file and the price cache, handed to every use
 //! case, on the system's clock. The composition root names the Steam client and
 //! the files.
@@ -7,22 +7,24 @@ use std::sync::Arc;
 
 use config_file::{ConfigFile, PriceCache};
 use price::{
-    Clock, GetPriceSettings, GetPrices, GetWallet, PriceOffers, PriceRepository, RefreshPrices,
-    SetBasis, WantPrices, WatchPrices, get_price_settings, get_prices, get_wallet, price_offers,
-    refresh_prices, set_basis, system_clock, want_prices, watch_prices,
+    Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
+    DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
+    DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
+    GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
+    PriceRepository, RefreshPricesUseCase, SetBasisUseCase, SetGamesToPriceUseCase, system_clock,
 };
 use price_data::SteamPriceRepository;
 use steam_api::SteamClient;
 
 pub struct PriceComponent {
-    pub prices: GetPrices,
-    pub want: WantPrices,
-    pub watch: WatchPrices,
-    pub refresh: RefreshPrices,
-    pub offers: PriceOffers,
-    pub wallet: GetWallet,
-    pub settings: GetPriceSettings,
-    pub set_basis: SetBasis,
+    pub get_prices: Arc<dyn GetPricesUseCase>,
+    pub set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
+    pub keep_prices_up_to_date: Arc<dyn KeepPricesUpToDateUseCase>,
+    pub refresh_prices: Arc<dyn RefreshPricesUseCase>,
+    pub look_up_offers: Arc<dyn LookUpOffersUseCase>,
+    pub get_wallet: Arc<dyn GetWalletUseCase>,
+    pub get_price_settings: Arc<dyn GetPriceSettingsUseCase>,
+    pub set_basis: Arc<dyn SetBasisUseCase>,
 }
 
 impl PriceComponent {
@@ -35,14 +37,20 @@ impl PriceComponent {
 
     pub fn over(repo: Arc<dyn PriceRepository>, clock: Clock) -> Self {
         Self {
-            prices: get_prices(repo.clone()),
-            want: want_prices(repo.clone()),
-            watch: watch_prices(repo.clone(), clock.clone()),
-            refresh: refresh_prices(repo.clone(), clock.clone()),
-            offers: price_offers(repo.clone(), clock),
-            wallet: get_wallet(repo.clone()),
-            settings: get_price_settings(repo.clone()),
-            set_basis: set_basis(repo),
+            get_prices: Arc::new(DefaultGetPricesUseCase::new(repo.clone())),
+            set_games_to_price: Arc::new(DefaultSetGamesToPriceUseCase::new(repo.clone())),
+            keep_prices_up_to_date: Arc::new(DefaultKeepPricesUpToDateUseCase::new(
+                repo.clone(),
+                clock.clone(),
+            )),
+            refresh_prices: Arc::new(DefaultRefreshPricesUseCase::new(
+                repo.clone(),
+                clock.clone(),
+            )),
+            look_up_offers: Arc::new(DefaultLookUpOffersUseCase::new(repo.clone(), clock)),
+            get_wallet: Arc::new(DefaultGetWalletUseCase::new(repo.clone())),
+            get_price_settings: Arc::new(DefaultGetPriceSettingsUseCase::new(repo.clone())),
+            set_basis: Arc::new(DefaultSetBasisUseCase::new(repo)),
         }
     }
 }

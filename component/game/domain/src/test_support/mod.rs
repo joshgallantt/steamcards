@@ -1,14 +1,18 @@
 //! Doubles for other crates' tests. A double stands in for the contract, so
 //! no test needs Steam.
 
+mod spies;
+
 use std::sync::{
-    Arc, Mutex,
+    Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
 use async_trait::async_trait;
 
-use crate::{AppId, CardDrops, Game, GameRepository, ReadLibrary, SteamLibrary};
+use crate::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
+
+pub use spies::SpyReadLibraryUseCase;
 
 /// A game with `received` and `remaining` card drops and `hours` played,
 /// named "Game <app ID>" unless named after.
@@ -23,14 +27,6 @@ pub fn game(app_id: u32, hours: f64, received: u32, remaining: u32) -> Game {
         },
         badge_level: 0,
     }
-}
-
-/// Answers every read with `library`.
-pub fn fixed_library(library: SteamLibrary) -> ReadLibrary {
-    Arc::new(move || {
-        let library = library.clone();
-        tokio::spawn(async move { Ok(library) })
-    })
 }
 
 /// A library held in memory.

@@ -9,11 +9,13 @@ use chrono::{DateTime, TimeDelta, Utc};
 use game::AppId;
 use money::{Currency, Money};
 use price::{
-    Basis, Clock, GetPrices, HeldCard, MarketPause, Price, PriceError, PriceEvent, PriceEventKind,
-    PriceOffers, RefreshPrices, WantPrices, get_price_settings, get_prices, get_wallet, held_value,
-    price_offers, refresh_prices, set_basis,
+    Basis, Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
+    DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
+    DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
+    GetPricesUseCase, GetWalletUseCase, HeldCard, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
+    MarketPause, Price, PriceError, PriceEvent, PriceEventKind, RefreshPricesUseCase,
+    SetBasisUseCase, SetGamesToPriceUseCase, held_value,
     test_support::{self, InMemoryMarketRepository},
-    want_prices, watch_prices,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -29,10 +31,10 @@ const CELESTE: u32 = 504_230;
 struct Player {
     market: Arc<InMemoryMarketRepository>,
     clock: Clock,
-    want: WantPrices,
-    prices: GetPrices,
-    refresh: RefreshPrices,
-    offers: PriceOffers,
+    want: Arc<dyn SetGamesToPriceUseCase>,
+    prices: Arc<dyn GetPricesUseCase>,
+    refresh: Arc<dyn RefreshPricesUseCase>,
+    offers: Arc<dyn LookUpOffersUseCase>,
     token: CancellationToken,
     events: Option<mpsc::Receiver<PriceEvent>>,
 }
@@ -55,10 +57,16 @@ impl Player {
         market.lists(HADES, &[("Zagreus", 8), ("Nyx", 9)], &[("Thanatos", 62)]);
         market.lists(CELESTE, &[("Madeline", 7), ("Badeline", 6)], &[]);
         Self {
-            want: want_prices(market.clone()),
-            prices: get_prices(market.clone()),
-            refresh: refresh_prices(market.clone(), Arc::clone(&clock)),
-            offers: price_offers(market.clone(), Arc::clone(&clock)),
+            want: Arc::new(DefaultSetGamesToPriceUseCase::new(market.clone())),
+            prices: Arc::new(DefaultGetPricesUseCase::new(market.clone())),
+            refresh: Arc::new(DefaultRefreshPricesUseCase::new(
+                market.clone(),
+                Arc::clone(&clock),
+            )),
+            offers: Arc::new(DefaultLookUpOffersUseCase::new(
+                market.clone(),
+                Arc::clone(&clock),
+            )),
             market,
             clock,
             token: CancellationToken::new(),
@@ -67,15 +75,16 @@ impl Player {
     }
 
     fn starts_farming(&mut self) {
-        let watch = watch_prices(self.market.clone(), Arc::clone(&self.clock));
+        let pricing =
+            DefaultKeepPricesUpToDateUseCase::new(self.market.clone(), Arc::clone(&self.clock));
         let (tx, rx) = mpsc::channel(1024);
-        drop(watch(self.token.clone(), tx));
+        drop(pricing.call(self.token.clone(), tx));
         self.events = Some(rx);
     }
 
     /// The games shown, most urgent first.
     fn is_shown(&self, games: &[u32]) {
-        (self.want)(games.iter().copied().map(AppId).collect());
+        self.want.call(games.iter().copied().map(AppId).collect());
     }
 
     /// Reads the log until a line of the kind wanted shows up.
@@ -113,7 +122,8 @@ impl Player {
 
     /// What the screen shows for a card of a game's set.
     fn sees(&self, app_id: u32, name: &str, foil: bool) -> Price {
-        (self.prices)()
+        self.prices
+            .call()
             .sets
             .get(&AppId(app_id))
             .map_or(Price::Pending, |set| set.price(name, foil))
@@ -239,7 +249,12 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
         .await;
 
     player.waits(30 * MINUTE).await;
-    (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap().unwrap();
+    player
+        .refresh
+        .call(AppId(HEAVY_RAIN))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         player.market.looked_up().len(),
         2,
@@ -247,12 +262,17 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
     );
 
     player.waits(31 * MINUTE).await;
-    (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap().unwrap();
+    player
+        .refresh
+        .call(AppId(HEAVY_RAIN))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         player.market.looked_up()[2..],
         [(HEAVY_RAIN, false), (HEAVY_RAIN, true)]
     );
-    let set = &(player.prices)().sets[&AppId(HEAVY_RAIN)];
+    let set = &player.prices.call().sets[&AppId(HEAVY_RAIN)];
     assert_eq!(set.fetched_at, player.now(), "the new prices are shown");
 }
 
@@ -473,8 +493,10 @@ async fn prices_from_before_stay_while_the_market_cant_be_asked() {
     )]);
     player.market.cant_be_asked(2, "no network");
 
-    let refreshed = (player.refresh)(AppId(CELESTE)).await.unwrap();
-    let offers = (player.offers)(vec!["504230-Badeline".into()])
+    let refreshed = player.refresh.call(AppId(CELESTE)).await.unwrap();
+    let offers = player
+        .offers
+        .call(vec!["504230-Badeline".into()])
         .await
         .unwrap();
 
@@ -486,7 +508,7 @@ async fn prices_from_before_stay_while_the_market_cant_be_asked() {
         "stale, and still shown"
     );
     assert!(
-        (player.prices)().offers.is_empty(),
+        player.prices.call().offers.is_empty(),
         "no order book taken as failed"
     );
 }
@@ -528,21 +550,23 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
     let player = Player::new();
     player.market.offers("960910-Madison", 5, 4);
 
-    (player.offers)(vec![
-        "960910-Madison".into(),
-        "960910-Madison".into(),
-        "1145360-Zagreus".into(),
-    ])
-    .await
-    .unwrap()
-    .unwrap();
+    player
+        .offers
+        .call(vec![
+            "960910-Madison".into(),
+            "960910-Madison".into(),
+            "1145360-Zagreus".into(),
+        ])
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         player.market.offer_lookups(),
         ["960910-Madison", "1145360-Zagreus"],
         "each card once"
     );
-    let book = (player.prices)();
+    let book = player.prices.call();
     assert_eq!(book.offers["1145360-Zagreus"].price, Price::NoMarket);
     let madison = HeldCard {
         market_hash_name: Some("960910-Madison".into()),
@@ -563,13 +587,17 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
     );
 
     player.waits(29 * MINUTE).await;
-    (player.offers)(vec!["960910-Madison".into()])
+    player
+        .offers
+        .call(vec!["960910-Madison".into()])
         .await
         .unwrap()
         .unwrap();
     assert_eq!(player.market.offer_lookups().len(), 2, "still fresh");
     player.waits(2 * MINUTE).await;
-    (player.offers)(vec!["960910-Madison".into()])
+    player
+        .offers
+        .call(vec!["960910-Madison".into()])
         .await
         .unwrap()
         .unwrap();
@@ -580,12 +608,16 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
 async fn an_order_book_nobody_is_on_is_looked_up_again_only_after_half_an_hour() {
     let player = Player::new();
 
-    (player.offers)(vec!["1145360-Zagreus".into()])
+    player
+        .offers
+        .call(vec!["1145360-Zagreus".into()])
         .await
         .unwrap()
         .unwrap();
     player.waits(29 * MINUTE).await;
-    (player.offers)(vec!["1145360-Zagreus".into()])
+    player
+        .offers
+        .call(vec!["1145360-Zagreus".into()])
         .await
         .unwrap()
         .unwrap();
@@ -596,7 +628,9 @@ async fn an_order_book_nobody_is_on_is_looked_up_again_only_after_half_an_hour()
     );
 
     player.waits(2 * MINUTE).await;
-    (player.offers)(vec!["1145360-Zagreus".into()])
+    player
+        .offers
+        .call(vec!["1145360-Zagreus".into()])
         .await
         .unwrap()
         .unwrap();
@@ -612,14 +646,16 @@ async fn offers_wait_while_steam_has_paused_lookups() {
     };
     player.market.paused(pause);
 
-    let asked = (player.offers)(vec!["960910-Madison".into()])
+    let asked = player
+        .offers
+        .call(vec!["960910-Madison".into()])
         .await
         .unwrap();
 
     assert_eq!(asked, Err(PriceError::Paused(pause)));
     assert!(player.market.offer_lookups().is_empty());
     assert_eq!(
-        (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap(),
+        player.refresh.call(AppId(HEAVY_RAIN)).await.unwrap(),
         Err(PriceError::Paused(pause))
     );
 }
@@ -628,28 +664,28 @@ async fn offers_wait_while_steam_has_paused_lookups() {
 async fn money_is_shown_at_list_prices_until_the_user_picks_another_basis() {
     let clock = test_support::clock_from(test_support::session_start());
     let market = Arc::new(InMemoryMarketRepository::new(clock));
-    let settings = get_price_settings(market.clone());
-    let basis = set_basis(market.clone());
-    assert_eq!(settings().basis, Basis::List);
+    let settings = DefaultGetPriceSettingsUseCase::new(market.clone());
+    let basis = DefaultSetBasisUseCase::new(market.clone());
+    assert_eq!(settings.call().basis, Basis::List);
 
-    basis(Basis::Net).unwrap();
-    assert_eq!(settings().basis, Basis::Net);
+    basis.call(Basis::Net).unwrap();
+    assert_eq!(settings.call().basis, Basis::Net);
 
     market.disk_full();
-    assert_eq!(basis(Basis::Instant), Err(PriceError::Unavailable));
-    assert_eq!(settings().basis, Basis::Net, "nothing changed");
+    assert_eq!(basis.call(Basis::Instant), Err(PriceError::Unavailable));
+    assert_eq!(settings.call().basis, Basis::Net, "nothing changed");
 }
 
 #[tokio::test]
 async fn the_wallet_is_whatever_steam_last_said() {
     let clock = test_support::clock_from(test_support::session_start());
     let market = Arc::new(InMemoryMarketRepository::new(clock));
-    let wallet = get_wallet(market.clone());
+    let wallet = DefaultGetWalletUseCase::new(market.clone());
     market.wallet_is(None);
-    assert_eq!(wallet(), None, "not signed on yet");
+    assert_eq!(wallet.call(), None, "not signed on yet");
 
     market.wallet_is(Some(test_support::pounds()));
-    let pounds = wallet().unwrap();
+    let pounds = wallet.call().unwrap();
     assert_eq!(pounds.currency, Currency::GBP);
     assert_eq!(pounds.seller_gets(62), 55, "Valve's fees");
 }

@@ -5,17 +5,17 @@
 use std::sync::Arc;
 
 use account::{
-    AccountRepository, GetAccount, LinkAccount, RefreshAccount, UnlinkAccount, get_account,
-    link_account, refresh_account, unlink_account,
+    AccountRepository, CheckSignInUseCase, DefaultCheckSignInUseCase, DefaultGetAccountUseCase,
+    DefaultSignInUseCase, DefaultSignOutUseCase, GetAccountUseCase, SignInUseCase, SignOutUseCase,
 };
 use account_data::SteamAccountRepository;
 use steam_api::SteamClient;
 
 pub struct AccountComponent {
-    pub get: GetAccount,
-    pub refresh: RefreshAccount,
-    pub link: LinkAccount,
-    pub unlink: UnlinkAccount,
+    pub get_account: Arc<dyn GetAccountUseCase>,
+    pub check_sign_in: Arc<dyn CheckSignInUseCase>,
+    pub sign_in: Arc<dyn SignInUseCase>,
+    pub sign_out: Arc<dyn SignOutUseCase>,
 }
 
 impl AccountComponent {
@@ -25,10 +25,10 @@ impl AccountComponent {
 
     pub fn over(repo: Arc<dyn AccountRepository>) -> Self {
         Self {
-            get: get_account(repo.clone()),
-            refresh: refresh_account(repo.clone()),
-            link: link_account(repo.clone()),
-            unlink: unlink_account(repo),
+            get_account: Arc::new(DefaultGetAccountUseCase::new(repo.clone())),
+            check_sign_in: Arc::new(DefaultCheckSignInUseCase::new(repo.clone())),
+            sign_in: Arc::new(DefaultSignInUseCase::new(repo.clone())),
+            sign_out: Arc::new(DefaultSignOutUseCase::new(repo)),
         }
     }
 }

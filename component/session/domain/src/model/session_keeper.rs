@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use crate::KeptSession;
 
 /// Keeps the farming session from one run of the farmer to the next, through
-/// pauses, until [`EndSession`](crate::EndSession) ends it. The farmer and
+/// pauses, until [`EndSessionUseCase`](crate::EndSessionUseCase) ends it. The farmer and
 /// that use case share one; nothing else reaches into it. A session is
 /// never kept on disk: quitting steamcards ends it too.
 #[derive(Default)]

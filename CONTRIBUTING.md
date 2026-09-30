@@ -208,9 +208,9 @@ On the dashboard, you select a game and press `1`. You want its cards first. Her
         │
         ▼
  ①  App::set_tier → Farming::set_tier   ui/terminal-ui                presentation
-        │  calls a use case function
+        │  calls a use case trait
         ▼
- ②  set_game_tier                       component/preferences/domain  domain  ── the rule
+ ②  DefaultSetGameTierUseCase           component/preferences/domain  domain  ── the rule
         │  calls a repository trait
         ▼
  ③  PreferencesRepository               component/preferences/domain  domain  ── the contract
@@ -229,25 +229,30 @@ The line at ③ is where it turns. The contract lives in the **domain**, and the
 **[`ui/terminal-ui/src/viewmodel/farming.rs`](ui/terminal-ui/src/viewmodel/farming.rs)**
 ```rust
 pub struct Farming {
-    farm: FarmCards,
-    end_session: EndSession,
-    account: GetAccount,
-    get_preferences: GetPreferences,
-    set_tier: SetGameTier,
+    farm: Arc<dyn FarmCardsUseCase>,
+    end_session: Arc<dyn EndSessionUseCase>,
+    account: Arc<dyn GetAccountUseCase>,
+    get_preferences: Arc<dyn GetPreferencesUseCase>,
+    set_tier: Arc<dyn SetGameTierUseCase>,
     ...
 ```
 
-Use cases, each a function the view model actually calls. It holds no repository, no Steam connection and no config file. Its crate can't hold them either: [`ui/terminal-ui/Cargo.toml`](ui/terminal-ui/Cargo.toml) lists domain crates only, so `use farming_data` doesn't resolve.
+Use cases, each one the view model actually calls. It holds no repository, no Steam connection and no config file. Its crate can't hold them either: [`ui/terminal-ui/Cargo.toml`](ui/terminal-ui/Cargo.toml) lists domain crates only, so `use farming_data` doesn't resolve.
 
 #### ② The rule lives in the domain, once
 
 **[`component/preferences/domain/src/use_cases/preferences_use_cases.rs`](component/preferences/domain/src/use_cases/preferences_use_cases.rs)**
 ```rust
-pub type SetGameTier = Arc<dyn Fn(u32, Tier) -> Result<(), PreferencesError> + Send + Sync>;
+pub trait SetGameTierUseCase: Send + Sync {
+    fn call(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError>;
+}
+```
 
-pub fn set_game_tier(repo: Arc<dyn PreferencesRepository>) -> SetGameTier {
-    Arc::new(move |app_id, tier| {
-        let mut p = repo.preferences();
+**[`component/preferences/domain/src/use_cases/impl/default_set_game_tier_use_case.rs`](component/preferences/domain/src/use_cases/impl/default_set_game_tier_use_case.rs)**
+```rust
+impl SetGameTierUseCase for DefaultSetGameTierUseCase {
+    fn call(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
+        let mut p = self.repo.preferences();
         p.priority_games.retain(|&g| g != app_id);
         p.skipped_games.retain(|&g| g != app_id);
         match tier {
@@ -258,12 +263,12 @@ pub fn set_game_tier(repo: Arc<dyn PreferencesRepository>) -> SetGameTier {
             Tier::Indifferent => {}
             Tier::Skip => p.skipped_games.push(app_id),
         }
-        save(&*repo, p)
-    })
+        self.repo.save(p).map_err(|_| PreferencesError::Unavailable)
+    }
 }
 ```
 
-A use case is a function value. The type names the capability, and the constructor builds the real one over the repository. Rust can't make a struct callable, so the screen calls it as `(self.set_tier)(app_id, tier)`, and a test double is just a closure.
+A use case is a trait named for what the user wants, and `DefaultSetGameTierUseCase` is the real one, over the repository. The screen calls it as `self.set_tier.call(app_id, tier)`, and a test hands it a double of its own: a `Stub…UseCase` that answers as it's told, or a `Spy…UseCase` that keeps what it's asked.
 
 "A game is in exactly one tier" and "#1 bumps the others down" are business rules, so they live in the domain. A second screen that ranks games (the games pop-up does) calls this same use case and gets the same rules.
 
@@ -334,14 +339,14 @@ if let Err(err) = self.farming.set_tier(e.game.app_id, tier) {
 
 Instead of confirming a change that didn't happen, it says *"That didn't stick — preferences couldn't be saved. Try again?"*
 
-The farmer never hears about the keypress. Every tick, it calls `GetPreferences` to see what the user wants. [`component/farming/domain/src/use_cases/farming_use_cases.rs`](component/farming/domain/src/use_cases/farming_use_cases.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
+The farmer never hears about the keypress. Every tick, it calls `GetPreferencesUseCase` to see what the user wants. [`component/farming/domain/src/farmer.rs`](component/farming/domain/src/farmer.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
 
 ### What that buys
 
 - **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
-- **Interface segregation** (①): one function per use case, so the games pop-up holds the preference functions it needs and the account pop-up holds the account ones. Neither sees the farmer.
-- **Liskov substitution**: the acceptance tests drive the real `farm_cards` over an in-memory Steam, and the farmer can't tell the difference.
+- **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
+- **Liskov substitution**: the acceptance tests drive the real `DefaultFarmCardsUseCase` over an in-memory Steam, and the farmer can't tell the difference.
 
 ---
 
@@ -365,7 +370,7 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 
 **Rust features this codebase doesn't use:** extension traits, global `static` state, `Deref` as inheritance, reading the environment outside [`app/src/settings.rs`](app/src/settings.rs), glob imports, printing outside presentation, and `unsafe`. [`app/tests/language_rules.rs`](app/tests/language_rules.rs), the workspace lints and [`clippy.toml`](clippy.toml) check them. [docs/architecture.md](docs/architecture.md#rust-features-this-codebase-doesnt-use) says why each one is out, and what to do instead.
 
-**Use cases are function types.** Each is a documented type alias, like `pub type UnlinkAccount = Arc<dyn Fn() -> Result<(), UnlinkError> + Send + Sync>`, built by a constructor like `pub fn unlink_account(repo) -> UnlinkAccount`. Repositories stay traits, because each has several methods.
+**Use cases are traits.** Each is named for what the user wants and has one method, `call`, like `pub trait SignOutUseCase: Send + Sync { fn call(&self) -> Result<(), SignOutError>; }`. All of a component's are declared in `use_cases/<name>_use_cases.rs`, and each is done by a `Default…UseCase` in a file of its own under `use_cases/impl/` (`impl` is a keyword, so the module is `r#impl`). Callers hold `Arc<dyn SignOutUseCase>`. Its test doubles are types too, a file each: `StubGetAccountUseCase` in `test_support/stubs/`, `SpySignOutUseCase` in `test_support/spies/`.
 
 **Lints are errors, not warnings.** They're set once for the whole workspace in the root [`Cargo.toml`](Cargo.toml):
 - no dead code: an unused function, field, import, variable or ignored `#[must_use]` result fails the build;

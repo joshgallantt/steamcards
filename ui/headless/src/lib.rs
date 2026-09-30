@@ -6,18 +6,22 @@
     reason = "printing to stdout is this presentation's whole job"
 )]
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use account::GetAccount;
-use farming::{FarmCards, FarmingEvent, FarmingStatus};
+use account::GetAccountUseCase;
+use farming::{FarmCardsUseCase, FarmingEvent, FarmingStatus};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// Farms until `duration` passes (never, if `None`) or ctrl-c. Signing in
 /// takes the Steam app and a screen for its QR code, so it's done in the
 /// TUI first.
-pub async fn run(account: GetAccount, farm: FarmCards, duration: Option<Duration>) {
-    let Some(signed_in) = account() else {
+pub async fn run(
+    account: Arc<dyn GetAccountUseCase>,
+    farm: Arc<dyn FarmCardsUseCase>,
+    duration: Option<Duration>,
+) {
+    let Some(signed_in) = account.call() else {
         println!(
             "Not signed in to Steam. Run steamcards without --headless once, and sign in with \
              the Steam app."
@@ -51,7 +55,7 @@ pub async fn run(account: GetAccount, farm: FarmCards, duration: Option<Duration
             print_event(&ev, &mut last);
         }
     });
-    let _ = farm(token, tx).await;
+    let _ = farm.call(token, tx).await;
     let _ = printer.await;
 }
 

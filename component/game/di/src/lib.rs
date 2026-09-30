@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
-use game::{GameRepository, ReadLibrary, read_library};
+use game::{DefaultReadLibraryUseCase, GameRepository, ReadLibraryUseCase};
 use game_data::SteamGameRepository;
 use steam_api::SteamClient;
 
 pub struct GameComponent {
-    pub read: ReadLibrary,
+    pub read_library: Arc<dyn ReadLibraryUseCase>,
 }
 
 impl GameComponent {
@@ -19,7 +19,7 @@ impl GameComponent {
 
     pub fn over(repo: Arc<dyn GameRepository>) -> Self {
         Self {
-            read: read_library(repo),
+            read_library: Arc::new(DefaultReadLibraryUseCase::new(repo)),
         }
     }
 }

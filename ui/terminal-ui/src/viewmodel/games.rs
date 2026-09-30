@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use game::{AppId, CardDrops, Game};
 use preferences::{
-    GetPreferences, PreferencesError, SetAppearOnline, SetGameTier, SetOnlyPriority, Tier,
+    GetPreferencesUseCase, PreferencesError, SetAppearOnlineUseCase, SetGameTierUseCase,
+    SetOnlyPriorityUseCase, Tier,
 };
 
 /// One line in a list of games to pick from.
@@ -16,18 +19,18 @@ pub struct GameRow {
 
 /// Choosing which games are farmed first, and how farming shows to friends.
 pub struct Games {
-    get: GetPreferences,
-    set_tier: SetGameTier,
-    set_only_priority: SetOnlyPriority,
-    set_appear_online: SetAppearOnline,
+    get: Arc<dyn GetPreferencesUseCase>,
+    set_tier: Arc<dyn SetGameTierUseCase>,
+    set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
+    set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
 }
 
 impl Games {
     pub fn new(
-        get: GetPreferences,
-        set_tier: SetGameTier,
-        set_only_priority: SetOnlyPriority,
-        set_appear_online: SetAppearOnline,
+        get: Arc<dyn GetPreferencesUseCase>,
+        set_tier: Arc<dyn SetGameTierUseCase>,
+        set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
+        set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
     ) -> Self {
         Self {
             get,
@@ -38,41 +41,41 @@ impl Games {
     }
 
     pub fn only_priority(&self) -> bool {
-        (self.get)().only_priority
+        self.get.call().only_priority
     }
 
     pub fn toggle_only_priority(&self) -> Result<(), PreferencesError> {
-        (self.set_only_priority)(!self.only_priority())
+        self.set_only_priority.call(!self.only_priority())
     }
 
     pub fn appear_online(&self) -> bool {
-        (self.get)().appear_online
+        self.get.call().appear_online
     }
 
     pub fn toggle_appear_online(&self) -> Result<(), PreferencesError> {
-        (self.set_appear_online)(!self.appear_online())
+        self.set_appear_online.call(!self.appear_online())
     }
 
     pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
-        (self.set_tier)(app_id, tier)
+        self.set_tier.call(app_id, tier)
     }
 
     /// Picks a game — it goes to the end of the priority list — or, if it's
     /// picked already, unpicks it. Returns its rank now.
     pub fn toggle(&self, app_id: AppId) -> Result<Option<usize>, PreferencesError> {
-        let prefs = (self.get)();
+        let prefs = self.get.call();
         let tier = match prefs.rank(app_id) {
             Some(_) => Tier::Indifferent,
             None => Tier::Priority(prefs.priority_games.len() + 1),
         };
-        (self.set_tier)(app_id, tier)?;
-        Ok((self.get)().rank(app_id).map(|i| i + 1))
+        self.set_tier.call(app_id, tier)?;
+        Ok(self.get.call().rank(app_id).map(|i| i + 1))
     }
 
     /// Priority games in their order, then every other game with drops left
     /// in `games`, so the user can see where each stands.
     pub fn rows(&self, games: &[Game]) -> Vec<GameRow> {
-        let prefs = (self.get)();
+        let prefs = self.get.call();
         let mut out: Vec<GameRow> = prefs
             .priority_games
             .iter()
@@ -90,7 +93,7 @@ impl Games {
     /// `games` with drops left, in their own order whatever is picked, so
     /// picking one doesn't move it; picked games they don't have come last.
     pub fn picks(&self, games: &[Game]) -> Vec<GameRow> {
-        let prefs = (self.get)();
+        let prefs = self.get.call();
         let mut out: Vec<GameRow> = games
             .iter()
             .filter(|g| g.has_drops_left())
@@ -121,12 +124,10 @@ fn row(app_id: AppId, games: &[Game], rank: Option<usize>) -> GameRow {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use game::{AppId, test_support::game};
     use preferences::{
-        Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
-        test_support::InMemoryPreferencesRepository,
+        DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
+        DefaultSetOnlyPriorityUseCase, Preferences, test_support::InMemoryPreferencesRepository,
     };
 
     use super::*;
@@ -137,10 +138,10 @@ mod tests {
             ..Default::default()
         }));
         Games::new(
-            get_preferences(repo.clone()),
-            set_game_tier(repo.clone()),
-            set_only_priority(repo.clone()),
-            set_appear_online(repo),
+            Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
+            Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
+            Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         )
     }
 

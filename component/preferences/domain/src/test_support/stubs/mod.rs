@@ -1,0 +1,3 @@
+mod stub_get_preferences_use_case;
+
+pub use stub_get_preferences_use_case::StubGetPreferencesUseCase;

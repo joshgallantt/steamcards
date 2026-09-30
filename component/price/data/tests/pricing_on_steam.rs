@@ -11,8 +11,9 @@ use debug_log::DebugLog;
 use game::AppId;
 use money::{Currency, Money};
 use price::{
-    Basis, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository, PriceSettings, QuoteSource,
-    SetPrices, Wallet, system_clock, want_prices, watch_prices,
+    Basis, DefaultKeepPricesUpToDateUseCase, DefaultSetGamesToPriceUseCase,
+    KeepPricesUpToDateUseCase, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository,
+    PriceSettings, QuoteSource, SetGamesToPriceUseCase, SetPrices, Wallet, system_clock,
 };
 use price_data::SteamPriceRepository;
 use steam_api::{
@@ -340,11 +341,13 @@ async fn a_market_that_cant_be_asked_marks_no_price_failed() {
     let disk = Disk::new("cant-ask");
     let (market, _) = disk.market(&steam, &site);
     let market = Arc::new(market);
-    want_prices(market.clone())([960_910, 1_145_360, 620].map(AppId).to_vec());
+    DefaultSetGamesToPriceUseCase::new(market.clone())
+        .call([960_910, 1_145_360, 620].map(AppId).to_vec());
     let (tx, mut rx) = mpsc::channel(16);
     let token = CancellationToken::new();
 
-    let watching = watch_prices(market.clone(), system_clock())(token.clone(), tx);
+    let watching = DefaultKeepPricesUpToDateUseCase::new(market.clone(), system_clock())
+        .call(token.clone(), tx);
     let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
         .await
         .unwrap()
@@ -453,11 +456,12 @@ async fn the_market_is_priced_end_to_end() {
     let disk = Disk::new("end-to-end");
     let (market, _) = disk.market(&steam, &site);
     let market = Arc::new(market);
-    want_prices(market.clone())(vec![AppId(960_910)]);
+    DefaultSetGamesToPriceUseCase::new(market.clone()).call(vec![AppId(960_910)]);
     let (tx, mut rx) = mpsc::channel(16);
     let token = CancellationToken::new();
 
-    let watching = watch_prices(market.clone(), system_clock())(token.clone(), tx);
+    let watching = DefaultKeepPricesUpToDateUseCase::new(market.clone(), system_clock())
+        .call(token.clone(), tx);
     let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
         .await
         .unwrap()

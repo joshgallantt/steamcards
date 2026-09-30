@@ -1,43 +1,21 @@
-//! Doubles for other crates' tests.
+//! Doubles for other crates' tests: stubs answer as they're told, and spies
+//! count what they're asked.
+
+mod spies;
+mod stubs;
 
 use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::{
-    Account, AccountRepository, GetAccount, LinkAccount, LinkError, LoginChallenge, RefreshAccount,
-    UnlinkAccount,
-};
+use crate::{AccountRepository, LoginChallenge};
 
-/// Answers with a fixed account, or nobody.
-pub fn fixed_account(account: Option<Account>) -> GetAccount {
-    Arc::new(move || account.clone())
-}
-
-/// Does nothing when asked to refresh.
-pub fn no_refresh() -> RefreshAccount {
-    Arc::new(|| {})
-}
-
-/// Refuses every sign-in, so nothing reaches Steam.
-pub fn refusing_link() -> LinkAccount {
-    Arc::new(|_| tokio::spawn(async { Err(LinkError::Refused("not in a test".into())) }))
-}
-
-/// Signs out of nothing, successfully, counting how often it was asked.
-pub fn recording_unlink() -> (UnlinkAccount, Arc<AtomicUsize>) {
-    let asked = Arc::new(AtomicUsize::new(0));
-    let count = asked.clone();
-    let unlink: UnlinkAccount = Arc::new(move || {
-        count.fetch_add(1, Ordering::Relaxed);
-        Ok(())
-    });
-    (unlink, asked)
-}
+pub use spies::{SpyCheckSignInUseCase, SpySignOutUseCase};
+pub use stubs::{StubGetAccountUseCase, StubSignInUseCase};
 
 /// A saved sign-in, held in memory.
 pub struct InMemoryAccountRepository {

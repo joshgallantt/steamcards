@@ -39,4 +39,5 @@ game = { workspace = true, features = ["test-support"] }
 card = { workspace = true, features = ["test-support"] }
 price = { workspace = true, features = ["test-support"] }
 preferences = { workspace = true, features = ["test-support"] }
+session = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

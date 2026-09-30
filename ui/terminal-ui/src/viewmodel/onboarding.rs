@@ -1,4 +1,6 @@
-use account::GetAccount;
+use std::sync::Arc;
+
+use account::GetAccountUseCase;
 
 /// The steps of getting set up, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +25,7 @@ pub struct NeedsAccount;
 /// First run: a welcome, signing in, picking games, starting to farm. The app
 /// comes back to signing in when the account signs out.
 pub struct Onboarding {
-    account: GetAccount,
+    account: Arc<dyn GetAccountUseCase>,
     /// `None` once onboarding is over.
     step: Option<Step>,
 }
@@ -31,8 +33,8 @@ pub struct Onboarding {
 impl Onboarding {
     /// Starts at the welcome when nobody is signed in; otherwise there is
     /// nothing to set up.
-    pub fn new(account: GetAccount) -> Self {
-        let step = account().is_none().then_some(Step::Welcome);
+    pub fn new(account: Arc<dyn GetAccountUseCase>) -> Self {
+        let step = account.call().is_none().then_some(Step::Welcome);
         Self { account, step }
     }
 
@@ -83,45 +85,41 @@ impl Onboarding {
     }
 
     fn signed_in(&self) -> bool {
-        (self.account)().is_some()
+        self.account.call().is_some()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    };
-
-    use account::Account;
+    use account::{Account, test_support::StubGetAccountUseCase};
 
     use super::*;
 
-    /// The account, signed in or not as the flag says.
-    fn steam(signed_in: &Arc<AtomicBool>) -> GetAccount {
-        let signed_in = signed_in.clone();
-        Arc::new(move || {
-            signed_in.load(Ordering::Relaxed).then(|| Account {
-                name: "cardfarmer".into(),
-                expired: false,
-            })
-        })
+    /// Steam, with the account signed in or not.
+    fn steam(signed_in: bool) -> Arc<StubGetAccountUseCase> {
+        Arc::new(StubGetAccountUseCase::new(signed_in.then(cardfarmer)))
+    }
+
+    fn cardfarmer() -> Account {
+        Account {
+            name: "cardfarmer".into(),
+            expired: false,
+        }
     }
 
     #[test]
     fn a_first_run_starts_at_the_welcome_and_a_set_up_one_skips_it() {
-        let first = Onboarding::new(steam(&Arc::new(AtomicBool::new(false))));
+        let first = Onboarding::new(steam(false));
         assert_eq!(first.step(), Some(Step::Welcome));
 
-        let set_up = Onboarding::new(steam(&Arc::new(AtomicBool::new(true))));
+        let set_up = Onboarding::new(steam(true));
         assert!(!set_up.is_active());
     }
 
     #[test]
     fn getting_past_signing_in_takes_an_account() {
-        let signed_in = Arc::new(AtomicBool::new(false));
-        let mut o = Onboarding::new(steam(&signed_in));
+        let steam = steam(false);
+        let mut o = Onboarding::new(steam.clone());
         assert_eq!(o.forward(), Ok(()));
         assert_eq!(o.step(), Some(Step::SignIn));
 
@@ -129,17 +127,17 @@ mod tests {
         assert_eq!(o.forward(), Err(NeedsAccount));
         assert_eq!(o.step(), Some(Step::SignIn), "it stays put");
 
-        signed_in.store(true, Ordering::Relaxed);
+        steam.set(Some(cardfarmer()));
         assert_eq!(o.forward(), Ok(()));
         assert_eq!(o.step(), Some(Step::Games));
     }
 
     #[test]
     fn games_can_be_skipped_and_the_last_step_ends_onboarding() {
-        let signed_in = Arc::new(AtomicBool::new(false));
-        let mut o = Onboarding::new(steam(&signed_in));
+        let steam = steam(false);
+        let mut o = Onboarding::new(steam.clone());
         o.forward().unwrap();
-        signed_in.store(true, Ordering::Relaxed);
+        steam.set(Some(cardfarmer()));
         o.forward().unwrap();
         o.forward().unwrap();
         assert_eq!(o.step(), Some(Step::Start), "nothing to pick first");
@@ -149,12 +147,12 @@ mod tests {
 
     #[test]
     fn back_retraces_the_steps() {
-        let signed_in = Arc::new(AtomicBool::new(false));
-        let mut o = Onboarding::new(steam(&signed_in));
+        let steam = steam(false);
+        let mut o = Onboarding::new(steam.clone());
         o.back();
         assert_eq!(o.step(), Some(Step::Welcome), "nowhere further back");
         o.forward().unwrap();
-        signed_in.store(true, Ordering::Relaxed);
+        steam.set(Some(cardfarmer()));
         for _ in 0..2 {
             o.forward().unwrap();
         }
@@ -167,9 +165,9 @@ mod tests {
 
     #[test]
     fn signing_out_goes_back_to_signing_in() {
-        let signed_in = Arc::new(AtomicBool::new(true));
-        let mut o = Onboarding::new(steam(&signed_in));
-        signed_in.store(false, Ordering::Relaxed);
+        let steam = steam(true);
+        let mut o = Onboarding::new(steam.clone());
+        steam.set(None);
         o.signed_out();
         assert_eq!(o.step(), Some(Step::SignIn), "not the welcome again");
     }

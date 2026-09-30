@@ -21,38 +21,43 @@ impl PresentationAssembler {
         let d = &self.domain;
         App::new(
             Account::new(
-                d.account.get.clone(),
-                d.account.refresh.clone(),
-                d.account.unlink.clone(),
+                d.account.get_account.clone(),
+                d.account.check_sign_in.clone(),
+                d.account.sign_out.clone(),
             ),
-            Login::new(d.account.link.clone()),
+            Login::new(d.account.sign_in.clone()),
             Farming::new(
-                d.farming.farm.clone(),
-                d.session.end.clone(),
-                d.account.get.clone(),
-                d.preferences.get.clone(),
+                d.farming.farm_cards.clone(),
+                d.session.end_session.clone(),
+                d.account.get_account.clone(),
+                d.preferences.get_preferences.clone(),
                 d.preferences.set_game_tier.clone(),
             ),
             Games::new(
-                d.preferences.get.clone(),
+                d.preferences.get_preferences.clone(),
                 d.preferences.set_game_tier.clone(),
                 d.preferences.set_only_priority.clone(),
                 d.preferences.set_appear_online.clone(),
             ),
-            Library::new(d.game.read.clone()),
-            Onboarding::new(d.account.get.clone()),
+            Library::new(d.game.read_library.clone()),
+            Onboarding::new(d.account.get_account.clone()),
             Market::new(
-                d.price.prices.clone(),
-                d.price.want.clone(),
-                d.price.watch.clone(),
-                d.price.refresh.clone(),
-                d.price.wallet.clone(),
+                d.price.get_prices.clone(),
+                d.price.set_games_to_price.clone(),
+                d.price.keep_prices_up_to_date.clone(),
+                d.price.refresh_prices.clone(),
+                d.price.get_wallet.clone(),
             ),
         )
     }
 
     pub(crate) async fn run_headless(&self, duration: Option<Duration>) {
         let d = &self.domain;
-        headless::run(d.account.get.clone(), d.farming.farm.clone(), duration).await;
+        headless::run(
+            d.account.get_account.clone(),
+            d.farming.farm_cards.clone(),
+            duration,
+        )
+        .await;
     }
 }

@@ -4,16 +4,16 @@
 
 use std::sync::Arc;
 
-use session::{EndSession, SessionKeeper, end_session};
+use session::{DefaultEndSessionUseCase, EndSessionUseCase, SessionKeeper};
 
 pub struct SessionComponent {
-    pub end: EndSession,
+    pub end_session: Arc<dyn EndSessionUseCase>,
 }
 
 impl SessionComponent {
     pub fn new(sessions: Arc<SessionKeeper>) -> Self {
         Self {
-            end: end_session(sessions),
+            end_session: Arc::new(DefaultEndSessionUseCase::new(sessions)),
         }
     }
 }

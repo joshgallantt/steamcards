@@ -6,17 +6,17 @@
 
 use std::sync::Arc;
 
-use card::{DescribeCards, LookAtCards, LookAtFoils};
-use farming::{FarmCards, FarmingRepository, farm_cards};
+use card::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
+use farming::{DefaultFarmCardsUseCase, FarmCardsUseCase, FarmingRepository};
 use farming_data::SteamFarmingRepository;
-use game::ReadLibrary;
+use game::ReadLibraryUseCase;
 use keep_awake::KeepAwake;
-use preferences::GetPreferences;
+use preferences::GetPreferencesUseCase;
 use session::SessionKeeper;
 use steam_api::SteamClient;
 
 pub struct FarmingComponent {
-    pub farm: FarmCards,
+    pub farm_cards: Arc<dyn FarmCardsUseCase>,
 }
 
 impl FarmingComponent {
@@ -29,11 +29,11 @@ impl FarmingComponent {
     pub fn new(
         steam: Arc<SteamClient>,
         awake: Arc<KeepAwake>,
-        read_library: ReadLibrary,
-        look_at_cards: LookAtCards,
-        look_at_foils: LookAtFoils,
-        describe_cards: DescribeCards,
-        get_preferences: GetPreferences,
+        read_library: Arc<dyn ReadLibraryUseCase>,
+        look_at_cards: Arc<dyn LookAtCardsUseCase>,
+        look_at_foils: Arc<dyn LookAtFoilsUseCase>,
+        identify_cards: Arc<dyn IdentifyCardsUseCase>,
+        get_preferences: Arc<dyn GetPreferencesUseCase>,
         sessions: Arc<SessionKeeper>,
     ) -> Self {
         Self::over(
@@ -41,7 +41,7 @@ impl FarmingComponent {
             read_library,
             look_at_cards,
             look_at_foils,
-            describe_cards,
+            identify_cards,
             get_preferences,
             sessions,
         )
@@ -49,23 +49,23 @@ impl FarmingComponent {
 
     pub fn over(
         play: Arc<dyn FarmingRepository>,
-        read_library: ReadLibrary,
-        look_at_cards: LookAtCards,
-        look_at_foils: LookAtFoils,
-        describe_cards: DescribeCards,
-        get_preferences: GetPreferences,
+        read_library: Arc<dyn ReadLibraryUseCase>,
+        look_at_cards: Arc<dyn LookAtCardsUseCase>,
+        look_at_foils: Arc<dyn LookAtFoilsUseCase>,
+        identify_cards: Arc<dyn IdentifyCardsUseCase>,
+        get_preferences: Arc<dyn GetPreferencesUseCase>,
         sessions: Arc<SessionKeeper>,
     ) -> Self {
         Self {
-            farm: farm_cards(
+            farm_cards: Arc::new(DefaultFarmCardsUseCase::new(
                 read_library,
                 look_at_cards,
                 look_at_foils,
-                describe_cards,
+                identify_cards,
                 play,
                 get_preferences,
                 sessions,
-            ),
+            )),
         }
     }
 }

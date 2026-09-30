@@ -1,4 +1,6 @@
-use account::{LinkAccount, LoginChallenge};
+use std::sync::Arc;
+
+use account::{LoginChallenge, SignInUseCase};
 use tokio::sync::mpsc;
 
 pub struct LoginUpdate {
@@ -10,16 +12,16 @@ pub struct LoginUpdate {
 /// Signing in with the Steam app, in the background: QR codes to show while
 /// it waits, then how it went.
 pub struct Login {
-    link: LinkAccount,
+    sign_in: Arc<dyn SignInUseCase>,
     /// Stops the sign-in itself on cancel.
     task: Option<tokio::task::AbortHandle>,
     updates: Option<mpsc::UnboundedReceiver<LoginUpdate>>,
 }
 
 impl Login {
-    pub fn new(link: LinkAccount) -> Self {
+    pub fn new(sign_in: Arc<dyn SignInUseCase>) -> Self {
         Self {
-            link,
+            sign_in,
             task: None,
             updates: None,
         }
@@ -44,7 +46,7 @@ impl Login {
             }
         });
 
-        let handle = (self.link)(challenge_tx);
+        let handle = self.sign_in.call(challenge_tx);
         self.task = Some(handle.abort_handle());
         tokio::spawn(async move {
             let err = match handle.await {

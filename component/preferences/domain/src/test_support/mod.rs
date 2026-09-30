@@ -1,12 +1,16 @@
 //! Doubles for other crates' tests. A double stands in for the contract, so
 //! no test here or downstream needs a disk.
 
+mod stubs;
+
 use std::sync::{
-    Arc, Mutex,
+    Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
-use crate::{GetPreferences, Preferences, PreferencesRepository};
+use crate::{Preferences, PreferencesRepository};
+
+pub use stubs::StubGetPreferencesUseCase;
 
 /// Keeps preferences in memory. `failing()` makes every save err, so the
 /// "didn't stick" path can be driven.
@@ -41,25 +45,5 @@ impl PreferencesRepository for InMemoryPreferencesRepository {
         }
         *self.preferences.lock().unwrap() = p;
         Ok(())
-    }
-}
-
-/// Preferences a test can change as it goes: `get()` answers with whatever
-/// was last `set`.
-#[derive(Clone, Default)]
-pub struct ChangingPreferences(Arc<Mutex<Preferences>>);
-
-impl ChangingPreferences {
-    pub fn new(p: Preferences) -> Self {
-        Self(Arc::new(Mutex::new(p)))
-    }
-
-    pub fn set(&self, p: Preferences) {
-        *self.0.lock().unwrap() = p;
-    }
-
-    pub fn get(&self) -> GetPreferences {
-        let current = self.0.clone();
-        Arc::new(move || current.lock().unwrap().clone())
     }
 }

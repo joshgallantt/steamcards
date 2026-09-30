@@ -11,6 +11,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Doubles for other crates' tests.
+test-support = []
+
 [dependencies]
 game.workspace = true
 card.workspace = true

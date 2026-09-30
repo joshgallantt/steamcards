@@ -14,10 +14,12 @@
 
 mod clock;
 mod model;
+mod pricing;
 mod repository;
 mod rules;
 mod use_cases;
 mod valuation;
+mod watcher;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;
@@ -30,8 +32,10 @@ pub use model::{
 };
 pub use repository::PriceRepository;
 pub use use_cases::{
-    GetPriceSettings, GetPrices, GetWallet, PriceOffers, RefreshPrices, SetBasis, WantPrices,
-    WatchPrices, get_price_settings, get_prices, get_wallet, price_offers, refresh_prices,
-    set_basis, want_prices, watch_prices,
+    DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
+    DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
+    DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
+    GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
+    RefreshPricesUseCase, SetBasisUseCase, SetGamesToPriceUseCase,
 };
 pub use valuation::{expected_per_drop, held_value, on_completion, value_left, value_of};

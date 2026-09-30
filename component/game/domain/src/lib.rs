@@ -18,4 +18,4 @@ pub mod test_support;
 pub use model::{AppId, CardDrops, Game, GameError, SteamLibrary};
 pub use repository::GameRepository;
 pub use rules::{HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE};
-pub use use_cases::{ReadLibrary, read_library};
+pub use use_cases::{DefaultReadLibraryUseCase, ReadLibraryUseCase};

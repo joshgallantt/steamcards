@@ -12,8 +12,11 @@ mod model;
 mod rules;
 mod use_cases;
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 pub use model::{
     Drop, DropCard, Finished, Forecast, Found, KeptSession, Looked, Mode, NewItem, Session,
     SessionKeeper, SetAside, Stretch,
 };
-pub use use_cases::{EndSession, end_session};
+pub use use_cases::{DefaultEndSessionUseCase, EndSessionUseCase};

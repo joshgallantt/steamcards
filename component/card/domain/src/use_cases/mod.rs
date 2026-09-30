@@ -1,5 +1,7 @@
 mod card_use_cases;
+mod r#impl;
 
-pub use card_use_cases::{
-    DescribeCards, LookAtCards, LookAtFoils, describe_cards, look_at_cards, look_at_foils,
+pub use card_use_cases::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
+pub use r#impl::{
+    DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
 };

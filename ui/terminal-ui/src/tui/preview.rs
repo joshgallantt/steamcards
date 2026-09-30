@@ -11,22 +11,27 @@ use std::sync::Arc;
 
 use account::{
     Account as SignedIn, LoginChallenge,
-    test_support::{fixed_account, no_refresh, recording_unlink, refusing_link},
+    test_support::{
+        SpyCheckSignInUseCase, SpySignOutUseCase, StubGetAccountUseCase, StubSignInUseCase,
+    },
 };
 use card::{AssetId, Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
-use farming::{EventKind, FarmingStatus, Status, test_support::idle_farmer};
-use game::{AppId, CardDrops, Game, SteamLibrary, test_support::fixed_library};
+use farming::{EventKind, FarmingStatus, Status, test_support::SpyFarmCardsUseCase};
+use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 use preferences::{
-    Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
-    test_support::InMemoryPreferencesRepository,
+    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
+    DefaultSetOnlyPriorityUseCase, Preferences, test_support::InMemoryPreferencesRepository,
 };
 use price::{
     PriceBook,
-    test_support::{fixed_prices, pounds, set_prices},
+    test_support::{
+        SpyKeepPricesUpToDateUseCase, SpyRefreshPricesUseCase, SpySetGamesToPriceUseCase,
+        StubGetPricesUseCase, StubGetWalletUseCase, pounds, set_prices,
+    },
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
-use session::{Drop, DropCard, Mode, Session, Stretch};
+use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
 
 use super::{App, Clock, LogView, LoginView, Overlay};
 use crate::viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding, Step};
@@ -231,32 +236,36 @@ fn prefs() -> Preferences {
 
 fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
     let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
-    let get = get_preferences(repo.clone());
-    let accounts = fixed_account(account);
+    let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
+    let accounts = Arc::new(StubGetAccountUseCase::new(account));
     let mut app = App::new(
-        Account::new(accounts.clone(), no_refresh(), recording_unlink().0),
-        Login::new(refusing_link()),
+        Account::new(
+            accounts.clone(),
+            Arc::new(SpyCheckSignInUseCase::default()),
+            Arc::new(SpySignOutUseCase::default()),
+        ),
+        Login::new(Arc::new(StubSignInUseCase)),
         Farming::new(
-            idle_farmer(),
-            Arc::new(|| {}),
+            Arc::new(SpyFarmCardsUseCase::default()),
+            Arc::new(SpyEndSessionUseCase::default()),
             accounts.clone(),
             get.clone(),
-            set_game_tier(repo.clone()),
+            Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
         Games::new(
             get,
-            set_game_tier(repo.clone()),
-            set_only_priority(repo.clone()),
-            set_appear_online(repo),
+            Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
+            Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        Library::new(fixed_library(library())),
+        Library::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(library())))),
         Onboarding::new(accounts),
         Market::new(
-            fixed_prices(prices()),
-            Arc::new(|_| {}),
-            Arc::new(|_, _| tokio::spawn(async {})),
-            Arc::new(|_| tokio::spawn(async { Ok(()) })),
-            Arc::new(|| Some(pounds())),
+            Arc::new(StubGetPricesUseCase::new(prices())),
+            Arc::new(SpySetGamesToPriceUseCase::default()),
+            Arc::new(SpyKeepPricesUpToDateUseCase::default()),
+            Arc::new(SpyRefreshPricesUseCase::default()),
+            Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
         ),
     );
     app.clock = CLOCK;
@@ -950,32 +959,38 @@ fn showcase_app() -> App {
         ..Default::default()
     };
     let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
-    let get = get_preferences(repo.clone());
-    let accounts = fixed_account(cardfarmer());
+    let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
+    let accounts = Arc::new(StubGetAccountUseCase::new(cardfarmer()));
     let mut a = App::new(
-        Account::new(accounts.clone(), no_refresh(), recording_unlink().0),
-        Login::new(refusing_link()),
+        Account::new(
+            accounts.clone(),
+            Arc::new(SpyCheckSignInUseCase::default()),
+            Arc::new(SpySignOutUseCase::default()),
+        ),
+        Login::new(Arc::new(StubSignInUseCase)),
         Farming::new(
-            idle_farmer(),
-            Arc::new(|| {}),
+            Arc::new(SpyFarmCardsUseCase::default()),
+            Arc::new(SpyEndSessionUseCase::default()),
             accounts.clone(),
             get.clone(),
-            set_game_tier(repo.clone()),
+            Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
         Games::new(
             get,
-            set_game_tier(repo.clone()),
-            set_only_priority(repo.clone()),
-            set_appear_online(repo),
+            Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
+            Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        Library::new(fixed_library(showcase_library())),
+        Library::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(
+            showcase_library(),
+        )))),
         Onboarding::new(accounts),
         Market::new(
-            fixed_prices(showcase_prices()),
-            Arc::new(|_| {}),
-            Arc::new(|_, _| tokio::spawn(async {})),
-            Arc::new(|_| tokio::spawn(async { Ok(()) })),
-            Arc::new(|| Some(pounds())),
+            Arc::new(StubGetPricesUseCase::new(showcase_prices())),
+            Arc::new(SpySetGamesToPriceUseCase::default()),
+            Arc::new(SpyKeepPricesUpToDateUseCase::default()),
+            Arc::new(SpyRefreshPricesUseCase::default()),
+            Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
         ),
     );
     a.clock = CLOCK;

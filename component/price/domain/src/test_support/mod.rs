@@ -1,5 +1,9 @@
 //! Doubles for this crate's tests and other crates' tests. A double stands
-//! in for the contract, so no test needs Steam.
+//! in for the contract, so no test needs Steam. Stubs answer as they're
+//! told, and spies count what they're asked.
+
+mod spies;
+mod stubs;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -16,9 +20,12 @@ use game::AppId;
 use money::{Currency, Money};
 
 use crate::{
-    Clock, GetPrices, Lookup, MarketPause, Offers, Price, PriceBook, PriceQuote, PriceRepository,
+    Clock, Lookup, MarketPause, Offers, Price, PriceBook, PriceQuote, PriceRepository,
     PriceSettings, PricedCard, QuoteSource, SetPrices, Wallet,
 };
+
+pub use spies::{SpyKeepPricesUpToDateUseCase, SpyRefreshPricesUseCase, SpySetGamesToPriceUseCase};
+pub use stubs::{StubGetPricesUseCase, StubGetWalletUseCase};
 
 /// Tuesday 29 September 2026, 09:14: when the session in the design's
 /// mockups starts.
@@ -98,17 +105,6 @@ pub fn set_prices(
         fetched_at: at,
         retry_at: None,
     }
-}
-
-/// Answers every read with `book`.
-pub fn fixed_prices(book: PriceBook) -> GetPrices {
-    let book = Arc::new(book);
-    Arc::new(move || Arc::clone(&book))
-}
-
-/// Nothing priced yet: every price is on its way.
-pub fn pending_prices() -> GetPrices {
-    fixed_prices(PriceBook::default())
 }
 
 /// What a set lookup finds, by game and border: each card's name and list

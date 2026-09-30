@@ -118,21 +118,29 @@ component/<name>/domain/src/
 │   └── <name>_repository.rs     the contract the data layer is written to fit
 ├── use_cases/
 │   ├── mod.rs
-│   └── <name>_use_cases.rs      one use case per action: its type, and the constructor of the real one
-└── test_support.rs              doubles, behind the `test-support` feature
+│   ├── <name>_use_cases.rs      every use case of the component, a trait each
+│   └── impl/
+│       ├── mod.rs
+│       └── default_<use case>.rs   the real one, over the repository: default_sign_in_use_case.rs
+└── test_support/                doubles, behind the `test-support` feature
+    ├── mod.rs                   in-memory repositories and builders
+    ├── stubs/                   a use case that answers as it's told, a file each
+    └── spies/                   a use case that keeps what it's asked, a file each
 ```
 
 A component that keeps nothing has no repository: `session` is kept in
 memory by its keeper, and `money` is its models alone.
 
-`farming` adds `ranking.rs` (what to play, and how: pure), `rules.rs`
-(every number it runs on, with where it comes from) and `reporter.rs`.
+`farming` adds `farmer.rs` (the farmer `DefaultFarmCardsUseCase` runs),
+`ranking.rs` (what to play, and how: pure), `rules.rs` (every number it
+runs on, with where it comes from) and `reporter.rs`.
 `session` keeps which card each drop was in `KeptSession`, the time to
 finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `game`
 has the rules both use, the 3 hours a game needs and the 32 Steam plays at
-once, in `rules.rs`. `price` adds `clock.rs`,
-`valuation.rs` (what cards are worth: pure, so every figure can be checked
-by hand) and `rules.rs`. `money` is its models alone, a file each:
+once, in `rules.rs`. `price` adds `clock.rs`, `pricing.rs` (looking a set
+up and keeping it), `watcher.rs` (the background pricing
+`DefaultKeepPricesUpToDateUseCase` runs), `valuation.rs` (what cards are
+worth: pure, so every figure can be checked by hand) and `rules.rs`. `money` is its models alone, a file each:
 `Currency`, with Valve's table of currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
@@ -151,53 +159,62 @@ valued after fees and say so.
 
 ### Use cases
 
-Each use case is a **function value**: a documented type alias names it, and a
-constructor builds the real one over the repositories. Call sites read
-`(self.read_library)()`, and a test double is a closure.
+Each use case is a **trait**, named for what the user wants and ending in
+`UseCase`, with one method, `call`. A component declares all of its use
+cases in `use_cases/<name>_use_cases.rs`, and each is done over the
+repository by a `Default…UseCase` in a file of its own under
+`use_cases/impl/`. View models hold `Arc<dyn …UseCase>`, only the ones they
+call, and read `self.set_tier.call(app_id, tier)`. A test double is a type of
+its own: a `Stub…UseCase` answers as it's told, and a `Spy…UseCase` keeps
+what it's asked. `Get…` answers with the current value, and `Set…` sets a new
+state.
 
-| Component | Use case (constructor) | What it does |
+| Component | Use case | What it does |
 | --- | --- | --- |
-| account | `GetAccount` (`get_account`) | The signed-in account, or nobody. |
-| | `RefreshAccount` (`refresh_account`) | Re-checks the saved sign-in in the background. |
-| | `LinkAccount` (`link_account`) | Signs in with a QR code; the codes arrive on a channel. Errs with `LinkError`. |
-| | `UnlinkAccount` (`unlink_account`) | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
-| game | `ReadLibrary` (`read_library`) | The whole library, games with drops left first. Errs with `GameError`. |
-| card | `LookAtCards` (`look_at_cards`) | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
-| | `LookAtFoils` (`look_at_foils`) | One game's foils afresh, from its foil badge: how many of each the account has. |
-| | `DescribeCards` (`describe_cards`) | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
-| preferences | `GetPreferences` (`get_preferences`) | The current preferences. |
-| | `SetGameTier` (`set_game_tier`) | Moves a game between priority (at a rank), indifferent and skip. |
-| | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
-| | `SetAppearOnline` (`set_appear_online`) | Show as online while farming, or appear offline. |
-| farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
-| session | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
-| market | `GetPrices` (`get_prices`) | The price book now. |
-| | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
-| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
-| | `RefreshPrices` (`refresh_prices`) | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
-| | `PriceOffers` (`price_offers`) | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
-| | `GetWallet` (`get_wallet`) | The wallet, once Steam has said. |
-| | `GetPriceSettings` (`get_price_settings`), `SetBasis` (`set_basis`) | The value basis, and choosing it. |
+| account | `GetAccountUseCase` | The signed-in account, or nobody. |
+| | `CheckSignInUseCase` | Checks the saved sign-in again, in the background. |
+| | `SignInUseCase` | Signs in with a QR code; the codes arrive on a channel. Errs with `SignInError`. |
+| | `SignOutUseCase` | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
+| game | `ReadLibraryUseCase` | The whole library, games with drops left first. Errs with `GameError`. |
+| card | `LookAtCardsUseCase` | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
+| | `LookAtFoilsUseCase` | One game's foils afresh, from its foil badge: how many of each the account has. |
+| | `IdentifyCardsUseCase` | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
+| preferences | `GetPreferencesUseCase` | The current preferences. |
+| | `SetGameTierUseCase` | Moves a game between priority (at a rank), indifferent and skip. |
+| | `SetOnlyPriorityUseCase` | Farm priority games only. |
+| | `SetAppearOnlineUseCase` | Show as online while farming, or appear offline. |
+| farming | `FarmCardsUseCase` | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
+| session | `EndSessionUseCase` | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
+| price | `GetPricesUseCase` | The price book now. |
+| | `SetGamesToPriceUseCase` | Which games to price, most urgent first. |
+| | `KeepPricesUpToDateUseCase` | Prices those games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
+| | `RefreshPricesUseCase` | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
+| | `LookUpOffersUseCase` | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
+| | `GetWalletUseCase` | The wallet, once Steam has said. |
+| | `GetPriceSettingsUseCase`, `SetBasisUseCase` | The value basis, and choosing it. |
 
 The market's use cases that keep time take a `Clock`: the system's, or in a
 test, one that moves with tokio's paused time.
 
 The dashboard values cards at their market price: the list basis, with
-`GetPrices`, `WantPrices`, `WatchPrices`, `RefreshPrices` and `GetWallet`.
-The other bases, `PriceOffers` and the settings are there for selling
+`GetPricesUseCase`, `SetGamesToPriceUseCase`, `KeepPricesUpToDateUseCase`,
+`RefreshPricesUseCase` and `GetWalletUseCase`. The other bases,
+`LookUpOffersUseCase` and the settings are there for selling
 later (see [the research](research/market-and-session.md), section 4).
 
 ### Use cases that call other use cases
 
-`farm_cards` needs the library, the cards and what the user wants. It takes
-`ReadLibrary`, `LookAtCards`, `LookAtFoils`, `DescribeCards` and
-`GetPreferences`, not their repositories: so `farming` depends on `game`,
+`DefaultFarmCardsUseCase` needs the library, the cards and what the user
+wants. It takes `ReadLibraryUseCase`, `LookAtCardsUseCase`,
+`LookAtFoilsUseCase`, `IdentifyCardsUseCase` and `GetPreferencesUseCase`,
+not their repositories: so `farming` depends on `game`,
 `card` and `preferences` as domain components, and never learns where any of
 them comes from. When a tier changes,
 the farmer sees it within moments, through the same use case the screens
 call.
 
-`farm_cards` and `end_session` share a `SessionKeeper`, which the
+`DefaultFarmCardsUseCase` and `DefaultEndSessionUseCase` share a
+`SessionKeeper`, which the
 composition root makes: it keeps the session from one run of the farmer to
 the next. The session asks the farmer for the farm order when it needs one
 (the drops left at the start, the first forecast), since which games are
@@ -219,8 +236,8 @@ cards joins the two.
 | `FarmingRepository` | `farming` | `SteamFarmingRepository` in `farming-data` |
 | `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
 
-Use cases return errors in the user's vocabulary (`LinkError::Refused`,
-`UnlinkError::Unavailable`, `PreferencesError::Unavailable`,
+Use cases return errors in the user's vocabulary (`SignInError::Refused`,
+`SignOutError::Unavailable`, `PreferencesError::Unavailable`,
 `GameError::Unavailable`, `CardError::Unavailable`, `PriceError::Paused`).
 Repository contracts
 return `anyhow::Result` with a reason written for the user; the use case
@@ -285,7 +302,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 ### `headless`
 
-The same `FarmCards`, printed as lines. Its own crate, so `--headless` can't
+The same `FarmCardsUseCase`, printed as lines. Its own crate, so `--headless` can't
 grow a dependency the dashboard doesn't have.
 
 ---
@@ -321,7 +338,7 @@ where.
 | Screens | `ui/terminal-ui/src/tui/preview.rs` | what's on screen | `test-support` doubles |
 | Architecture | `app/tests/dependency_rule.rs`, `app/tests/language_rules.rs` | the table at the top of this page, and the section below | none |
 
-The farming acceptance tests run the real `farm_cards` on paused tokio time
+The farming acceptance tests run the real `DefaultFarmCardsUseCase` on paused tokio time
 over an in-memory Steam whose cards drop as its games are played: ten hours
 without a drop costs milliseconds. The market's run the real watcher on
 paused time over an in-memory market that pauses as Steam's queue does, and

@@ -1,13 +1,16 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use futures::FutureExt;
-use game::{Game, GameError, ReadLibrary, SteamLibrary};
+use game::{Game, GameError, ReadLibraryUseCase, SteamLibrary};
 use tokio::task::JoinHandle;
 
 /// The Steam library, read in the background, so a screen showing it never
 /// waits on Steam.
 pub struct Library {
-    read: ReadLibrary,
+    read: Arc<dyn ReadLibraryUseCase>,
     pending: Option<JoinHandle<Result<SteamLibrary, GameError>>>,
     library: Option<SteamLibrary>,
     fetched: Option<Instant>,
@@ -19,7 +22,7 @@ pub struct Library {
 }
 
 impl Library {
-    pub fn new(read: ReadLibrary) -> Self {
+    pub fn new(read: Arc<dyn ReadLibraryUseCase>) -> Self {
         Self {
             read,
             pending: None,
@@ -35,7 +38,7 @@ impl Library {
     /// the library went out of date since it began.
     pub fn refresh(&mut self) {
         if self.pending.is_none() || self.outdated {
-            self.pending = Some((self.read)());
+            self.pending = Some(self.read.call());
             self.outdated = false;
         }
     }
@@ -99,25 +102,12 @@ impl Library {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-
-    use game::test_support::game;
+    use game::test_support::{SpyReadLibraryUseCase, game};
 
     use super::*;
 
-    /// Answers every read with `answer`, counting the reads.
-    fn answering(answer: Result<SteamLibrary, GameError>) -> (ReadLibrary, Arc<AtomicUsize>) {
-        let asked = Arc::new(AtomicUsize::new(0));
-        let count = asked.clone();
-        let read: ReadLibrary = Arc::new(move || {
-            count.fetch_add(1, Ordering::Relaxed);
-            let answer = answer.clone();
-            tokio::spawn(async move { answer })
-        });
-        (read, asked)
+    fn answering(result: Result<SteamLibrary, GameError>) -> Arc<SpyReadLibraryUseCase> {
+        Arc::new(SpyReadLibraryUseCase::answering(result))
     }
 
     async fn settle(l: &mut Library) {
@@ -133,14 +123,14 @@ mod tests {
 
     #[tokio::test]
     async fn reads_in_the_background_one_read_at_a_time() {
-        let (read, asked) = answering(Ok(SteamLibrary::new(vec![
+        let read = answering(Ok(SteamLibrary::new(vec![
             game(620, 5.2, 1, 3),
             game(220, 30.0, 3, 0),
         ])));
-        let mut l = Library::new(read);
+        let mut l = Library::new(read.clone());
         l.refresh();
         l.refresh();
-        assert_eq!(asked.load(Ordering::Relaxed), 1);
+        assert_eq!(read.reads(), 1);
         settle(&mut l).await;
         let left: Vec<u32> = l.with_drops_left().iter().map(|g| g.app_id.0).collect();
         assert_eq!(left, [620]);
@@ -148,22 +138,22 @@ mod tests {
 
     #[tokio::test]
     async fn a_fresh_library_isnt_read_again_but_a_failed_one_is() {
-        let (read, asked) = answering(Ok(SteamLibrary::default()));
-        let mut l = Library::new(read);
+        let read = answering(Ok(SteamLibrary::default()));
+        let mut l = Library::new(read.clone());
         l.refresh_if_older(Duration::from_secs(600));
         settle(&mut l).await;
         l.refresh_if_older(Duration::from_secs(600));
-        assert_eq!(asked.load(Ordering::Relaxed), 1);
+        assert_eq!(read.reads(), 1);
 
-        let (read, asked) = answering(Err(GameError::Unavailable(
+        let read = answering(Err(GameError::Unavailable(
             "steamcommunity.com didn't answer".into(),
         )));
-        let mut l = Library::new(read);
+        let mut l = Library::new(read.clone());
         l.refresh_if_older(Duration::from_secs(600));
         settle(&mut l).await;
         assert_eq!(l.error(), Some("steamcommunity.com didn't answer"));
         l.refresh_if_older(Duration::from_secs(600));
-        assert_eq!(asked.load(Ordering::Relaxed), 2, "tried again");
+        assert_eq!(read.reads(), 2, "tried again");
         settle(&mut l).await;
     }
 }

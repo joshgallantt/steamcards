@@ -2,19 +2,23 @@
 //! card that drops is a drop of its own, told at once and named a moment
 //! later; the session keeps what was played, the games finished and the
 //! first forecast, through pauses, until the user signs out. Every test
-//! drives the real `farm_cards` over an in-memory Steam, on paused time.
+//! drives the real `DefaultFarmCardsUseCase` over an in-memory Steam, on
+//! paused time.
 
 use std::{sync::Arc, time::Duration};
 
-use card::AssetId;
-use card::{describe_cards, look_at_cards, look_at_foils};
+use card::{
+    AssetId, DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
+};
 use farming::{
-    EventKind, FarmCards, FarmingEvent, FarmingStatus, Status, farm_cards,
+    DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
     test_support::InMemorySteam,
 };
-use game::{AppId, read_library};
-use preferences::{Preferences, test_support::ChangingPreferences};
-use session::{DropCard, EndSession, Finished, Mode, NewItem, SessionKeeper, end_session};
+use game::{AppId, DefaultReadLibraryUseCase};
+use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
+use session::{
+    DefaultEndSessionUseCase, DropCard, EndSessionUseCase, Finished, Mode, NewItem, SessionKeeper,
+};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -27,9 +31,9 @@ const HADES: u32 = 1_145_360;
 /// Someone farming, who can pause, carry on, and sign out.
 struct Player {
     steam: Arc<InMemorySteam>,
-    prefs: ChangingPreferences,
-    farm: FarmCards,
-    end_session: EndSession,
+    prefs: Arc<StubGetPreferencesUseCase>,
+    farm: Arc<dyn FarmCardsUseCase>,
+    end_session: Arc<dyn EndSessionUseCase>,
     token: CancellationToken,
     tx: mpsc::Sender<FarmingEvent>,
     events: mpsc::Receiver<FarmingEvent>,
@@ -39,20 +43,20 @@ struct Player {
 impl Player {
     fn new() -> Self {
         let steam = Arc::new(InMemorySteam::new());
-        let prefs = ChangingPreferences::default();
+        let prefs = Arc::new(StubGetPreferencesUseCase::default());
         let sessions = Arc::new(SessionKeeper::default());
         let (tx, events) = mpsc::channel(8192);
         Self {
-            farm: farm_cards(
-                read_library(steam.clone()),
-                look_at_cards(steam.clone()),
-                look_at_foils(steam.clone()),
-                describe_cards(steam.clone()),
+            farm: Arc::new(DefaultFarmCardsUseCase::new(
+                Arc::new(DefaultReadLibraryUseCase::new(steam.clone())),
+                Arc::new(DefaultLookAtCardsUseCase::new(steam.clone())),
+                Arc::new(DefaultLookAtFoilsUseCase::new(steam.clone())),
+                Arc::new(DefaultIdentifyCardsUseCase::new(steam.clone())),
                 steam.clone(),
-                prefs.get(),
+                prefs.clone(),
                 sessions.clone(),
-            ),
-            end_session: end_session(sessions),
+            )),
+            end_session: Arc::new(DefaultEndSessionUseCase::new(sessions)),
             steam,
             prefs,
             token: CancellationToken::new(),
@@ -89,7 +93,7 @@ impl Player {
 
     fn starts_farming(&mut self) {
         self.token = CancellationToken::new();
-        self.farmer = Some((self.farm)(self.token.clone(), self.tx.clone()));
+        self.farmer = Some(self.farm.call(self.token.clone(), self.tx.clone()));
     }
 
     /// Pauses, waits for the farmer to stop, and reads what it said until
@@ -103,7 +107,7 @@ impl Player {
     }
 
     fn signs_out(&self) {
-        (self.end_session)();
+        self.end_session.call();
     }
 
     /// Reads the log until a line of `kind` shows up, and returns it.

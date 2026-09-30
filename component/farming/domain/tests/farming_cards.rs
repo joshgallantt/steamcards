@@ -1,15 +1,16 @@
 //! Acceptance tier: the farmer as the user meets it. Every test drives the
-//! real `farm_cards` over an in-memory Steam, on paused time, and reads only
+//! real `DefaultFarmCardsUseCase` over an in-memory Steam, on paused time, and reads only
 //! what the user would read — the log and the status line.
 
 use std::{sync::Arc, time::Duration};
 
-use card::{describe_cards, look_at_cards, look_at_foils};
+use card::{DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase};
 use farming::{
-    EventKind, FarmingEvent, FarmingStatus, Status, farm_cards, test_support::InMemorySteam,
+    DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
+    test_support::InMemorySteam,
 };
-use game::{AppId, read_library};
-use preferences::{Preferences, test_support::ChangingPreferences};
+use game::{AppId, DefaultReadLibraryUseCase};
+use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::Mode;
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -20,7 +21,7 @@ const HOUR: Duration = Duration::from_secs(60 * 60);
 /// Someone with a Steam library, leaving the farmer running.
 struct Player {
     steam: Arc<InMemorySteam>,
-    prefs: ChangingPreferences,
+    prefs: Arc<StubGetPreferencesUseCase>,
     token: CancellationToken,
     events: Option<mpsc::Receiver<FarmingEvent>>,
     farmer: Option<tokio::task::JoinHandle<()>>,
@@ -30,7 +31,7 @@ impl Player {
     fn new() -> Self {
         Self {
             steam: Arc::new(InMemorySteam::new()),
-            prefs: ChangingPreferences::default(),
+            prefs: Arc::default(),
             token: CancellationToken::new(),
             events: None,
             farmer: None,
@@ -42,17 +43,17 @@ impl Player {
     }
 
     fn starts_farming(&mut self) {
-        let farm = farm_cards(
-            read_library(self.steam.clone()),
-            look_at_cards(self.steam.clone()),
-            look_at_foils(self.steam.clone()),
-            describe_cards(self.steam.clone()),
+        let farm = DefaultFarmCardsUseCase::new(
+            Arc::new(DefaultReadLibraryUseCase::new(self.steam.clone())),
+            Arc::new(DefaultLookAtCardsUseCase::new(self.steam.clone())),
+            Arc::new(DefaultLookAtFoilsUseCase::new(self.steam.clone())),
+            Arc::new(DefaultIdentifyCardsUseCase::new(self.steam.clone())),
             self.steam.clone(),
-            self.prefs.get(),
+            self.prefs.clone(),
             Arc::default(),
         );
         let (tx, rx) = mpsc::channel(8192);
-        self.farmer = Some(farm(self.token.clone(), tx));
+        self.farmer = Some(farm.call(self.token.clone(), tx));
         self.events = Some(rx);
     }
 

@@ -1,9 +1,11 @@
 //! Doubles for this crate's tests and other crates' tests. A double stands in
-//! for the contract, so no test needs Steam.
+//! for the contract, so no test needs Steam. Spies count what they're asked.
+
+mod spies;
 
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Mutex,
     time::Duration,
 };
 
@@ -14,12 +16,9 @@ use tokio::{sync::mpsc, time::Instant};
 
 use session::NewItem;
 
-use crate::{FarmCards, FarmingRepository, Signal};
+use crate::{FarmingRepository, Signal};
 
-/// Never farms. For screens that need a farmer to exist.
-pub fn idle_farmer() -> FarmCards {
-    Arc::new(|_, _| tokio::spawn(async {}))
-}
+pub use spies::SpyFarmCardsUseCase;
 
 /// A game's card drops, as the stand-in plays them out.
 #[derive(Debug, Clone)]
