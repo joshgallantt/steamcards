@@ -111,3 +111,28 @@ async fn new_items_come_with_their_ids_until_the_inventory_is_viewed() {
         })
     );
 }
+
+#[tokio::test]
+async fn a_drop_after_an_unanswered_ask_is_news() {
+    let steam = FakeSteam::start().await;
+    steam.never_answers_the_ask();
+    let session =
+        signed_in(&steam, "unanswered-ask").with_sign_on_answer_within(Duration::from_millis(100));
+    let conn = session.connection().await.unwrap();
+    let mut events = conn.events();
+    eventually(|| steam.announcement_asks() == 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let madison = unseen_card(31_004, 960_910);
+    steam.announce(vec![madison]);
+    assert_eq!(
+        next(&mut events).await,
+        Event::NewItems(Announcement {
+            count: 1,
+            items: vec![madison],
+            at_sign_on: false,
+        }),
+        "a card that dropped, not what was there already"
+    );
+    assert_eq!(conn.new_at_sign_on(), None);
+}

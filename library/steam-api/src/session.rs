@@ -25,7 +25,7 @@ use crate::{
         BadgeGame, Seen, SetCard, read_badge_page, read_foil_cards_page, read_game_cards_page,
         seen_by,
     },
-    cm::{Connection, LogOn, NoAnswer, Refused, WalletInfo},
+    cm::{self, Connection, LogOn, NoAnswer, Refused, WalletInfo},
     community::{Community, WebLogin},
     directory,
     inventory::{self, Described, InventoryItem},
@@ -68,6 +68,8 @@ pub struct Session {
     wallet: Mutex<Option<WalletInfo>>,
     /// How long before asking Steam about items again.
     ask_again_after: Duration,
+    /// How long Steam's answer to what's new at sign-on may take.
+    answer_within: Duration,
 }
 
 impl Session {
@@ -98,6 +100,7 @@ impl Session {
             market: MarketQueue::new(MarketPace::default()),
             wallet: Mutex::default(),
             ask_again_after: ASK_AGAIN_AFTER,
+            answer_within: cm::SIGN_ON_ANSWER_WITHIN,
         }
     }
 
@@ -112,6 +115,14 @@ impl Session {
     /// seconds: for tests that can't wait.
     pub fn with_ask_again_after(mut self, after: Duration) -> Self {
         self.ask_again_after = after;
+        self
+    }
+
+    /// The same, counting Steam's answer to what's new at sign-on only
+    /// within `within` of asking, in place of 10 seconds: for tests that
+    /// can't wait.
+    pub fn with_sign_on_answer_within(mut self, within: Duration) -> Self {
+        self.answer_within = within;
         self
     }
 
@@ -201,7 +212,9 @@ impl Session {
         tokio::spawn(async move {
             let conn = match live.filter(|c| c.is_signed_on()) {
                 Some(conn) => conn,
-                None => match sign_on(&endpoints, &http, &log, &creds).await {
+                None => match sign_on(&endpoints, &http, &log, &creds, cm::SIGN_ON_ANSWER_WITHIN)
+                    .await
+                {
                     Ok(conn) => Arc::new(conn),
                     Err(e) => return log.line(&format!("signing out: {e}")),
                 },
@@ -228,7 +241,15 @@ impl Session {
         if self.is_rejected() {
             bail!("Steam didn't accept the saved sign-in — sign in again");
         }
-        let conn = match sign_on(&self.endpoints, &self.http, &self.log, &creds).await {
+        let conn = match sign_on(
+            &self.endpoints,
+            &self.http,
+            &self.log,
+            &creds,
+            self.answer_within,
+        )
+        .await
+        {
             Ok(conn) => Arc::new(conn),
             Err(e) => {
                 let rejected = e
@@ -554,6 +575,7 @@ async fn sign_on(
     http: &reqwest::Client,
     log: &DebugLog,
     creds: &Credentials,
+    answer_within: Duration,
 ) -> anyhow::Result<Connection> {
     let servers = servers(endpoints, http).await?;
     let mut last = None;
@@ -565,6 +587,7 @@ async fn sign_on(
                 continue;
             }
         };
+        conn.sign_on_answer_within(answer_within);
         let signed_on = conn
             .log_on(&LogOn {
                 refresh_token: &creds.refresh_token,

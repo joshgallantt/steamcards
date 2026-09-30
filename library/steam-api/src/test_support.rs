@@ -180,6 +180,8 @@ struct State {
     /// New items not seen yet: Steam lists them until the inventory is
     /// viewed.
     unseen: Vec<UnseenItem>,
+    /// Says nothing when asked at sign-on what's new, as Steam can.
+    silent_when_asked: bool,
     /// How often a session asked what's new.
     announcement_asks: usize,
     clients: Vec<mpsc::UnboundedSender<Vec<u8>>>,
@@ -225,6 +227,7 @@ impl FakeSteam {
             asked_about: HashSet::new(),
             inventory_asks: Vec::new(),
             unseen: Vec::new(),
+            silent_when_asked: false,
             announcement_asks: 0,
             clients: Vec::new(),
         }));
@@ -371,6 +374,12 @@ impl FakeSteam {
             announcement(&s.unseen)
         };
         self.push(&frame);
+    }
+
+    /// From now on says nothing when asked at sign-on what's new, as Steam
+    /// did when nothing was.
+    pub fn never_answers_the_ask(&self) {
+        self.state().silent_when_asked = true;
     }
 
     /// These items arrived before any session signed on, and haven't been
@@ -534,7 +543,11 @@ impl State {
             }
             emsg::CLIENT_REQUEST_ITEM_ANNOUNCEMENTS => {
                 self.announcement_asks += 1;
-                vec![announcement(&self.unseen)]
+                if self.silent_when_asked {
+                    Vec::new()
+                } else {
+                    vec![announcement(&self.unseen)]
+                }
             }
             _ => Vec::new(),
         }

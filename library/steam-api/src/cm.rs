@@ -12,9 +12,9 @@ use std::{
     fmt,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, bail};
@@ -173,6 +173,10 @@ struct SignedOn {
 }
 
 /// What the tasks share.
+/// How long Steam's answer to what's new at sign-on may take to count as the
+/// answer. It comes within a round trip when it comes at all.
+pub(crate) const SIGN_ON_ANSWER_WITHIN: Duration = Duration::from_secs(10);
+
 struct State {
     /// Jobs waiting for their answer.
     pending: Mutex<HashMap<u64, oneshot::Sender<Packet>>>,
@@ -180,8 +184,10 @@ struct State {
     logon: Mutex<Option<oneshot::Sender<Packet>>>,
     signed_on: Mutex<Option<SignedOn>>,
     blocked: Mutex<Option<Blocked>>,
-    /// Asked at sign-on what's new, and not answered yet.
-    asked_new_items: AtomicBool,
+    /// When it asked at sign-on what's new, while not answered yet.
+    asked_new_items: Mutex<Option<Instant>>,
+    /// How long an answer to that may take to count as one.
+    answer_within: Mutex<Duration>,
     /// The answer, once it came.
     new_at_sign_on: Mutex<Option<Announcement>>,
     wallet: Mutex<Option<WalletInfo>>,
@@ -198,6 +204,12 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// Counts Steam's answer to what's new at sign-on only if it comes within
+    /// `within` of asking: for tests that can't wait.
+    pub fn sign_on_answer_within(&self, within: Duration) {
+        *self.state.answer_within.lock().unwrap() = within;
+    }
+
     /// Connects to the CM server at `url` (`wss://…/cmsocket/`) and says
     /// hello. Not signed on yet: sign-in calls work, playing doesn't.
     pub async fn connect(url: &str, log: &DebugLog) -> anyhow::Result<Self> {
@@ -215,7 +227,8 @@ impl Connection {
             logon: Mutex::default(),
             signed_on: Mutex::default(),
             blocked: Mutex::default(),
-            asked_new_items: AtomicBool::new(false),
+            asked_new_items: Mutex::default(),
+            answer_within: Mutex::new(SIGN_ON_ANSWER_WITHIN),
             new_at_sign_on: Mutex::default(),
             wallet: Mutex::default(),
             events,
@@ -338,7 +351,7 @@ impl Connection {
         self.heartbeat(every);
         // What's new in the inventory already, as ASF and node-steam-user
         // ask at sign-on: the answer tells new items from those before.
-        self.state.asked_new_items.store(true, Ordering::Relaxed);
+        *self.state.asked_new_items.lock().unwrap() = Some(Instant::now());
         self.send(
             emsg::CLIENT_REQUEST_ITEM_ANNOUNCEMENTS,
             self.header(),
@@ -588,10 +601,13 @@ impl State {
                 if let Ok(a) =
                     proto::decode::<ClientItemAnnouncements>("item announcement", &packet.body)
                 {
-                    // The first after asking is the answer: nothing is played
-                    // until a moment after signing on, so no card drops
-                    // before it comes.
-                    let at_sign_on = self.asked_new_items.swap(false, Ordering::Relaxed);
+                    // The first after asking is the answer, when it comes
+                    // promptly: no card drops within moments of playing. With
+                    // nothing new, Steam may not answer at all, and a drop
+                    // announced later is news, not what was there already.
+                    let asked = self.asked_new_items.lock().unwrap().take();
+                    let within = *self.answer_within.lock().unwrap();
+                    let at_sign_on = asked.is_some_and(|at| at.elapsed() <= within);
                     // Whether Steam lists the items for card drops is still
                     // to be seen (research: market-and-session.md, section 6).
                     self.log.line(&format!(
