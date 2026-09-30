@@ -3,7 +3,7 @@
 The dashboard shows how far farming has got, what each game has left, and
 the cards that dropped this session, with what they're worth. It replaces
 a larger design with many panels and views that proved too much to take in
-(git history keeps it: `c618a3f`).
+(git history keeps it, from the commit "Specify the new terminal UI").
 
 The mockups below are the previews' renders
 (`cargo test -p terminal-ui previews -- --nocapture`), with their sample

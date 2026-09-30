@@ -147,6 +147,11 @@ constructor builds the real one over the repositories. Call sites read
 The market's use cases that keep time take a `Clock`: the system's, or in a
 test, one that moves with tokio's paused time.
 
+The dashboard values cards at their market price: the list basis, with
+`GetPrices`, `WantPrices`, `WatchPrices`, `RefreshPrices` and `GetWallet`.
+The other bases, `PriceOffers` and the settings are there for selling
+later (see [the research](research/market-and-session.md), section 4).
+
 ### Use cases that call other use cases
 
 `farm_cards` needs the library and what the user wants. It takes
