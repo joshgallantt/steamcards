@@ -18,7 +18,7 @@ use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    EventKind, FarmingEvent, FarmingStatus, PlayRepository, Signal, Status,
+    EventKind, FarmingEvent, FarmingRepository, FarmingStatus, Signal, Status,
     ranking::{Plan, farm_order, plan, why_nothing},
     reporter::Reporter,
     rules::{
@@ -38,7 +38,7 @@ pub fn farm_cards(
     look: LookAtCards,
     look_at_foils: LookAtFoils,
     describe: DescribeCards,
-    play: Arc<dyn PlayRepository>,
+    play: Arc<dyn FarmingRepository>,
     prefs: GetPreferences,
     sessions: Arc<SessionKeeper>,
 ) -> FarmCards {
@@ -70,7 +70,7 @@ struct Farmer {
     look: LookAtCards,
     look_at_foils: LookAtFoils,
     describe: DescribeCards,
-    play: Arc<dyn PlayRepository>,
+    play: Arc<dyn FarmingRepository>,
     prefs: GetPreferences,
     sessions: Arc<SessionKeeper>,
 }

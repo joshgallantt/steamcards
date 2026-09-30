@@ -5,7 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::DateTime;
-use farming::{PlayRepository, Signal};
+use farming::{FarmingRepository, Signal};
 use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
@@ -19,7 +19,7 @@ use tokio::sync::broadcast;
 /// another device plays, nothing is: Steam signs off a session that says
 /// it's playing then. While anything is to be played, the computer is kept
 /// awake.
-pub struct SteamPlayRepository {
+pub struct SteamFarmingRepository {
     steam: Arc<SteamClient>,
     awake: Arc<KeepAwake>,
     /// The connection being played on, and what it was last told: a
@@ -82,7 +82,7 @@ impl Heard {
     }
 }
 
-impl SteamPlayRepository {
+impl SteamFarmingRepository {
     pub fn new(steam: Arc<SteamClient>, awake: Arc<KeepAwake>) -> Self {
         Self {
             steam,
@@ -146,7 +146,7 @@ impl SteamPlayRepository {
 }
 
 #[async_trait]
-impl PlayRepository for SteamPlayRepository {
+impl FarmingRepository for SteamFarmingRepository {
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
         let (conn, told, was_online) = self.take_up().await?;
         if online != was_online {

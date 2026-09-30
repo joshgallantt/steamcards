@@ -1,4 +1,4 @@
-use std::fmt;
+use crate::Tier;
 
 /// Games are named by their Steam app ID throughout: a name can change, and
 /// two games can share one.
@@ -45,35 +45,6 @@ impl Preferences {
         }
     }
 }
-
-/// How much the user wants a game farmed: priority -> indifferent -> skip.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tier {
-    /// 1-based position among the priority games.
-    Priority(usize),
-    /// The default: farmed after the priorities, in the farmer's own order.
-    Indifferent,
-    /// Never farmed.
-    Skip,
-}
-
-/// Why a change to the preferences didn't happen, in the user's terms. A disk
-/// that won't write and a file that can't be renamed are one fact to them: the
-/// change didn't stick.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PreferencesError {
-    Unavailable,
-}
-
-impl fmt::Display for PreferencesError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PreferencesError::Unavailable => write!(f, "preferences couldn't be saved"),
-        }
-    }
-}
-
-impl std::error::Error for PreferencesError {}
 
 #[cfg(test)]
 mod tests {

@@ -5,7 +5,7 @@ use crate::Signal;
 /// Playing games on Steam. Declared here, beside the use case that needs it;
 /// the data layer is written to fit.
 #[async_trait]
-pub trait PlayRepository: Send + Sync {
+pub trait FarmingRepository: Send + Sync {
     /// Plays exactly these games, signing on first if need be, and shows to
     /// friends as online or not. While another device plays, it plays
     /// nothing: Steam would sign this session off. Errs with a reason fit to

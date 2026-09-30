@@ -90,16 +90,27 @@ The domain starts from its entities:
   or just a name and a border. **`Held`** is what cards held are worth, at
   least; **`Estimate`**, what cards still to drop are likely worth.
 
-Each domain crate has the same shape:
+Each domain crate has the same shape, one type to a file, each file named
+for the type it holds:
 
 ```
 component/<name>/domain/src/
-├── lib.rs           the public surface, and what the component is for
-├── model.rs         entities and the component's error type
-├── repository.rs    the contract the data layer is written to fit
-├── use_cases.rs     one function per action: its type, and the constructor of the real one
-└── test_support.rs  doubles, behind the `test-support` feature
+├── lib.rs                       the public surface, and what the component is for
+├── model/
+│   ├── mod.rs                   the models, re-exported
+│   ├── <entity>.rs              one entity, value or error each: game.rs holds Game
+│   └── ...
+├── repository/
+│   ├── mod.rs
+│   └── <name>_repository.rs     the contract the data layer is written to fit
+├── use_cases/
+│   ├── mod.rs
+│   └── <name>_use_cases.rs      one use case per action: its type, and the constructor of the real one
+└── test_support.rs              doubles, behind the `test-support` feature
 ```
+
+A component that keeps nothing has no repository: `session` is kept in
+memory by its keeper, and `money` is its models alone.
 
 `farming` adds `ranking.rs` (what to play, and how: pure), `rules.rs`
 (every number it runs on, with where it comes from) and `reporter.rs`.
@@ -192,7 +203,7 @@ cards joins the two.
 | `GameRepository` | `game` | `SteamGameRepository` in `game-data` |
 | `CardRepository` | `card` | `SteamCardRepository` in `card-data` |
 | `PreferencesRepository` | `preferences` | `FilePreferencesRepository` in `preferences-data` |
-| `PlayRepository` | `farming` | `SteamPlayRepository` in `farming-data` |
+| `FarmingRepository` | `farming` | `SteamFarmingRepository` in `farming-data` |
 | `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
 
 Use cases return errors in the user's vocabulary (`LinkError::Refused`,

@@ -241,7 +241,7 @@ Use cases, each a function the view model actually calls. It holds no repository
 
 #### ② The rule lives in the domain, once
 
-**[`component/preferences/domain/src/use_cases.rs`](component/preferences/domain/src/use_cases.rs)**
+**[`component/preferences/domain/src/use_cases/preferences_use_cases.rs`](component/preferences/domain/src/use_cases/preferences_use_cases.rs)**
 ```rust
 pub type SetGameTier = Arc<dyn Fn(u32, Tier) -> Result<(), PreferencesError> + Send + Sync>;
 
@@ -279,7 +279,7 @@ To the user, a full disk and a failed rename are the same thing: *the change did
 
 #### ③ The contract belongs to the domain
 
-**[`component/preferences/domain/src/repository.rs`](component/preferences/domain/src/repository.rs)**
+**[`component/preferences/domain/src/repository/preferences_repository.rs`](component/preferences/domain/src/repository/preferences_repository.rs)**
 ```rust
 pub trait PreferencesRepository: Send + Sync {
     fn preferences(&self) -> Preferences;
@@ -334,11 +334,11 @@ if let Err(err) = self.farming.set_tier(e.game.app_id, tier) {
 
 Instead of confirming a change that didn't happen, it says *"That didn't stick — preferences couldn't be saved. Try again?"*
 
-The farmer never hears about the keypress. Every tick, it calls `GetPreferences` to see what the user wants. [`component/farming/domain/src/use_cases.rs`](component/farming/domain/src/use_cases.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
+The farmer never hears about the keypress. Every tick, it calls `GetPreferences` to see what the user wants. [`component/farming/domain/src/use_cases/farming_use_cases.rs`](component/farming/domain/src/use_cases/farming_use_cases.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
 
 ### What that buys
 
-- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one function per use case, so the games pop-up holds the preference functions it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the acceptance tests drive the real `farm_cards` over an in-memory Steam, and the farmer can't tell the difference.

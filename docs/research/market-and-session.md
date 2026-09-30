@@ -345,7 +345,7 @@ Each drop costs one CM call, the page steamcards already reads, and at most one 
   - `source_appid` u32 = 6
 
   Log it on the next drop to confirm that Steam fills it in for this kind of session.
-- **`library/steam-api/src/cm.rs:500-508`** turns 5576 into `Event::NewItems(count)`, which reaches the farmer as `Signal::NewItems` (`component/farming/data/src/play.rs:106`, `component/farming/domain/src/model.rs:92`). Carry the items as well as the count.
+- **`library/steam-api/src/cm.rs:500-508`** turns 5576 into `Event::NewItems(count)`, which reaches the farmer as `Signal::NewItems` (`component/farming/data/src/play.rs:106`, `component/farming/domain/src/model/signal.rs`). Carry the items as well as the count.
 - **`cm.rs:518`** drops every other push, including EMsg 146 and 5528.
 - **`cm.rs:360`:** `call()` can make the Econ call as it is, once the messages from Protobufs `steammessages_econ.steamclient.proto` are added.
 

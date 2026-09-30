@@ -6,7 +6,7 @@
 //! It works through the [`game`] and [`card`] components' use cases (what
 //! can still drop, a game's set, and which card an item is) and the
 //! [`preferences`] component's (what the user wants first), never their
-//! storage. Playing is the data layer's business, behind [`PlayRepository`].
+//! storage. Playing is the data layer's business, behind [`FarmingRepository`].
 //! The numbers it runs on, and where each comes from, are in `rules.rs`.
 
 mod model;
@@ -21,5 +21,5 @@ pub mod test_support;
 
 pub use model::{EventKind, FarmingEvent, FarmingStatus, Signal, Status};
 pub use ranking::farm_order;
-pub use repository::PlayRepository;
+pub use repository::FarmingRepository;
 pub use use_cases::{FarmCards, farm_cards};

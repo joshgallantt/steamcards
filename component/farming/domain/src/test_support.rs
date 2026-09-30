@@ -14,7 +14,7 @@ use tokio::{sync::mpsc, time::Instant};
 
 use session::NewItem;
 
-use crate::{FarmCards, PlayRepository, Signal};
+use crate::{FarmCards, FarmingRepository, Signal};
 
 /// Never farms. For screens that need a farmer to exist.
 pub fn idle_farmer() -> FarmCards {
@@ -503,7 +503,7 @@ fn sign_on(s: &mut State) {
 }
 
 #[async_trait]
-impl PlayRepository for InMemorySteam {
+impl FarmingRepository for InMemorySteam {
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
         self.settle();
         let mut s = self.state.lock().unwrap();

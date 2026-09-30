@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use card::{DescribeCards, LookAtCards, LookAtFoils};
-use farming::{FarmCards, PlayRepository, farm_cards};
-use farming_data::SteamPlayRepository;
+use farming::{FarmCards, FarmingRepository, farm_cards};
+use farming_data::SteamFarmingRepository;
 use game::ReadLibrary;
 use keep_awake::KeepAwake;
 use preferences::GetPreferences;
@@ -37,7 +37,7 @@ impl FarmingComponent {
         sessions: Arc<SessionKeeper>,
     ) -> Self {
         Self::over(
-            Arc::new(SteamPlayRepository::new(steam, awake)),
+            Arc::new(SteamFarmingRepository::new(steam, awake)),
             read_library,
             look_at_cards,
             look_at_foils,
@@ -48,7 +48,7 @@ impl FarmingComponent {
     }
 
     pub fn over(
-        play: Arc<dyn PlayRepository>,
+        play: Arc<dyn FarmingRepository>,
         read_library: ReadLibrary,
         look_at_cards: LookAtCards,
         look_at_foils: LookAtFoils,

@@ -4,4 +4,4 @@
 
 mod play;
 
-pub use play::SteamPlayRepository;
+pub use play::SteamFarmingRepository;
