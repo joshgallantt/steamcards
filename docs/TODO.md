@@ -129,15 +129,26 @@ done, and move it into a numbered section if it grows.
 - [x] Research where prices, the wallet's currency, drop asset IDs and
       completion estimates come from, and what quick-sell will need:
       [docs/research/market-and-session.md](research/market-and-session.md).
-- [~] Design: five designs from different angles, judged, and one spec
-      made from them (`docs/design/ui.md`).
-- [ ] Domain first: the farming session and its card drops; a `market`
-      component with money, prices, the wallet and the value basis.
-- [ ] Data: the wallet's currency and the drops' asset IDs over the CM
-      connection, set prices from the market at a polite pace, fee maths.
+- [x] Design: five designs from different angles, judged, and one spec
+      made from them (`docs/design/ui.md`). Its questions for you (§9)
+      are still open; the screens can start from its defaults.
+- [x] Domain first (2026-09-30): the farming session and its card drops,
+      one drop per copy, each named and numbered as the copy it made, and
+      the time to finish learnt from real drops; a `market` component
+      with money, prices, the wallet and the value basis, and what the
+      cards held and still to drop are worth.
+- [x] Data (2026-09-30): the wallet's currency and the drops' asset IDs
+      over the CM connection, set prices from the market at a polite pace
+      (one queue, 5 s apart; Steam's pause and the prices outlast a
+      restart), fee maths.
 - [ ] The new screens, their previews, and a check that nothing is cut off
-      at any size.
-- [ ] Review it adversarially, then try it on the real account.
+      at any size (`docs/design/ui.md`, §8). The market goes into the app
+      with them: the composition root builds `MarketComponent`, with
+      `prices.json` beside the config, which the README's "Your data"
+      should then mention.
+- [ ] Review it adversarially, then try it on the real account. The first
+      real drops and prices answer the research's open questions 1 to 3
+      (§6); `STEAMCARDS_DEBUG` keeps what Steam announces of each drop.
 
 ## Later
 
