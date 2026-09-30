@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use farming::{DropCard, FarmingSession, forecast};
 use game::{Game, SteamLibrary};
 use money::Money;
 use price::{
     Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
 };
+use session::{DropCard, Forecast, Session};
 
 /// Cards are valued at their market price: what buyers pay, the lowest
 /// listing on the Steam market.
@@ -44,7 +44,7 @@ pub struct Summary {
 impl Summary {
     /// `order` is the games that will be farmed, in farm order.
     pub fn build(
-        session: &FarmingSession,
+        session: &Session,
         library: &SteamLibrary,
         order: &[u32],
         book: &PriceBook,
@@ -57,7 +57,7 @@ impl Summary {
             .filter(|g| g.has_drops_left())
             .collect();
         let cards_to_go = farmed.iter().map(|g| g.drops.remaining).sum();
-        let time_to_go = (cards_to_go > 0).then(|| forecast(session, library, order, now).eta);
+        let time_to_go = (cards_to_go > 0).then(|| Forecast::of(session, library, order, now).eta);
 
         let (session_value, when_done) = match wallet {
             Some(wallet) => {
@@ -94,7 +94,7 @@ impl Summary {
 
 /// This session's cards as the market values them, and how many drops
 /// aren't known yet: still being found out, or nothing could tell.
-fn held_cards(session: &FarmingSession) -> (Vec<HeldCard>, u32) {
+fn held_cards(session: &Session) -> (Vec<HeldCard>, u32) {
     let mut cards = Vec::new();
     let mut unknown = 0;
     for drop in &session.drops {
@@ -157,7 +157,7 @@ pub struct SessionCard {
 
 /// This session's cards, newest first.
 pub fn session_cards(
-    session: &FarmingSession,
+    session: &Session,
     library: &SteamLibrary,
     book: &PriceBook,
     wallet: Option<&Wallet>,
@@ -238,7 +238,7 @@ pub fn card_price(app_id: u32, name: &str, book: &PriceBook, wallet: Option<&Wal
 /// The games to price, most urgent first: those playing now, then those
 /// whose cards dropped this session (newest first), then the rest in farm
 /// order.
-pub fn prices_wanted(playing: &[u32], session: &FarmingSession, order: &[u32]) -> Vec<u32> {
+pub fn prices_wanted(playing: &[u32], session: &Session, order: &[u32]) -> Vec<u32> {
     let mut wanted: Vec<u32> = Vec::new();
     let dropped = session.drops.iter().rev().map(|d| d.app_id);
     for id in playing
@@ -258,13 +258,13 @@ pub fn prices_wanted(playing: &[u32], session: &FarmingSession, order: &[u32]) -
 mod tests {
     use card::CardAsset;
     use chrono::TimeZone;
-    use farming::{Drop, Mode, Stretch};
     use game::CardDrops;
     use money::Currency;
     use price::{
         PriceQuote, PricedCard, QuoteSource, SetPrices,
         test_support::{listing, pounds},
     };
+    use session::{Drop, Mode, Stretch};
 
     use super::*;
 
@@ -348,8 +348,8 @@ mod tests {
     }
 
     /// Two Madisons, the second a spare, and a card still being found out.
-    fn session() -> FarmingSession {
-        FarmingSession {
+    fn session() -> Session {
+        Session {
             started_at: at(16, 50),
             drops: vec![
                 Drop {
@@ -433,7 +433,7 @@ mod tests {
         };
         let library = SteamLibrary::new(vec![done]);
         let s = Summary::build(
-            &FarmingSession::default(),
+            &Session::default(),
             &library,
             &[],
             &book(),

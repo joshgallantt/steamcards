@@ -60,7 +60,8 @@ fn components(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
         "money" | "account" | "game" | "preferences" => &[],
         "card" => &["game"],
-        "farming" => &["game", "card", "preferences"],
+        "session" => &["game", "card"],
+        "farming" => &["game", "card", "session", "preferences"],
         "price" => &["game", "card", "money"],
         _ => return None,
     })
@@ -103,7 +104,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        27,
+        29,
         "a crate was added or removed; place it in a layer above"
     );
 

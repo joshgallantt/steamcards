@@ -18,6 +18,8 @@ members = [
     "component/card/domain",
     "component/card/data",
     "component/card/di",
+    "component/session/domain",
+    "component/session/di",
     "component/preferences/domain",
     "component/preferences/data",
     "component/preferences/di",
@@ -95,6 +97,7 @@ money = { path = "component/money/domain" }
 account = { path = "component/account/domain" }
 game = { path = "component/game/domain" }
 card = { path = "component/card/domain" }
+session = { path = "component/session/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
 price = { path = "component/price/domain" }
@@ -111,6 +114,7 @@ price-data = { path = "component/price/data" }
 account-di = { path = "component/account/di" }
 game-di = { path = "component/game/di" }
 card-di = { path = "component/card/di" }
+session-di = { path = "component/session/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
 price-di = { path = "component/price/di" }

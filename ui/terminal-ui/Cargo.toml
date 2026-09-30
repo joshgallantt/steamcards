@@ -21,6 +21,7 @@ card.workspace = true
 price.workspace = true
 money.workspace = true
 preferences.workspace = true
+session.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 crossterm.workspace = true

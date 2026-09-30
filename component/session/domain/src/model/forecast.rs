@@ -26,102 +26,124 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use game::SteamLibrary;
+use game::{MOST_PLAYED_AT_ONCE, SteamLibrary};
 
 use crate::{
-    Drop, FarmingSession, Forecast, Mode, Stretch,
-    ranking::hours_to_go,
-    rules::{BAND_80, MOST_AT_ONCE, PRIOR_DROPS, PRIOR_HOURS},
+    Drop, Mode, Session, Stretch,
+    rules::{BAND_80, PRIOR_DROPS, PRIOR_HOURS},
 };
 
-/// How long farming the games in `order` should take from `now`, learnt from
-/// `session`'s drops farming alone. `order` is the farm order: games not in
-/// it, or with no drops left, aren't farmed, so they take no time.
-pub fn forecast(
-    session: &FarmingSession,
-    library: &SteamLibrary,
-    order: &[u32],
-    now: DateTime<Utc>,
-) -> Forecast {
-    let alone: Vec<&Stretch> = session
-        .stretches
-        .iter()
-        .filter(|s| s.mode == Mode::Cards)
-        .collect();
-    // Drops, and hours, farming alone: all of them, or one game's.
-    let k = |app: Option<u32>| {
-        session
-            .drops
-            .iter()
-            .filter(|d| app.is_none_or(|a| d.app_id == a))
-            .filter(|d| alone.iter().any(|s| during(d, s, now)))
-            .count() as f64
-    };
-    let t = |app: Option<u32>| {
-        alone
-            .iter()
-            .filter(|s| app.is_none_or(|a| s.app_ids.contains(&a)))
-            .map(|s| hours(s, now))
-            .sum::<f64>()
-    };
+/// How long farming should take to finish, learnt from this session's drops
+/// (see [`Forecast::of`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Forecast {
+    /// The time to finish, if left farming.
+    pub eta: Duration,
+    /// Where it falls 80% of the time; `None` before the second drop.
+    pub band: Option<(Duration, Duration)>,
+    /// Too few drops to learn from yet: it assumes 30 minutes a drop.
+    pub assumed: bool,
+    /// The part of `eta` spent building hours for games short of 3.
+    pub hours_term: Duration,
+    /// Drops an hour, farming alone.
+    pub rate: f64,
+    /// When each game's last card should drop, by app ID, counted from now,
+    /// in the order they're farmed.
+    pub per_game: Vec<(u32, Duration)>,
+    pub made_at: DateTime<Utc>,
+}
 
-    let learnt_from = k(None);
-    let assumed = learnt_from < 2.0;
-    let rate = if assumed {
-        PRIOR_DROPS / PRIOR_HOURS
-    } else {
-        (PRIOR_DROPS + learnt_from) / (PRIOR_HOURS + t(None))
-    };
-    let rate_of = |app: u32| {
-        if assumed {
-            rate
+impl Forecast {
+    /// How long farming the games in `order` should take from `now`, learnt from
+    /// `session`'s drops farming alone. `order` is the farm order: games not in
+    /// it, or with no drops left, aren't farmed, so they take no time.
+    pub fn of(
+        session: &Session,
+        library: &SteamLibrary,
+        order: &[u32],
+        now: DateTime<Utc>,
+    ) -> Forecast {
+        let alone: Vec<&Stretch> = session
+            .stretches
+            .iter()
+            .filter(|s| s.mode == Mode::Cards)
+            .collect();
+        // Drops, and hours, farming alone: all of them, or one game's.
+        let k = |app: Option<u32>| {
+            session
+                .drops
+                .iter()
+                .filter(|d| app.is_none_or(|a| d.app_id == a))
+                .filter(|d| alone.iter().any(|s| during(d, s, now)))
+                .count() as f64
+        };
+        let t = |app: Option<u32>| {
+            alone
+                .iter()
+                .filter(|s| app.is_none_or(|a| s.app_ids.contains(&a)))
+                .map(|s| hours(s, now))
+                .sum::<f64>()
+        };
+
+        let learnt_from = k(None);
+        let assumed = learnt_from < 2.0;
+        let rate = if assumed {
+            PRIOR_DROPS / PRIOR_HOURS
         } else {
-            (PRIOR_DROPS + k(Some(app))) / (PRIOR_DROPS / rate + t(Some(app)))
-        }
-    };
-
-    let mut elapsed = 0.0;
-    let mut hours_term = 0.0;
-    let mut left = 0;
-    // The group building hours: how many games are in it, and the hours it
-    // has built so far.
-    let mut group = (0, 0.0);
-    let mut per_game = Vec::new();
-    for game in order
-        .iter()
-        .filter_map(|&id| library.game(id))
-        .filter(|g| g.has_drops_left())
-    {
-        let to_go = hours_to_go(game);
-        if to_go > 0.0 {
-            if group.0 == MOST_AT_ONCE {
-                group = (0, 0.0);
+            (PRIOR_DROPS + learnt_from) / (PRIOR_HOURS + t(None))
+        };
+        let rate_of = |app: u32| {
+            if assumed {
+                rate
+            } else {
+                (PRIOR_DROPS + k(Some(app))) / (PRIOR_DROPS / rate + t(Some(app)))
             }
-            // Built alongside the ones before it, it needs only what they
-            // didn't need: the group takes as long as its lowest needs.
-            let more = (to_go - group.1).max(0.0);
-            group = (group.0 + 1, group.1 + more);
-            hours_term += more;
-            elapsed += more;
-        }
-        elapsed += f64::from(game.drops.remaining) / rate_of(game.app_id);
-        left += game.drops.remaining;
-        per_game.push((game.app_id, span(elapsed)));
-    }
+        };
 
-    let band = (!assumed && left > 0).then(|| {
-        let spread =
-            (BAND_80 * (1.0 / f64::from(left) + 1.0 / (PRIOR_DROPS + learnt_from)).sqrt()).exp();
-        (span(elapsed / spread), span(elapsed * spread))
-    });
-    Forecast {
-        eta: span(elapsed),
-        band,
-        assumed,
-        hours_term: span(hours_term),
-        rate,
-        per_game,
-        made_at: now,
+        let mut elapsed = 0.0;
+        let mut hours_term = 0.0;
+        let mut left = 0;
+        // The group building hours: how many games are in it, and the hours it
+        // has built so far.
+        let mut group = (0, 0.0);
+        let mut per_game = Vec::new();
+        for game in order
+            .iter()
+            .filter_map(|&id| library.game(id))
+            .filter(|g| g.has_drops_left())
+        {
+            let to_go = game.hours_to_go();
+            if to_go > 0.0 {
+                if group.0 == MOST_PLAYED_AT_ONCE {
+                    group = (0, 0.0);
+                }
+                // Built alongside the ones before it, it needs only what they
+                // didn't need: the group takes as long as its lowest needs.
+                let more = (to_go - group.1).max(0.0);
+                group = (group.0 + 1, group.1 + more);
+                hours_term += more;
+                elapsed += more;
+            }
+            elapsed += f64::from(game.drops.remaining) / rate_of(game.app_id);
+            left += game.drops.remaining;
+            per_game.push((game.app_id, span(elapsed)));
+        }
+
+        let band = (!assumed && left > 0).then(|| {
+            let spread = (BAND_80
+                * (1.0 / f64::from(left) + 1.0 / (PRIOR_DROPS + learnt_from)).sqrt())
+            .exp();
+            (span(elapsed / spread), span(elapsed * spread))
+        });
+        Forecast {
+            eta: span(elapsed),
+            band,
+            assumed,
+            hours_term: span(hours_term),
+            rate,
+            per_game,
+            made_at: now,
+        }
     }
 }
 
@@ -200,14 +222,14 @@ mod tests {
     fn six_drops_in_two_and_a_half_hours_learn_the_rate() {
         // The research's worked example: 6 drops in 2.5 hours farming one
         // game alone, and 40 drops left in games never farmed alone.
-        let session = FarmingSession {
+        let session = Session {
             drops: drops(1, 6, 0.0, 2.5),
             stretches: vec![stretch(&[1], Mode::Cards, 0.0, Some(2.5))],
             ..Default::default()
         };
         let library = SteamLibrary::new(vec![game(1, 8.0, 0), game(2, 5.0, 25), game(3, 4.0, 15)]);
 
-        let f = forecast(&session, &library, &[2, 3], at(2.5));
+        let f = Forecast::of(&session, &library, &[2, 3], at(2.5));
 
         assert!(!f.assumed);
         assert!(near(f.rate, 2.29, 0.01), "about 2.3 an hour: {}", f.rate);
@@ -229,15 +251,15 @@ mod tests {
     #[test]
     fn before_the_second_drop_it_assumes_30_minutes_a_drop() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 4), game(2, 5.0, 6)]);
-        let nothing_yet = FarmingSession::default();
-        let one_slow_drop = FarmingSession {
+        let nothing_yet = Session::default();
+        let one_slow_drop = Session {
             drops: drops(1, 1, 0.0, 2.0),
             stretches: vec![stretch(&[1], Mode::Cards, 0.0, None)],
             ..Default::default()
         };
 
         for session in [nothing_yet, one_slow_drop] {
-            let f = forecast(&session, &library, &[1, 2], at(2.0));
+            let f = Forecast::of(&session, &library, &[1, 2], at(2.0));
             assert!(f.assumed);
             assert_eq!(f.rate, 2.0, "30 minutes a drop");
             assert_eq!(f.eta, Duration::from_secs(5 * 3600), "10 drops left");
@@ -249,7 +271,7 @@ mod tests {
     fn only_farming_alone_teaches_the_rate() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 4)]);
         // Three drops while building hours, and one found after a pause.
-        let session = FarmingSession {
+        let session = Session {
             drops: [drops(2, 3, 0.0, 1.0), drops(1, 1, 3.0, 3.0)].concat(),
             stretches: vec![
                 stretch(&[2, 3], Mode::Hours, 0.0, Some(1.0)),
@@ -258,7 +280,7 @@ mod tests {
             ..Default::default()
         };
 
-        let f = forecast(&session, &library, &[1], at(3.0));
+        let f = Forecast::of(&session, &library, &[1], at(3.0));
 
         assert!(f.assumed, "none of them came farming alone");
     }
@@ -266,13 +288,13 @@ mod tests {
     #[test]
     fn the_stretch_going_on_counts_up_to_now() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 6)]);
-        let session = FarmingSession {
+        let session = Session {
             drops: drops(1, 4, 0.0, 1.5),
             stretches: vec![stretch(&[1], Mode::Cards, 0.0, None)],
             ..Default::default()
         };
 
-        let f = forecast(&session, &library, &[1], at(2.0));
+        let f = Forecast::of(&session, &library, &[1], at(2.0));
 
         assert!(near(f.rate, 2.0, 1e-9), "(2 + 4) / (1 + 2): {}", f.rate);
     }
@@ -280,7 +302,7 @@ mod tests {
     #[test]
     fn a_game_farmed_alone_goes_at_its_own_pace() {
         // Game 1 dropped 2 in 4 hours; game 2, 4 in an hour.
-        let session = FarmingSession {
+        let session = Session {
             drops: [drops(1, 2, 0.0, 4.0), drops(2, 4, 4.0, 5.0)].concat(),
             stretches: vec![
                 stretch(&[1], Mode::Cards, 0.0, Some(4.0)),
@@ -290,7 +312,7 @@ mod tests {
         };
         let library = SteamLibrary::new(vec![game(1, 9.0, 2), game(2, 6.0, 2), game(3, 7.0, 2)]);
 
-        let f = forecast(&session, &library, &[2, 1, 3], at(5.0));
+        let f = Forecast::of(&session, &library, &[2, 1, 3], at(5.0));
 
         let r = 8.0 / 6.0;
         assert!(near(f.rate, r, 1e-9));
@@ -309,7 +331,7 @@ mod tests {
     fn games_short_of_three_hours_add_the_hours_they_build() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 2), game(2, 2.0, 1), game(3, 0.5, 1)]);
 
-        let f = forecast(&FarmingSession::default(), &library, &[1, 2, 3], at(0.0));
+        let f = Forecast::of(&Session::default(), &library, &[1, 2, 3], at(0.0));
 
         assert_eq!(f.hours_term, Duration::from_secs(9000), "3 hours less 0.5");
         assert_eq!(f.eta, Duration::from_secs(4 * 3600 + 1800));
@@ -326,8 +348,8 @@ mod tests {
         let games: Vec<Game> = (1..=33).map(|id| game(id, 0.0, 1)).collect();
         let order: Vec<u32> = (1..=33).collect();
 
-        let f = forecast(
-            &FarmingSession::default(),
+        let f = Forecast::of(
+            &Session::default(),
             &SteamLibrary::new(games),
             &order,
             at(0.0),
@@ -340,7 +362,7 @@ mod tests {
     fn games_not_to_be_farmed_take_no_time() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 2), game(2, 5.0, 0), game(3, 1.0, 4)]);
 
-        let f = forecast(&FarmingSession::default(), &library, &[1, 2], at(0.0));
+        let f = Forecast::of(&Session::default(), &library, &[1, 2], at(0.0));
 
         assert_eq!(
             f.per_game.len(),
@@ -348,7 +370,7 @@ mod tests {
             "game 2 is done, game 3 not in the order"
         );
         assert_eq!(f.eta, Duration::from_secs(3600));
-        let done = forecast(&FarmingSession::default(), &library, &[], at(0.0));
+        let done = Forecast::of(&Session::default(), &library, &[], at(0.0));
         assert_eq!(done.eta, Duration::ZERO);
         assert!(done.per_game.is_empty());
     }

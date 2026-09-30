@@ -1,0 +1,17 @@
+[package]
+name = "session"
+description = "This session of farming: every card that dropped and which it was, what was played and how, the games finished, and how long the rest should take."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+game.workspace = true
+card.workspace = true
+chrono.workspace = true

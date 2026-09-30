@@ -12,6 +12,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+session.workspace = true
 farming.workspace = true
 keep-awake.workspace = true
 steam-api.workspace = true

@@ -24,12 +24,13 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use farming::{EventKind, FarmingEvent, FarmingSession, FarmingStatus, farm_order};
+use farming::{EventKind, FarmingEvent, FarmingStatus, farm_order};
 use futures::StreamExt;
 use game::SteamLibrary;
 use preferences::{Preferences, PreferencesError, Tier};
 use price::{PriceBook, PriceEvent, PriceEventKind, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
+use session::Session;
 
 use crate::viewmodel::{
     Account, Farming, GameRow, Games, Library, Login, LoginUpdate, Market, NeedsAccount,
@@ -136,7 +137,7 @@ struct Ctx<'a> {
     /// counted in.
     sets: &'a CardSets,
     /// This session's cards.
-    session: &'a FarmingSession,
+    session: &'a Session,
     /// Every price known, and the wallet whose currency they're shown in.
     book: &'a PriceBook,
     wallet: Option<&'a Wallet>,
@@ -892,7 +893,7 @@ impl App {
             Some(s) => s.order.clone(),
             None => farm_order(&library, &prefs, &[]),
         };
-        let no_session = FarmingSession::default();
+        let no_session = Session::default();
         let no_sets = CardSets::default();
         let book = self.market.book();
         let wallet = self.market.wallet();

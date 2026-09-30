@@ -1,13 +1,11 @@
 //! What to play, and how. Pure: the library, the preferences and what's been
 //! set aside go in; an order and a plan come out.
 
-use game::{Game, SteamLibrary};
+use game::{Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
 use preferences::Preferences;
+use session::SetAside;
 
-use crate::{
-    SetAside,
-    rules::{GIVE_UP_TIMES, HOURS_BEFORE_DROPS, MOST_AT_ONCE, SALE_EVENTS},
-};
+use crate::rules::{GIVE_UP_TIMES, SALE_EVENTS};
 
 /// What to play next.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,17 +16,6 @@ pub(crate) enum Plan {
     Hours(Vec<u32>),
     /// Nothing is worth playing.
     Nothing,
-}
-
-/// Hours a game still needs on record before its cards can drop: none once
-/// it has 3.
-pub fn hours_to_go(game: &Game) -> f64 {
-    (HOURS_BEFORE_DROPS - game.hours).max(0.0)
-}
-
-/// Whether a game has the hours its cards need to start dropping.
-pub(crate) fn can_drop(game: &Game) -> bool {
-    hours_to_go(game) <= 0.0
 }
 
 /// The games worth farming, by app ID, in the order they're farmed:
@@ -62,9 +49,9 @@ pub fn farm_order(library: &SteamLibrary, prefs: &Preferences, set_aside: &[SetA
         aside(a)
             .cmp(&aside(b))
             .then(rank(a).cmp(&rank(b)))
-            .then(can_drop(b).cmp(&can_drop(a)))
+            .then(b.can_drop().cmp(&a.can_drop()))
             .then_with(|| {
-                if can_drop(a) && can_drop(b) {
+                if a.can_drop() && b.can_drop() {
                     a.drops.remaining.cmp(&b.drops.remaining)
                 } else {
                     b.hours.total_cmp(&a.hours)
@@ -85,15 +72,15 @@ pub(crate) fn plan(library: &SteamLibrary, prefs: &Preferences, set_aside: &[Set
     let Some(first) = order.first().and_then(|&id| library.game(id)) else {
         return Plan::Nothing;
     };
-    if can_drop(first) {
+    if first.can_drop() {
         return Plan::Cards(first.app_id);
     }
     Plan::Hours(
         order
             .iter()
             .copied()
-            .filter(|&id| library.game(id).is_some_and(|g| !can_drop(g)))
-            .take(MOST_AT_ONCE)
+            .filter(|&id| library.game(id).is_some_and(|g| !g.can_drop()))
+            .take(MOST_PLAYED_AT_ONCE)
             .collect(),
     )
 }
@@ -152,19 +139,6 @@ mod tests {
             times,
             since: DateTime::default(),
         }
-    }
-
-    #[test]
-    fn a_game_needs_three_hours_before_its_cards_drop() {
-        assert_eq!(hours_to_go(&game(1, 0.0, 2)), 3.0);
-        assert!(
-            (hours_to_go(&game(1, 2.2, 2)) - 0.8).abs() < 1e-9,
-            "needs 0.8h"
-        );
-        assert_eq!(hours_to_go(&game(1, 3.0, 2)), 0.0);
-        assert_eq!(hours_to_go(&game(1, 350.0, 2)), 0.0, "never below none");
-        assert!(!can_drop(&game(1, 2.99, 2)));
-        assert!(can_drop(&game(1, 3.0, 2)));
     }
 
     #[test]

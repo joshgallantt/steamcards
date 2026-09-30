@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
 use account::GetAccount;
-use farming::{EndSession, FarmCards, FarmingEvent};
+use farming::{FarmCards, FarmingEvent};
 use preferences::{GetPreferences, Preferences, PreferencesError, SetGameTier, Tier};
+use session::EndSession;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 

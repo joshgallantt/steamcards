@@ -810,6 +810,7 @@ dependencies = [
  "farming",
  "game",
  "preferences",
+ "session",
  "tokio",
  "tokio-util",
 ]
@@ -825,6 +826,7 @@ dependencies = [
  "debug-log",
  "farming",
  "keep-awake",
+ "session",
  "steam-api",
  "tokio",
 ]
@@ -839,6 +841,7 @@ dependencies = [
  "game",
  "keep-awake",
  "preferences",
+ "session",
  "steam-api",
 ]
 
@@ -2776,6 +2779,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "session"
+version = "0.1.0"
+dependencies = [
+ "card",
+ "chrono",
+ "game",
+]
+
+[[package]]
+name = "session-di"
+version = "0.1.0"
+dependencies = [
+ "session",
+]
+
+[[package]]
 name = "sha1"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2938,6 +2957,8 @@ dependencies = [
  "preferences-di",
  "price-di",
  "serde_json",
+ "session",
+ "session-di",
  "steam-api",
  "terminal-ui",
  "tokio",
@@ -3093,6 +3114,7 @@ dependencies = [
  "qrcode",
  "ratatui",
  "serde_json",
+ "session",
  "tokio",
  "tokio-util",
  "webbrowser",

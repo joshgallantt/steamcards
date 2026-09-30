@@ -6,9 +6,10 @@ use std::{sync::Arc, time::Duration};
 use chrono::DateTime;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use farming::{NewItem, PlayRepository, Signal};
+use farming::{PlayRepository, Signal};
 use farming_data::SteamPlayRepository;
 use keep_awake::KeepAwake;
+use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
     cm::UnseenItem,

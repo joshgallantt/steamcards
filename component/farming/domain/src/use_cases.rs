@@ -1,7 +1,7 @@
 //! Farming cards: reading the library, playing what the plan says, looking at
 //! the cards as they drop, telling which card each was, and stepping aside
 //! while another device plays. What a session has seen outlasts a run of the
-//! farmer: the `SessionKeeper` keeps it until `EndSession`. A pause stops a
+//! farmer: the session's keeper keeps it until it's ended. A pause stops a
 //! run at once, whatever it's waiting for.
 
 use std::{
@@ -11,21 +11,20 @@ use std::{
 
 use card::{CardAsset, DescribeCards, LookAtCards, LookAtFoils};
 use chrono::Utc;
-use game::{Game, ReadLibrary, SteamLibrary};
+use game::{Game, HOURS_BEFORE_DROPS, ReadLibrary, SteamLibrary};
 use preferences::{GetPreferences, Preferences};
+use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    DropCard, EventKind, FarmingEvent, FarmingStatus, Mode, PlayRepository, Signal, Status,
-    ranking::{Plan, can_drop, farm_order, hours_to_go, plan, why_nothing},
+    EventKind, FarmingEvent, FarmingStatus, PlayRepository, Signal, Status,
+    ranking::{Plan, farm_order, plan, why_nothing},
     reporter::Reporter,
     rules::{
-        AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES,
-        HOURS_BEFORE_DROPS, IDLE_LOOK, LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ,
-        TICK,
+        AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES, IDLE_LOOK,
+        LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ, TICK,
     },
-    session::{Found, Kept, SessionKeeper},
 };
 
 /// Farms until the token is cancelled, reporting on the channel. Runs
@@ -33,11 +32,6 @@ use crate::{
 /// A run carries on the session the last one left, until it's ended.
 pub type FarmCards =
     Arc<dyn Fn(CancellationToken, mpsc::Sender<FarmingEvent>) -> JoinHandle<()> + Send + Sync>;
-
-/// Ends the farming session: the next run of [`FarmCards`] starts a new one,
-/// with no drops, no hours counted and nothing set aside. Signing out ends
-/// it, and so does signing in as another account.
-pub type EndSession = Arc<dyn Fn() + Send + Sync>;
 
 pub fn farm_cards(
     read: ReadLibrary,
@@ -69,10 +63,6 @@ pub fn farm_cards(
             farmer.play.stop().await;
         })
     })
-}
-
-pub fn end_session(sessions: Arc<SessionKeeper>) -> EndSession {
-    Arc::new(move || sessions.end())
 }
 
 struct Farmer {
@@ -125,11 +115,11 @@ enum Woke {
 /// One run of the farmer, from starting to stopping, and the session it
 /// carries on.
 struct Run {
-    kept: Arc<Mutex<Kept>>,
+    kept: Arc<Mutex<KeptSession>>,
 }
 
 impl Run {
-    fn kept(&self) -> MutexGuard<'_, Kept> {
+    fn kept(&self) -> MutexGuard<'_, KeptSession> {
         self.kept.lock().unwrap()
     }
 
@@ -181,7 +171,11 @@ impl Farmer {
             match read {
                 Ok(Ok(fresh)) => {
                     let prefs = (self.prefs)();
-                    let found = run.kept().take(fresh, &prefs, Utc::now());
+                    let found = run.kept().take(
+                        fresh,
+                        |library, aside| farm_order(library, &prefs, aside),
+                        Utc::now(),
+                    );
                     self.dropped(found, &prefs, run, r, token).await;
                     if token.is_cancelled() {
                         return;
@@ -472,7 +466,7 @@ impl Farmer {
                 let kept = run.kept();
                 app_ids
                     .iter()
-                    .find_map(|&id| kept.library.game(id).filter(|g| can_drop(g)))
+                    .find_map(|&id| kept.library.game(id).filter(|g| g.can_drop()))
                     .map(|g| g.name.clone())
             };
             if let Some(ready) = ready {
@@ -662,7 +656,10 @@ impl Farmer {
         }
         let (lines, ask) = {
             let mut kept = run.kept();
-            kept.first_forecast(prefs, Utc::now());
+            kept.first_forecast(
+                |library, aside| farm_order(library, prefs, aside),
+                Utc::now(),
+            );
             let lines: Vec<String> = found
                 .iter()
                 .filter_map(|f| {
@@ -709,7 +706,7 @@ impl Farmer {
         let asked = ask.iter().map(|i| i.asset_id).collect();
         let described = match self.describe(asked, r, token).await {
             Some(cards) => cards,
-            // Kept to ask about again: each may yet name a drop the card
+            // KeptSession to ask about again: each may yet name a drop the card
             // page named.
             None => {
                 run.kept().keep_announced(ask);
@@ -867,7 +864,7 @@ async fn lost(why: &str, r: &Reporter, token: &CancellationToken) -> bool {
 }
 
 /// What to say as farming starts waiting for another device.
-fn waiting_for(why: Elsewhere, kept: &Kept) -> String {
+fn waiting_for(why: Elsewhere, kept: &KeptSession) -> String {
     match why {
         Elsewhere::TookOver => {
             "Another device took over playing: farming waits until it stops.".into()
@@ -913,7 +910,7 @@ fn until_ready(library: &SteamLibrary, app_ids: &[u32]) -> Duration {
     let least = app_ids
         .iter()
         .filter_map(|&id| library.game(id))
-        .map(hours_to_go)
+        .map(Game::hours_to_go)
         .fold(HOURS_BEFORE_DROPS, f64::min);
     Duration::from_secs_f64((least * 3600.0).max(1.0))
 }
@@ -957,7 +954,7 @@ fn dropped_message(game: &Game, dropped: usize) -> String {
 /// What to say of drops just told: which card each was, and which copy
 /// ("Madison dropped for Heavy Rain (a 2nd copy)"), or that it can't be
 /// told. A card only the card page could name says so first.
-fn told_lines(told: &[usize], kept: &Kept) -> Vec<(EventKind, String)> {
+fn told_lines(told: &[usize], kept: &KeptSession) -> Vec<(EventKind, String)> {
     let mut lines = Vec::new();
     let mut by_page = Vec::new();
     for drop in told.iter().filter_map(|&i| kept.session.drops.get(i)) {

@@ -4,6 +4,7 @@ use farming_di::FarmingComponent;
 use game_di::GameComponent;
 use preferences_di::PreferencesComponent;
 use price_di::PriceComponent;
+use session_di::SessionComponent;
 
 use super::DataAssembler;
 
@@ -12,6 +13,7 @@ pub(crate) struct DomainAssembler {
     pub account: AccountComponent,
     pub game: GameComponent,
     pub preferences: PreferencesComponent,
+    pub session: SessionComponent,
     pub farming: FarmingComponent,
     pub price: PriceComponent,
 }
@@ -23,6 +25,7 @@ impl DomainAssembler {
         // Only the farmer looks at cards: it takes their use cases here.
         let card = CardComponent::new(data.steam.clone());
         let preferences = PreferencesComponent::new(data.config.clone());
+        let session = SessionComponent::new(data.sessions.clone());
         let farming = FarmingComponent::new(
             data.steam.clone(),
             data.awake.clone(),
@@ -31,6 +34,7 @@ impl DomainAssembler {
             card.look_at_foils.clone(),
             card.describe.clone(),
             preferences.get.clone(),
+            data.sessions.clone(),
         );
         let price =
             PriceComponent::new(data.steam.clone(), data.config.clone(), data.prices.clone());
@@ -38,6 +42,7 @@ impl DomainAssembler {
             account,
             game,
             preferences,
+            session,
             farming,
             price,
         }

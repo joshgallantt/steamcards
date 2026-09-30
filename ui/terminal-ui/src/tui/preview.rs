@@ -15,10 +15,7 @@ use account::{
 };
 use card::{Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
-use farming::{
-    Drop, DropCard, EventKind, FarmingSession, FarmingStatus, Mode, Status, Stretch,
-    test_support::idle_farmer,
-};
+use farming::{EventKind, FarmingStatus, Status, test_support::idle_farmer};
 use game::{CardDrops, Game, SteamLibrary, test_support::fixed_library};
 use preferences::{
     Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
@@ -29,6 +26,7 @@ use price::{
     test_support::{fixed_prices, pounds, set_prices},
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
+use session::{Drop, DropCard, Mode, Session, Stretch};
 
 use super::{App, Clock, LogView, LoginView, Overlay};
 use crate::viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding, Step};
@@ -166,14 +164,14 @@ fn hades_card(asset_id: u64, name: &str, foil: bool) -> DropCard {
 
 /// This session: Hades' last cards, a second Zagreus among them and a foil,
 /// then Portal 2's: one named by its card page, one still being found out.
-fn session() -> FarmingSession {
+fn session() -> Session {
     let drop = |at, app_id, card, copy| Drop {
         at,
         app_id,
         card,
         copy,
     };
-    FarmingSession {
+    Session {
         started_at: at(12, 30),
         drops: vec![
             drop(
@@ -875,7 +873,7 @@ fn showcase_prices() -> PriceBook {
     book
 }
 
-fn showcase_session() -> FarmingSession {
+fn showcase_session() -> Session {
     let named = |name: &str| DropCard::NameOnly {
         name: name.into(),
         foil: false,
@@ -892,7 +890,7 @@ fn showcase_session() -> FarmingSession {
         from: at(from.0, from.1),
         to: to.map(|(h, m)| at(h, m)),
     };
-    FarmingSession {
+    Session {
         started_at: at(7, 10),
         drops: vec![
             drop((7, 40), 367_520, named("Hornet"), Some(1)),

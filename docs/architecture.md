@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `price` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
 | Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
-| DI | `account-di`, `game-di`, `card-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
+| DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `terminal-ui`, `headless` | Domain |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -28,8 +28,8 @@ Two things enforce this table:
    reads every manifest through `cargo metadata` and fails on any arrow the
    table doesn't allow. It also fails if a production dependency enables
    `test-support`, and if a domain crate uses a component its own table
-   doesn't name: `card` may use `game`; `farming` `game`, `card` and
-   `preferences`; `price` `game`, `card` and `money`. So farming and the
+   doesn't name: `card` may use `game`; `session` `game` and `card`;
+   `farming` `game`, `card`, `session` and `preferences`; `price` `game`, `card` and `money`. So farming and the
    prices never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
@@ -62,13 +62,16 @@ The domain starts from its entities:
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
   priority", and whether to appear online while farming.
-- **`FarmingSession`**, in `farming`: this session of farming, from the first
-  run of the farmer until the user signs out, another account signs in, or
+- **`Session`**, in `session`: this session of farming, from the first run
+  of the farmer until the user signs out, another account signs in, or
   steamcards quits, through pauses. It holds every `Drop` (one per copy that
   dropped, which card it was once that's known, and which copy, from the
   account's own counts), the `Stretch`es of what was played and how, the
   games finished, and what the games it farms had left at the start. From
-  it, `forecast()` learns how long the rest should take.
+  it, `Forecast::of` learns how long the rest should take. The farmer keeps
+  it as a **`KeptSession`**, with what should outlast a pause beside it,
+  and the **`SessionKeeper`** keeps that from one run of the farmer to the
+  next.
 - **`Money`**, a component of its own: an amount in hundredths of a
   `Currency`, Steam's `ECurrency` with Valve's own format for it. Amounts in
   different currencies are never added or converted. Prices, the wallet and
@@ -98,10 +101,12 @@ component/<name>/domain/src/
 └── test_support.rs  doubles, behind the `test-support` feature
 ```
 
-`farming` adds `ranking.rs` (what to play, and how: pure), `forecast.rs`
-(the time to finish: pure), `session.rs` (the session, kept between runs of
-the farmer, and which card each drop was), `rules.rs` (every number it runs
-on, with where it comes from) and `reporter.rs`. `price` adds `clock.rs`,
+`farming` adds `ranking.rs` (what to play, and how: pure), `rules.rs`
+(every number it runs on, with where it comes from) and `reporter.rs`.
+`session` keeps which card each drop was in `KeptSession`, the time to
+finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `game`
+has the rules both use, the 3 hours a game needs and the 32 Steam plays at
+once, in `rules.rs`. `price` adds `clock.rs`,
 `valuation.rs` (what cards are worth: pure, so every figure can be checked
 by hand) and `rules.rs`. `money` is its models alone, a file each:
 `Currency`, with Valve's table of currencies as a `match`, and `Money`.
@@ -141,7 +146,7 @@ constructor builds the real one over the repositories. Call sites read
 | | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
 | | `SetAppearOnline` (`set_appear_online`) | Show as online while farming, or appear offline. |
 | farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
-| | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
+| session | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | market | `GetPrices` (`get_prices`) | The price book now. |
 | | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
 | | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
@@ -168,8 +173,11 @@ them comes from. When a tier changes,
 the farmer sees it within moments, through the same use case the screens
 call.
 
-`farm_cards` and `end_session` share a `SessionKeeper`, which the DI crate
-makes: it keeps the session from one run of the farmer to the next.
+`farm_cards` and `end_session` share a `SessionKeeper`, which the
+composition root makes: it keeps the session from one run of the farmer to
+the next. The session asks the farmer for the farm order when it needs one
+(the drops left at the start, the first forecast), since which games are
+farmed, and in what order, is the farmer's to say.
 
 `price` depends on `game` and `card` for their entities alone: it values
 `CardAsset`s, a game's set and the drops still to come, handed to it. It
@@ -269,8 +277,8 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::SteamClient`, `KeepAwake` | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
+| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::SteamClient`, `KeepAwake`, `SessionKeeper` | `Settings` |
+| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
 `PriceComponent` takes the `SteamClient`, the `ConfigFile` and a `PriceCache`
@@ -331,6 +339,7 @@ graph TD
         ADI[account-di]
         GDI[game-di]
         CDI[card-di]
+        SDI[session-di]
         PDI[preferences-di]
         FDI[farming-di]
         PRDI[price-di]
@@ -350,6 +359,7 @@ graph TD
         ACC[account]
         GAME[game]
         CARD[card]
+        SES[session]
         PREF[preferences]
         FARM[farming]
         PRICE[price]
@@ -362,23 +372,25 @@ graph TD
         KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & GDI & CDI & PDI & FDI & PRDI & CF & SA & DL & KA
-    TUI --> ACC & GAME & CARD & PREF & FARM & PRICE & MON
+    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
+    TUI --> ACC & GAME & CARD & SES & PREF & FARM & PRICE & MON
     HL --> ACC & FARM
     ADI --> AD
     GDI --> GD
     CDI --> CD
     PDI --> PD
     FDI --> FD
+    SDI --> SES
     PRDI --> PRD
     AD --> ACC & SA
     GD --> GAME & SA
     CD --> CARD & GAME & SA
     PD --> PREF & CF
-    FD --> FARM & SA & KA
+    FD --> FARM & SES & SA & KA
     PRD --> PRICE & MON & SA & CF
     CARD --> GAME
-    FARM --> GAME & CARD & PREF
+    SES --> GAME & CARD
+    FARM --> GAME & CARD & SES & PREF
     PRICE --> GAME & CARD & MON
     SA --> CF & DL
     KA --> DL
@@ -386,4 +398,5 @@ graph TD
 
 Every arrow is a line in a `Cargo.toml`. Each DI crate also lists its
 domain crate, and `farming-di` the domain crates whose use cases it's
-handed: those arrows are left out, so the graph stays readable.
+handed: those arrows are left out, so the graph stays readable, but for
+`session-di`'s, which has no data crate to go through.

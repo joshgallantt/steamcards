@@ -2,9 +2,9 @@
 // don't mind about, what they skipped, and what's done. Pure data — built
 // fresh from the latest farming status and preferences on every frame.
 
-use farming::Mode;
 use game::{Game, SteamLibrary};
 use preferences::{Preferences, Tier};
+use session::Mode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {

@@ -181,7 +181,8 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── game/          The games with trading cards, and their card drops.
 │   ├── card/          Each game's cards: its set, its foils, and the copies you hold.
 │   ├── preferences/   What you want farmed first.
-│   ├── farming/       What to play, playing it, and this session's drops.
+│   ├── session/       This session: every card that dropped, and how long the rest should take.
+│   ├── farming/       What to play, playing it, and stepping aside for another device.
 │   ├── price/         What cards are worth: prices and the wallet.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
@@ -352,7 +353,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `price` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |

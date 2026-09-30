@@ -12,7 +12,9 @@ use card::{Card, CardAsset, CardRepository, CardSet, GameCards};
 use game::{CardDrops, Game, GameRepository, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 
-use crate::{FarmCards, NewItem, PlayRepository, Signal};
+use session::NewItem;
+
+use crate::{FarmCards, PlayRepository, Signal};
 
 /// Never farms. For screens that need a farmer to exist.
 pub fn idle_farmer() -> FarmCards {

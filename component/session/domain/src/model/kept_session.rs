@@ -15,56 +15,27 @@
 use std::{
     collections::{HashMap, HashSet},
     iter,
-    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use card::{CardAsset, CardSet, CardSets, GameCards};
 use chrono::{DateTime, Utc};
 use game::{Game, SteamLibrary};
-use preferences::Preferences;
 
 use crate::{
-    Drop, DropCard, FarmingSession, Finished, Mode, NewItem, SetAside, Stretch, forecast::forecast,
-    ranking::farm_order,
+    Drop, DropCard, Finished, Forecast, Found, Looked, Mode, NewItem, Session, SetAside, Stretch,
 };
 
-/// Keeps the farming session from one run of [`FarmCards`](crate::FarmCards)
-/// to the next, through pauses, until [`EndSession`](crate::EndSession) ends
-/// it. The two use cases share one; nothing else reaches into it. A session
-/// is never kept on disk: quitting steamcards ends it too.
-#[derive(Default)]
-pub struct SessionKeeper {
-    current: Mutex<Option<Arc<Mutex<Kept>>>>,
-}
-
-impl SessionKeeper {
-    /// The session going on, or a new one starting `now`.
-    pub(crate) fn current(&self, now: DateTime<Utc>) -> Arc<Mutex<Kept>> {
-        self.current
-            .lock()
-            .unwrap()
-            .get_or_insert_with(|| Arc::new(Mutex::new(Kept::new(now))))
-            .clone()
-    }
-
-    /// Ends the session: the next run starts a new one. A run still going
-    /// carries on with the old one, on its own.
-    pub(crate) fn end(&self) {
-        self.current.lock().unwrap().take();
-    }
-}
-
-/// What the farmer keeps through a session: the session itself, and beside
-/// it what should outlast a pause.
-pub(crate) struct Kept {
-    pub(crate) session: FarmingSession,
+/// A session as the farmer keeps it through a run, and from one run to the
+/// next: the session itself, and beside it what should outlast a pause.
+pub struct KeptSession {
+    pub session: Session,
     /// The library as the farmer sees it: hours counted as they're played,
     /// drops as they land.
-    pub(crate) library: SteamLibrary,
+    pub library: SteamLibrary,
     /// The card sets of the games looked at: each as last read, with the
     /// drops since counted in.
-    pub(crate) sets: CardSets,
+    pub sets: CardSets,
     /// Whether the library has been read yet: until it has, there's nothing
     /// to tell drops by.
     read: bool,
@@ -73,7 +44,7 @@ pub(crate) struct Kept {
     /// pages say.
     counted: HashMap<u32, f64>,
     /// Games put behind the others after a long while without a drop.
-    pub(crate) set_aside: Vec<SetAside>,
+    pub set_aside: Vec<SetAside>,
     /// Items Steam announced that nothing has asked about yet. Each waits
     /// for a drop of its game, or of any game when Steam didn't say which.
     announced: Vec<NewItem>,
@@ -83,56 +54,10 @@ pub(crate) struct Kept {
     uncounted: HashSet<u32>,
 }
 
-/// Drops that one look at a game, or one read of the library, found.
-#[derive(Debug)]
-pub(crate) struct Found {
-    pub(crate) app_id: u32,
-    /// Where they are in the session's drops.
-    drops: Vec<usize>,
-    /// The set as the farmer knew it before them, every earlier drop counted
-    /// in; empty when it didn't know it so.
-    before: CardSet,
-    /// The set a look at the game found, with them in it. The badge pages
-    /// show no sets, so a read has none until the game is looked at.
-    after: Option<CardSet>,
-}
-
-impl Found {
-    /// How many cards dropped.
-    pub(crate) fn count(&self) -> usize {
-        self.drops.len()
-    }
-
-    /// Found by a read: no set says which cards they were until the game is
-    /// looked at.
-    pub(crate) fn needs_look(&self) -> bool {
-        self.after.is_none()
-    }
-
-    /// Takes in a look at the game since: the set it read, and any drops it
-    /// found meanwhile, which are told with these.
-    pub(crate) fn join(&mut self, looked: Looked) {
-        self.after = looked.set;
-        if let Some(more) = looked.found {
-            self.drops.extend(more.drops);
-        }
-    }
-}
-
-/// A look at one game, taken in.
-pub(crate) struct Looked {
-    /// The game as the farmer now sees it.
-    pub(crate) game: Game,
-    /// The drops it found since the farmer last saw the game.
-    pub(crate) found: Option<Found>,
-    /// The set it read: `None` when its page showed none, or was behind.
-    set: Option<CardSet>,
-}
-
-impl Kept {
-    fn new(now: DateTime<Utc>) -> Self {
+impl KeptSession {
+    pub fn new(now: DateTime<Utc>) -> Self {
         Self {
-            session: FarmingSession {
+            session: Session {
                 started_at: now,
                 ..Default::default()
             },
@@ -149,11 +74,12 @@ impl Kept {
     /// Takes in a fresh read of the library, keeping the hours counted here
     /// and the card sets already seen, and records the drops it shows. The
     /// session's first read is what it starts from: the drops left in the
-    /// games it will farm, as the user's choices stand then.
-    pub(crate) fn take(
+    /// games it will farm, in `order` (the farm order of a library, less
+    /// what's set aside), as the user's choices stand then.
+    pub fn take(
         &mut self,
         fresh: SteamLibrary,
-        prefs: &Preferences,
+        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<u32>,
         now: DateTime<Utc>,
     ) -> Vec<Found> {
         let mut games = Vec::with_capacity(fresh.games().len());
@@ -168,7 +94,7 @@ impl Kept {
         self.library = SteamLibrary::new(games);
         if !self.read {
             self.read = true;
-            let order = farm_order(&self.library, prefs, &self.set_aside);
+            let order = order(&self.library, &self.set_aside);
             let left = order
                 .iter()
                 .filter_map(|&id| self.library.game(id))
@@ -183,7 +109,7 @@ impl Kept {
     /// Takes in a fresh look at one game, and records the drops it shows. A
     /// page showing more drops to come than the farmer has already seen is
     /// behind, cards never undropping: it's left out, its counts and all.
-    pub(crate) fn update(&mut self, looked: GameCards, now: DateTime<Utc>) -> Looked {
+    pub fn update(&mut self, looked: GameCards, now: DateTime<Utc>) -> Looked {
         let GameCards { game: fresh, set } = looked;
         let behind = self
             .library
@@ -264,7 +190,7 @@ impl Kept {
     }
 
     /// Counts `played` towards each game's hours.
-    pub(crate) fn count(&mut self, app_ids: &[u32], played: Duration) {
+    pub fn count(&mut self, app_ids: &[u32], played: Duration) {
         for &app_id in app_ids {
             let Some(mut game) = self.library.game(app_id).cloned() else {
                 continue;
@@ -275,7 +201,7 @@ impl Kept {
         }
     }
 
-    pub(crate) fn name(&self, app_id: u32) -> String {
+    pub fn name(&self, app_id: u32) -> String {
         self.library
             .game(app_id)
             .map_or_else(|| format!("app {app_id}"), |g| g.name.clone())
@@ -283,7 +209,7 @@ impl Kept {
 
     /// Starts a stretch of playing these games, this way, from `now`: where
     /// it is, to stop it by.
-    pub(crate) fn start(&mut self, app_ids: &[u32], mode: Mode, now: DateTime<Utc>) -> usize {
+    pub fn start(&mut self, app_ids: &[u32], mode: Mode, now: DateTime<Utc>) -> usize {
         self.session.stretches.push(Stretch {
             app_ids: app_ids.to_vec(),
             mode,
@@ -294,14 +220,14 @@ impl Kept {
     }
 
     /// Ends a stretch, if it goes on.
-    pub(crate) fn stop(&mut self, stretch: usize, now: DateTime<Utc>) {
+    pub fn stop(&mut self, stretch: usize, now: DateTime<Utc>) {
         if let Some(s) = self.session.stretches.get_mut(stretch) {
             s.to.get_or_insert(now);
         }
     }
 
     /// Puts a game behind the others once more: how often it has been.
-    pub(crate) fn set_aside(&mut self, app_id: u32, now: DateTime<Utc>) -> u8 {
+    pub fn set_aside(&mut self, app_id: u32, now: DateTime<Utc>) -> u8 {
         match self.set_aside.iter_mut().find(|s| s.app_id == app_id) {
             Some(s) => {
                 s.times = s.times.saturating_add(1);
@@ -322,7 +248,7 @@ impl Kept {
     /// Keeps the items Steam announced, each once, until a drop they may be.
     /// One Steam says arrived before the session began isn't one of its
     /// drops (research §2.2).
-    pub(crate) fn keep_announced(&mut self, items: Vec<NewItem>) {
+    pub fn keep_announced(&mut self, items: Vec<NewItem>) {
         let began = self.session.started_at.timestamp();
         for item in items {
             let earlier = item.gained_at.is_some_and(|at| at.timestamp() < began);
@@ -339,7 +265,7 @@ impl Kept {
     /// The items to ask Steam about for drops of these games, taken from
     /// those waiting: the ones Steam said came from one of them, and the
     /// ones it didn't say.
-    pub(crate) fn take_announced(&mut self, app_ids: &[u32]) -> Vec<NewItem> {
+    pub fn take_announced(&mut self, app_ids: &[u32]) -> Vec<NewItem> {
         let (ask, wait): (Vec<NewItem>, Vec<NewItem>) = self
             .announced
             .drain(..)
@@ -350,7 +276,7 @@ impl Kept {
 
     /// Whether items wait that may name a drop of this game that only its
     /// card page could: worth asking Steam about now, without a new drop.
-    pub(crate) fn has_items_for(&self, app_id: u32) -> bool {
+    pub fn has_items_for(&self, app_id: u32) -> bool {
         let named_by_page = self
             .session
             .drops
@@ -370,7 +296,7 @@ impl Kept {
     /// page named before, which it then names; else it's no drop of this
     /// session's, and is left out. Returns where the drops are, to tell of
     /// them.
-    pub(crate) fn identify(&mut self, found: &[Found], described: &[CardAsset]) -> Vec<usize> {
+    pub fn identify(&mut self, found: &[Found], described: &[CardAsset]) -> Vec<usize> {
         let mut left: Vec<&CardAsset> = described.iter().collect();
         let mut told = Vec::new();
         for f in found {
@@ -494,7 +420,7 @@ impl Kept {
 
     /// The games with foils among these drops: which copy each is, their
     /// foil badges say.
-    pub(crate) fn foil_games(&self, told: &[usize]) -> Vec<u32> {
+    pub fn foil_games(&self, told: &[usize]) -> Vec<u32> {
         let mut games = Vec::new();
         for drop in told.iter().filter_map(|&i| self.session.drops.get(i)) {
             if drop.card.is_foil() && !games.contains(&drop.app_id) {
@@ -507,7 +433,7 @@ impl Kept {
     /// Numbers a game's foils among these drops by its foil badge's counts,
     /// after them: how many of that foil the account has, less the copies of
     /// it found after this one.
-    pub(crate) fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &CardSet) {
+    pub fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &CardSet) {
         let theirs: Vec<usize> = told
             .iter()
             .copied()
@@ -532,13 +458,17 @@ impl Kept {
     }
 
     /// Makes the session's first forecast, once it has two drops farming
-    /// alone to learn from.
-    pub(crate) fn first_forecast(&mut self, prefs: &Preferences, now: DateTime<Utc>) {
+    /// alone to learn from, over the games farmed in `order`.
+    pub fn first_forecast(
+        &mut self,
+        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<u32>,
+        now: DateTime<Utc>,
+    ) {
         if self.session.first_forecast.is_some() {
             return;
         }
-        let order = farm_order(&self.library, prefs, &self.set_aside);
-        let made = forecast(&self.session, &self.library, &order, now);
+        let order = order(&self.library, &self.set_aside);
+        let made = Forecast::of(&self.session, &self.library, &order, now);
         if !made.assumed {
             self.session.first_forecast = Some(made);
         }
@@ -676,22 +606,23 @@ mod tests {
         }
     }
 
+    /// Every game with drops left, in the library's order: the farm order,
+    /// as far as these tests go.
+    fn every(library: &SteamLibrary, _: &[SetAside]) -> Vec<u32> {
+        library.with_drops_left().map(|g| g.app_id).collect()
+    }
+
     /// A session that has read the library, and looked at Heavy Rain: `left`
     /// drops to come, and its set.
-    fn farming(left: u32, set: CardSet) -> Kept {
-        let mut kept = Kept::new(at());
-        let prefs = Preferences::default();
-        kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, left)]),
-            &prefs,
-            at(),
-        );
+    fn farming(left: u32, set: CardSet) -> KeptSession {
+        let mut kept = KeptSession::new(at());
+        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, left)]), every, at());
         kept.update(page(HEAVY_RAIN, left, set), at());
         kept
     }
 
     /// What each drop is, and which copy.
-    fn named(kept: &Kept, told: &[usize]) -> Vec<(Option<String>, bool, Option<u32>)> {
+    fn named(kept: &KeptSession, told: &[usize]) -> Vec<(Option<String>, bool, Option<u32>)> {
         told.iter()
             .map(|&i| {
                 let d = &kept.session.drops[i];
@@ -705,7 +636,7 @@ mod tests {
     }
 
     /// A look at Heavy Rain: `left` to come, and its set now.
-    fn looks(kept: &mut Kept, left: u32, set: CardSet) -> Option<Found> {
+    fn looks(kept: &mut KeptSession, left: u32, set: CardSet) -> Option<Found> {
         kept.update(page(HEAVY_RAIN, left, set), at()).found
     }
 
@@ -823,8 +754,7 @@ mod tests {
     #[test]
     fn a_read_is_told_by_a_look_at_the_game_after_it() {
         let mut kept = farming(3, heavy_rain(1, 1));
-        let prefs = Preferences::default();
-        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         assert!(found[0].needs_look(), "the badges show no sets");
 
         let looked = kept.update(page(HEAVY_RAIN, 2, heavy_rain(2, 1)), at());
@@ -844,8 +774,7 @@ mod tests {
         // A read found Madison's drop, and nothing could tell it: the look
         // after it failed, and Steam gave only a count.
         let mut kept = farming(3, heavy_rain(1, 1));
-        let prefs = Preferences::default();
-        let read = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        let read = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         let told = kept.identify(&read, &[]);
         assert_eq!(named(&kept, &told), [(None, false, None)]);
 
@@ -866,10 +795,9 @@ mod tests {
 
     #[test]
     fn a_set_not_known_before_is_numbered_from_the_look_after() {
-        let mut kept = Kept::new(at());
-        let prefs = Preferences::default();
-        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
-        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        let mut kept = KeptSession::new(at());
+        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), every, at());
+        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         found[0].join(kept.update(page(HEAVY_RAIN, 2, heavy_rain(2, 1)), at()));
         let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
 
@@ -889,10 +817,9 @@ mod tests {
     #[test]
     fn without_a_set_nothing_says_which_copy() {
         // Its set was never read, and the look after the read failed.
-        let mut kept = Kept::new(at());
-        let prefs = Preferences::default();
-        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
-        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        let mut kept = KeptSession::new(at());
+        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), every, at());
+        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
 
         let told = kept.identify(&found, slice::from_ref(&madison));
@@ -938,8 +865,7 @@ mod tests {
     #[test]
     fn a_drop_no_look_saw_is_counted_into_the_set() {
         let mut kept = farming(3, heavy_rain(1, 0));
-        let prefs = Preferences::default();
-        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         let told = kept.identify(&found, &[asset(9, HEAVY_RAIN, "Madison", false)]);
         assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
 
@@ -958,9 +884,7 @@ mod tests {
         let mut kept = farming(3, heavy_rain(1, 1));
         let found = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
         kept.identify(&[found], &[]);
-
-        let prefs = Preferences::default();
-        let behind = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
+        let behind = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), every, at());
         let again = looks(&mut kept, 3, heavy_rain(1, 1));
         assert!(
             behind.is_empty() && again.is_none(),
@@ -1016,7 +940,7 @@ mod tests {
 
     #[test]
     fn items_wait_for_a_drop_of_their_game() {
-        let mut kept = Kept::new(at());
+        let mut kept = KeptSession::new(at());
         let item = |asset_id, app_id| NewItem {
             asset_id,
             app_id,
@@ -1038,7 +962,7 @@ mod tests {
     #[test]
     fn an_item_from_before_the_session_is_none_of_its_drops() {
         let started = DateTime::from_timestamp(1_790_700_000, 0).unwrap();
-        let mut kept = Kept::new(started);
+        let mut kept = KeptSession::new(started);
         let item = |asset_id, gained: i64| NewItem {
             asset_id,
             app_id: Some(10),

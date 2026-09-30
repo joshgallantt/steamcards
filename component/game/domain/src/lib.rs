@@ -9,6 +9,7 @@
 
 mod model;
 mod repository;
+mod rules;
 mod use_cases;
 
 #[cfg(feature = "test-support")]
@@ -16,4 +17,5 @@ pub mod test_support;
 
 pub use model::{CardDrops, Game, GameError, SteamLibrary};
 pub use repository::GameRepository;
+pub use rules::{HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE};
 pub use use_cases::{ReadLibrary, read_library};

@@ -1,0 +1,15 @@
+[package]
+name = "session-di"
+description = "Builds the session use cases over the keeper of the session."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+session.workspace = true

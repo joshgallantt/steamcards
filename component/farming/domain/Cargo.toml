@@ -16,6 +16,7 @@ workspace = true
 test-support = []
 
 [dependencies]
+session.workspace = true
 game.workspace = true
 card.workspace = true
 preferences.workspace = true

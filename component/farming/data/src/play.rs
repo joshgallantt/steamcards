@@ -5,8 +5,9 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::DateTime;
-use farming::{NewItem, PlayRepository, Signal};
+use farming::{PlayRepository, Signal};
 use keep_awake::KeepAwake;
+use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
     cm::{Announcement, Connection, Event, UnseenItem},

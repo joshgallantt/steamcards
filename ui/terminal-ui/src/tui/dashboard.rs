@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use farming::{EventKind, Mode, Status};
+use farming::{EventKind, Status};
 use preferences::Tier;
 use ratatui::{
     Frame,
@@ -22,6 +22,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use session::Mode;
 
 use super::{
     Ctx, LogEntry, MIN_HEIGHT, MIN_WIDTH,
@@ -36,8 +37,6 @@ use crate::viewmodel::{
     session_cards, value_to_come,
 };
 
-/// Hours a game needs before its cards drop: what the farmer works to.
-const HOURS_BEFORE_DROPS: f64 = 3.0;
 /// From this width, the games and this session's cards sit side by side.
 const SIDE_BY_SIDE: u16 = 90;
 /// Width of the summary's labels, with their lead-in space: " This session  ".
@@ -898,7 +897,7 @@ pub(super) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
             ),
             format!(
                 "Its cards can drop once it has 3 hours on record: {} to go.",
-                hours((HOURS_BEFORE_DROPS - g.hours).max(0.0))
+                hours(g.hours_to_go())
             ),
         ),
         State::Done => (
@@ -943,7 +942,7 @@ pub(super) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
         Line::from(spans)
     };
     let mut played = vec![Span::raw(format!("{} on record", hours(g.hours)))];
-    if g.hours < HOURS_BEFORE_DROPS && g.has_drops_left() {
+    if !g.can_drop() && g.has_drops_left() {
         played.push(dim(" · cards drop from 3h"));
     }
     out.push(field("Hours", played));

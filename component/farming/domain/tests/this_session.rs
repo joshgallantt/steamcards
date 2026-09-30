@@ -8,11 +8,12 @@ use std::{sync::Arc, time::Duration};
 
 use card::{describe_cards, look_at_cards, look_at_foils};
 use farming::{
-    DropCard, EndSession, EventKind, FarmCards, FarmingEvent, FarmingStatus, Finished, Mode,
-    NewItem, SessionKeeper, Status, end_session, farm_cards, test_support::InMemorySteam,
+    EventKind, FarmCards, FarmingEvent, FarmingStatus, Status, farm_cards,
+    test_support::InMemorySteam,
 };
 use game::read_library;
 use preferences::{Preferences, test_support::ChangingPreferences};
+use session::{DropCard, EndSession, Finished, Mode, NewItem, SessionKeeper, end_session};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 

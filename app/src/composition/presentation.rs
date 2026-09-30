@@ -28,7 +28,7 @@ impl PresentationAssembler {
             Login::new(d.account.link.clone()),
             Farming::new(
                 d.farming.farm.clone(),
-                d.farming.end_session.clone(),
+                d.session.end.clone(),
                 d.account.get.clone(),
                 d.preferences.get.clone(),
                 d.preferences.set_game_tier.clone(),

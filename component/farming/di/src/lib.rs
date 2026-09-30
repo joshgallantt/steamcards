@@ -1,25 +1,31 @@
 //! Where the farming domain meets its data layer: games played on the Steam
 //! session, with the computer kept awake meanwhile. Farming asks the game,
 //! card and preferences components through their use cases, never their storage;
-//! the composition root hands them in. Farming and ending its session share
-//! one keeper of the session.
+//! the composition root hands them in, and the keeper of the session the
+//! farmer writes.
 
 use std::sync::Arc;
 
 use card::{DescribeCards, LookAtCards, LookAtFoils};
-use farming::{EndSession, FarmCards, PlayRepository, SessionKeeper, end_session, farm_cards};
+use farming::{FarmCards, PlayRepository, farm_cards};
 use farming_data::SteamPlayRepository;
 use game::ReadLibrary;
 use keep_awake::KeepAwake;
 use preferences::GetPreferences;
+use session::SessionKeeper;
 use steam_api::SteamClient;
 
 pub struct FarmingComponent {
     pub farm: FarmCards,
-    pub end_session: EndSession,
 }
 
 impl FarmingComponent {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the farmer runs on the Steam client, the computer staying awake and the \
+                  session's keeper, and on five use cases of three components, each handed \
+                  in on its own rather than as a whole container"
+    )]
     pub fn new(
         steam: Arc<SteamClient>,
         awake: Arc<KeepAwake>,
@@ -28,6 +34,7 @@ impl FarmingComponent {
         look_at_foils: LookAtFoils,
         describe_cards: DescribeCards,
         get_preferences: GetPreferences,
+        sessions: Arc<SessionKeeper>,
     ) -> Self {
         Self::over(
             Arc::new(SteamPlayRepository::new(steam, awake)),
@@ -36,6 +43,7 @@ impl FarmingComponent {
             look_at_foils,
             describe_cards,
             get_preferences,
+            sessions,
         )
     }
 
@@ -46,8 +54,8 @@ impl FarmingComponent {
         look_at_foils: LookAtFoils,
         describe_cards: DescribeCards,
         get_preferences: GetPreferences,
+        sessions: Arc<SessionKeeper>,
     ) -> Self {
-        let sessions = Arc::new(SessionKeeper::default());
         Self {
             farm: farm_cards(
                 read_library,
@@ -56,9 +64,8 @@ impl FarmingComponent {
                 describe_cards,
                 play,
                 get_preferences,
-                sessions.clone(),
+                sessions,
             ),
-            end_session: end_session(sessions),
         }
     }
 }
