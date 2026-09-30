@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
 use crate::{EventKind, FarmingEvent, FarmingStatus, Status};
@@ -45,6 +46,16 @@ impl Reporter {
 
     /// Status with a note, keeping the last library and order on screen.
     pub(crate) fn stage(&self, status: Status, note: &str) {
+        self.staged(status, note, None);
+    }
+
+    /// Status with a note, and when the farmer tries again: after an error,
+    /// the screens say so.
+    pub(crate) fn stage_until(&self, status: Status, note: &str, again: DateTime<Utc>) {
+        self.staged(status, note, Some(again));
+    }
+
+    fn staged(&self, status: Status, note: &str, next_look: Option<DateTime<Utc>>) {
         let last = self.last.lock().unwrap().clone();
         self.status(FarmingStatus {
             status,
@@ -52,7 +63,7 @@ impl Reporter {
             playing: Vec::new(),
             mode: None,
             blocked_by: None,
-            next_look: None,
+            next_look,
             look_every: None,
             ..last
         });

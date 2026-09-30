@@ -86,6 +86,7 @@ The dashboard, top to bottom. At the large size the Now panel, the chosen game a
 | 2 spares this session: £0.13 | the session's drops whose `copy` is 2 or more, priced | new: farming session + market |
 | ▶ Heavy Rain, ▷ building hours, ‖ waiting | `FarmingStatus { status, playing, mode, blocked_by }` | exists |
 | next look in 4m | `FarmingStatus.next_look` | exists |
+| ✕ reconnecting · in 42s | `FarmingStatus.next_look`, which after an error says when the farmer tries again | new: farming |
 | looks every 5 min: it's the last card | `FarmingStatus.look_every` (the rule in force, made visible) | new: farming |
 | on it 38m, since 16:53 | the last `Stretch.from` | new: farming session |
 | Last drop 8m ago · ⠋ finding out which card | the last `Drop.at`; `DropCard::Identifying` | new: farming session |

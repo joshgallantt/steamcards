@@ -59,7 +59,9 @@ To run without the dashboard, for a server or a log: `steamcards --headless`
 
 Your sign-in and choices stay on your computer, in one file only you can
 read (`~/Library/Application Support/steamcards` on macOS,
-`~/.config/steamcards` on Linux). steamcards talks to nobody but Steam.
+`~/.config/steamcards` on Linux). The market's prices of your cards are kept
+beside it, in `prices.json`, so a restart doesn't look every game up again.
+steamcards talks to nobody but Steam.
 Signing out (press `a`) forgets the sign-in and ends it at Steam's end too.
 
 ## Good to know

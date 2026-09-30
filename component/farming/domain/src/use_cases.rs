@@ -189,9 +189,10 @@ impl Farmer {
                         EventKind::Error,
                         format!("Couldn't read your badges: {why}"),
                     );
-                    r.stage(
+                    r.stage_until(
                         Status::Error,
                         "couldn't read your badges — trying again in 5 minutes",
+                        when(Instant::now() + RETRY_READ),
                     );
                     if !pause(RETRY_READ, token).await {
                         return;
@@ -218,7 +219,7 @@ impl Farmer {
                         EventKind::Warning,
                         format!("{why} — trying again in a minute"),
                     );
-                    r.stage(Status::Error, &why);
+                    r.stage_until(Status::Error, &why, when(Instant::now() + RETRY_CONNECT));
                     if !pause(RETRY_CONNECT, token).await {
                         return;
                     }

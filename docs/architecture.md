@@ -219,11 +219,22 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 ### `terminal-ui`
 
-- **`viewmodel/`** turns use cases into screen state (`Queue`, `GameRow`) and
-  keys into use case calls. It depends on domain crates only.
+- **`viewmodel/`** turns use cases into screen state and keys into use case
+  calls. It depends on domain crates only. Each frame, a `Snapshot` of the
+  domain values (the farmer's status and forecast, the library, the price
+  book, the wallet and the basis, the account, the clock) builds the
+  screens' view models afresh: `Progress`, `Now`, `Queue`, `ChosenGame`,
+  `Haul`, `MarketView`, `AccountView`, and the strip. `Market` runs the
+  market's use cases: pricing in the background, what's wanted first, and
+  the order books the instant basis needs.
 - **`tui/`** draws that state with ratatui and forwards keys. It holds no
-  business rule. `tui/preview.rs` renders every screen into an in-memory
-  terminal, with the domain crates' test doubles.
+  business rule. `tui/text.rs` is how text reaches the screen: padded to
+  its area, wrapped whole, never cut, a test failing on anything wider;
+  `tui/format.rs` writes numbers, money and time as the spec does;
+  `tui/layout/` holds the size classes and every region's ladder.
+  `tui/golden.rs` holds each screen to its mockup in `docs/design/ui.md`,
+  and `tui/preview.rs` renders every screen into an in-memory terminal from
+  the spec's data set.
 
 ### `headless`
 
@@ -243,13 +254,13 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `steam_api::Session`, `KeepAwake` | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `LibraryComponent`, `PreferencesComponent`, `FarmingComponent` | `DataAssembler` |
+| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::Session`, `KeepAwake` | `Settings` |
+| `DomainAssembler` | `AccountComponent`, `LibraryComponent`, `PreferencesComponent`, `FarmingComponent`, `MarketComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
-`MarketComponent` isn't assembled yet: the new screens will be the first to
-use it. It takes the `Session`, the `ConfigFile` and a `PriceCache` whose
-file sits beside the config (`prices.json`).
+`MarketComponent` takes the `Session`, the `ConfigFile` and a `PriceCache`
+whose file sits beside the config (`prices.json`); `Settings` works out
+where.
 
 ---
 

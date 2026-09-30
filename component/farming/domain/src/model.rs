@@ -51,7 +51,8 @@ pub struct FarmingStatus {
     pub mode: Option<Mode>,
     /// While blocked: what the other device is playing, when Steam says.
     pub blocked_by: Option<u32>,
-    /// When the farmer next looks at the cards.
+    /// When the farmer next looks at the cards; after an error, when it
+    /// tries again.
     pub next_look: Option<DateTime<Utc>>,
     /// How often the game farmed alone has its cards looked at: every 5
     /// minutes on its last card, else every quarter of an hour. `None`

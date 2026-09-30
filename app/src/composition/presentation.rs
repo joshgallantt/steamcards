@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use terminal_ui::{
     App,
-    viewmodel::{Account, Farming, Games, Library, Login, Onboarding},
+    viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding},
 };
 
 use super::DomainAssembler;
@@ -41,6 +41,16 @@ impl PresentationAssembler {
             ),
             Library::new(d.library.read.clone()),
             Onboarding::new(d.account.get.clone()),
+            Market::new(
+                d.market.prices.clone(),
+                d.market.want.clone(),
+                d.market.watch.clone(),
+                d.market.refresh.clone(),
+                d.market.offers.clone(),
+                d.market.wallet.clone(),
+                d.market.settings.clone(),
+                d.market.set_basis.clone(),
+            ),
         )
     }
 

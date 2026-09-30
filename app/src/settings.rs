@@ -15,6 +15,9 @@ use debug_log::DebugLog;
 pub(crate) struct Settings {
     /// `$STEAMCARDS_CONFIG`, or `<config-dir>/steamcards/config.json`.
     pub config_path: PathBuf,
+    /// The market's prices, in a file of their own beside the config file:
+    /// `prices.json`.
+    pub prices_path: PathBuf,
     pub debug_log: DebugLog,
 }
 
@@ -48,6 +51,7 @@ impl Settings {
         };
 
         Ok(Self {
+            prices_path: config_path.with_file_name("prices.json"),
             config_path,
             debug_log,
         })

@@ -2,6 +2,7 @@
 // the account, signing in, games, the full log, a game's details (narrow
 // windows), help, and quit confirmation.
 
+use crate::viewmodel::{Haul, MarketView, Priced, Snapshot};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -11,7 +12,7 @@ use ratatui::{
 };
 
 use super::{
-    Ctx, GamesView, LogView, LoginView, Overlay, dashboard, onboarding,
+    Ctx, GamesView, LogView, LoginView, Overlay, dashboard, format, layout, onboarding,
     theme::{self, ACCENT, BAD, BUSY, GOOD, SELECT},
     widgets::{
         centered, fit, flash_line, hints, keycap, qr, scroll, selected_row, spread, truncate,
@@ -21,7 +22,12 @@ use super::{
 
 /// Draws the open pop-up, if any. For the log, returns its (offset, max) so the
 /// app can remember where it's scrolled to.
-pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> Option<(usize, usize)> {
+pub(super) fn render(
+    f: &mut Frame<'_>,
+    area: Rect,
+    cx: &Ctx<'_>,
+    s: &Snapshot<'_>,
+) -> Option<(usize, usize)> {
     let overlay = cx.app.overlay.as_ref()?;
     // Fade what's underneath so the pop-up stands out.
     f.buffer_mut()
@@ -34,6 +40,8 @@ pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> Option<(usi
         Overlay::Games(v) => games(f, area, cx, v),
         Overlay::Log(v) => log_scroll = Some(log(f, area, cx, v)),
         Overlay::Detail => detail(f, area, cx),
+        Overlay::Haul => haul(f, area, cx, s),
+        Overlay::Market => market(f, area, cx, s),
         Overlay::ConfirmQuit => confirm_quit(f, area),
     }
     // A pop-up can cover the strip where messages go, so they go on the
@@ -508,7 +516,7 @@ fn log(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, v: &LogView) -> (usize, usiz
     } else {
         let lines: Vec<Line<'_>> = cx.app.log[off..(off + h).min(n)]
             .iter()
-            .map(|e| dashboard::log_line(e, false))
+            .map(|e| dashboard::log_line(e, cx.app.clock.zone(), false))
             .collect();
         f.render_widget(Paragraph::new(lines), inner);
     }
@@ -694,6 +702,76 @@ fn legend(head: impl Fn(&'static str) -> Line<'static>) -> Vec<Line<'static>> {
             .concat(),
         ),
     ]
+}
+
+// ── This session's cards, and the market ─────────────────────────────────────
+
+/// This session's cards, the newest at the bottom, until the pop-ups are
+/// drawn as the spec draws them.
+fn haul(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, s: &Snapshot<'_>) {
+    let w = area.width.saturating_sub(4).min(100);
+    let inner_w = w.saturating_sub(6) as usize;
+    let rows = area.height.saturating_sub(6) as usize;
+    let h = Haul::build(s);
+    let (mut lines, _) =
+        layout::haul_rows_m(&h, rows.saturating_sub(2), cx.spinner(), inner_w).unwrap_or_default();
+    if let Some(total) = &h.total {
+        lines.push(Line::default());
+        lines.push(Line::styled(
+            format!("{} cards · {}", h.rows.len(), format::held(total)),
+            theme::bold(),
+        ));
+    }
+    let keys = hints(
+        &[("b", "list/net/instant", 1), ("esc", "close", 0)],
+        inner_w,
+    );
+    let inner = modal(
+        f,
+        area,
+        w,
+        fit_height(lines.len()),
+        "This session's cards",
+        keys,
+    );
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Each game's prices in farm order, until the pop-ups are drawn as the
+/// spec draws them.
+fn market(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, s: &Snapshot<'_>) {
+    let w = area.width.saturating_sub(4).min(100);
+    let inner_w = w.saturating_sub(6) as usize;
+    let view = MarketView::build(s, cx.app.market.paused_since());
+    let mut lines = Vec::new();
+    if let Some(banner) = view.pause {
+        lines.push(Line::styled(
+            format!(
+                "‖ Prices paused by Steam until {}",
+                format::clock(banner.until, view.now, view.zone)
+            ),
+            theme::fg(BUSY),
+        ));
+        lines.push(Line::default());
+    }
+    let room = area.height.saturating_sub(8) as usize;
+    for row in view.rows.iter().take(room) {
+        let range = row.normal.map_or_else(
+            || "…".to_owned(),
+            |(a, b)| format!("{} – {}", format::money(a), format::money(b)),
+        );
+        let priced = match row.priced {
+            Priced::Fresh(age) => format::ago(age),
+            Priced::Stale(age) => format!("stale {}", format::age(age)),
+            Priced::Pending => "not yet".to_owned(),
+            Priced::Failed(_) => "failed".to_owned(),
+        };
+        let name = truncate(&row.name, inner_w.saturating_sub(34));
+        lines.push(Line::raw(format!("{name:<28} {range:>15}  {priced:>10}")));
+    }
+    let keys = hints(&[("b", "basis", 1), ("esc", "close", 0)], inner_w);
+    let inner = modal(f, area, w, fit_height(lines.len()), "Market · Prices", keys);
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 // ── Quit ─────────────────────────────────────────────────────────────────────

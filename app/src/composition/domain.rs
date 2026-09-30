@@ -1,6 +1,7 @@
 use account_di::AccountComponent;
 use farming_di::FarmingComponent;
 use library_di::LibraryComponent;
+use market_di::MarketComponent;
 use preferences_di::PreferencesComponent;
 
 use super::DataAssembler;
@@ -11,6 +12,7 @@ pub(crate) struct DomainAssembler {
     pub library: LibraryComponent,
     pub preferences: PreferencesComponent,
     pub farming: FarmingComponent,
+    pub market: MarketComponent,
 }
 
 impl DomainAssembler {
@@ -27,11 +29,14 @@ impl DomainAssembler {
             library.describe.clone(),
             preferences.get.clone(),
         );
+        let market =
+            MarketComponent::new(data.steam.clone(), data.config.clone(), data.prices.clone());
         Self {
             account,
             library,
             preferences,
             farming,
+            market,
         }
     }
 }

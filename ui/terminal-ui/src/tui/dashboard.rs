@@ -15,7 +15,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use farming::{EventKind, Mode, Status};
+use farming::{Mode, Status};
 use preferences::Tier;
 use ratatui::{
     Frame,
@@ -28,14 +28,14 @@ use ratatui::{
 };
 
 use super::{
-    Ctx, LogEntry, MIN_HEIGHT, MIN_WIDTH, WIDE,
+    Ctx, Logged, WIDE, layout,
     theme::{self, BAD, BUSY, DIM, GOOD, LINK, SELECT},
     widgets::{
-        DIVIDER, bar, elapsed, first_fit, fit, fit_right, flash_line, hints, keycap, panel, rule,
-        selected_row, spread, truncate, width, wrap_list, wrap_text,
+        DIVIDER, bar, elapsed, first_fit, fit, fit_right, hints, keycap, panel, rule, selected_row,
+        spread, truncate, width, wrap_list, wrap_text,
     },
 };
-use crate::viewmodel::{QueueEntry, Section};
+use crate::viewmodel::{LogKind, QueueEntry, Section, Strip};
 
 /// Hours a game needs before its cards drop: what the farmer works to.
 const HOURS_BEFORE_DROPS: f64 = 3.0;
@@ -87,25 +87,6 @@ pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
     render_strip(f, strip_area, cx);
     render_footer(f, footer, cx);
     offset
-}
-
-pub(super) fn too_small(f: &mut Frame<'_>, area: Rect) {
-    let lines = vec![
-        Line::styled("Make the window a little bigger", theme::bold()),
-        Line::styled(
-            format!(
-                "needs {MIN_WIDTH}×{MIN_HEIGHT}, it's {}×{}",
-                area.width, area.height
-            ),
-            theme::dim(),
-        ),
-    ];
-    let r = Rect {
-        y: area.y + (area.height / 2).saturating_sub(1),
-        height: area.height.min(2),
-        ..area
-    };
-    f.render_widget(Paragraph::new(lines).centered(), r);
 }
 
 fn dim(s: impl Into<String>) -> Span<'static> {
@@ -632,7 +613,13 @@ fn render_queue(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> (usize, Option<u
 
     // An empty PRIORITY section still shows, with instructions — it's the
     // feature people most need to discover.
-    let no_priority = !q.sections.iter().any(|(s, _)| *s == Section::Priority) && to_go > 0;
+    let sections: Vec<(Section, &Vec<QueueEntry>)> = q
+        .sections
+        .iter()
+        .filter(|r| !r.entries.is_empty())
+        .map(|r| (r.section, &r.entries))
+        .collect();
+    let no_priority = !sections.iter().any(|(s, _)| *s == Section::Priority) && to_go > 0;
     let show_done = cx.app.show_done;
     let rows_shown = |s: Section, n: usize| {
         if s == Section::Done && !show_done {
@@ -641,9 +628,8 @@ fn render_queue(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> (usize, Option<u
             n
         }
     };
-    let groups = q.sections.len() + usize::from(no_priority);
-    let total: usize = q
-        .sections
+    let groups = sections.len() + usize::from(no_priority);
+    let total: usize = sections
         .iter()
         .map(|(s, v)| 1 + rows_shown(*s, v.len()))
         .sum::<usize>()
@@ -676,14 +662,14 @@ fn render_queue(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> (usize, Option<u
         lines.push(Line::from(hint));
         is_heading.extend([true, true]);
     }
-    for (i, (section, entries)) in q.sections.iter().enumerate() {
+    for (i, &(section, entries)) in sections.iter().enumerate() {
         if roomy && (i > 0 || no_priority) {
             lines.push(Line::default());
             is_heading.push(true);
         }
-        lines.push(section_rule(*section, entries, cx, w));
+        lines.push(section_rule(section, entries, cx, w));
         is_heading.push(true);
-        if rows_shown(*section, entries.len()) == 0 {
+        if rows_shown(section, entries.len()) == 0 {
             continue;
         }
         for e in entries {
@@ -1252,54 +1238,67 @@ fn field(label: &str, value: Vec<Span<'static>>) -> Line<'static> {
 /// itself, where the pop-up can't cover it.)
 fn render_strip(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
     let h = area.height as usize;
-    let mut lines: Vec<Line<'_>> = cx
+    if h == 0 {
+        return;
+    }
+    // The bottom row is the strip: a flash, a new event, an alert while it
+    // lasts, or the newest event. Rows above it, when there are any, show
+    // the events before.
+    let newest = cx
         .app
         .log
         .iter()
+        .rposition(|e| e.entry.kind != LogKind::Progress);
+    let mut lines: Vec<Line<'_>> = cx.app.log[..newest.unwrap_or(0)]
+        .iter()
         .rev()
-        .filter(|e| e.kind != EventKind::Progress)
-        .take(h)
-        .map(|e| log_line(e, true))
+        .filter(|e| e.entry.kind != LogKind::Progress)
+        .take(h - 1)
+        .map(|e| log_line(e, cx.app.clock.zone(), true))
         .collect();
     lines.reverse();
-    if let Some((msg, _)) = cx.app.flash.as_ref().filter(|_| cx.app.overlay.is_none()) {
-        if lines.len() == h {
-            lines.remove(0);
-        }
-        lines.push(flash_line(msg));
-    }
+    let strip = if cx.app.overlay.is_some() && matches!(cx.strip, Strip::Flash { .. }) {
+        Line::default()
+    } else {
+        layout::strip::strip(&cx.strip, cx.progress, area.width as usize).unwrap_or_default()
+    };
+    lines.push(strip);
     let mut out = vec![Line::default(); h.saturating_sub(lines.len())];
     out.extend(lines);
     f.render_widget(Paragraph::new(out), area);
 }
 
 /// A log entry: time, icon, text. `fade` greys out older entries.
-pub(super) fn log_line(e: &LogEntry, fade: bool) -> Line<'static> {
-    let (icon, style) = match e.kind {
-        EventKind::Dropped | EventKind::Identified => (theme::DONE, theme::fg(GOOD)),
-        EventKind::Playing => (theme::FARMING, theme::fg(GOOD)),
-        EventKind::Switched => ("↻", theme::fg(LINK)),
-        EventKind::Warning => ("!", theme::fg(BUSY)),
-        EventKind::Error => (theme::FAILED, theme::fg(BAD)),
-        EventKind::Info | EventKind::Progress => ("·", theme::dim()),
+pub(super) fn log_line(e: &Logged, zone: chrono::FixedOffset, fade: bool) -> Line<'static> {
+    let kind = e.entry.kind;
+    let style = match kind {
+        LogKind::Dropped | LogKind::Playing => theme::fg(GOOD),
+        LogKind::MovedOn => theme::fg(LINK),
+        LogKind::Waiting | LogKind::Warning => theme::fg(BUSY),
+        LogKind::Error => theme::fg(BAD),
+        LogKind::Info | LogKind::Progress => theme::dim(),
     };
     let stale = fade && e.received.elapsed() > FRESH;
-    let text_style = match e.kind {
+    let text_style = match kind {
         _ if stale => theme::dim(),
-        EventKind::Progress => theme::dim(),
-        EventKind::Dropped | EventKind::Identified => theme::fg(GOOD),
-        EventKind::Error => theme::fg(BAD),
+        LogKind::Progress => theme::dim(),
+        LogKind::Dropped => theme::fg(GOOD),
+        LogKind::Error => theme::fg(BAD),
         _ => theme::plain(),
     };
+    let at = e.entry.at.with_timezone(&zone);
     let time = if fade {
-        e.at.format("%H:%M")
+        at.format("%H:%M")
     } else {
-        e.at.format("%H:%M:%S")
+        at.format("%H:%M:%S")
     };
     Line::from(vec![
         dim(format!(" {time}  ")),
-        Span::styled(format!("{icon} "), if stale { theme::dim() } else { style }),
-        Span::styled(e.text.clone(), text_style),
+        Span::styled(
+            format!("{} ", kind.glyph()),
+            if stale { theme::dim() } else { style },
+        ),
+        Span::styled(e.entry.text.clone(), text_style),
     ])
 }
 
@@ -1378,20 +1377,5 @@ mod tests {
             countdown(now + chrono::Duration::minutes(65), now),
             "in 1h 5m"
         );
-    }
-
-    #[test]
-    fn a_game_reads_as_its_state() {
-        use library::test_support::game;
-        let entry = |remaining: u32, playing: Option<Mode>| QueueEntry {
-            game: game(1, 5.0, 1, remaining),
-            tier: Tier::Indifferent,
-            playing,
-            wanted: true,
-        };
-        assert_eq!(State::of(&entry(2, Some(Mode::Cards))), State::Farming);
-        assert_eq!(State::of(&entry(2, Some(Mode::Hours))), State::Hours);
-        assert_eq!(State::of(&entry(2, None)), State::Queued);
-        assert_eq!(State::of(&entry(0, None)), State::Done);
     }
 }

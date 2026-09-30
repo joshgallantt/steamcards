@@ -4,76 +4,101 @@
 // business logic lives here.
 
 mod dashboard;
+#[cfg(test)]
+mod fixtures;
+#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
+pub(crate) mod format;
+#[cfg(test)]
+mod golden;
+#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
+mod layout;
 mod onboarding;
 mod overlays;
 #[cfg(test)]
 mod preview;
+mod small;
+#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
+mod text;
 mod theme;
 mod widgets;
 
 use std::{
-    collections::HashMap,
     io,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use account::{Account as SignedIn, LoginChallenge};
-use chrono::{DateTime, FixedOffset, Local, Utc};
+use chrono::{DateTime, FixedOffset, Local, TimeDelta, Utc};
 use crossterm::{
     event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use farming::{EventKind, FarmingEvent, FarmingStatus};
+use farming::{FarmingEvent, FarmingStatus, Forecast, forecast};
 use futures::StreamExt;
 use library::SteamLibrary;
+use market::{Basis, MarketError, MarketEventKind, Money, PriceBook, Wallet};
 use preferences::{Preferences, PreferencesError, Tier};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 
 use crate::viewmodel::{
-    Account, Farming, GameRow, Games, Library, Login, LoginUpdate, NeedsAccount, Onboarding, Queue,
-    QueueEntry, Section, Step, card_page, open_in_browser,
+    Account, Activity, ChosenGame, Farming, Flash, GameRow, Games, Library, LogEntry, LogKind,
+    Login, LoginUpdate, Market, NeedsAccount, Onboarding, Progress, Queue, QueueEntry, Run,
+    Section, Snapshot, Step, Strip, Values, card_page, market_line, open_in_browser,
 };
 
 const MAX_LOG: usize = 1000;
 /// Below this width the details panel folds into a pop-up (enter).
 const WIDE: u16 = 100;
-const MIN_WIDTH: u16 = 60;
-const MIN_HEIGHT: u16 = 16;
 const FLASH_FOR: Duration = Duration::from_secs(4);
 const LOGIN_DONE_FOR: Duration = Duration::from_millis(1500);
 /// How old the library may be when a screen showing it opens.
 const LIBRARY_FRESH: Duration = Duration::from_secs(10 * 60);
 /// The sign-in step lists the account, then "Continue".
 const CONTINUE_ROW: usize = 1;
+/// The time to finish is worked out again once a minute, as well as when a
+/// card drops or the order changes (docs/design/ui.md §5.7).
+const FORECAST_EVERY: TimeDelta = TimeDelta::minutes(1);
 
 /// What time it is, and the time zone times are shown in: the system's when
-/// steamcards runs, and fixed ones in the previews, so a screen looks the
-/// same on any machine, on any day.
-#[derive(Clone, Copy)]
-struct Clock {
-    now: fn() -> DateTime<Utc>,
-    zone: fn() -> FixedOffset,
+/// steamcards runs, and a fixed one in the previews and the screens' tests,
+/// so a screen looks the same on any machine, on any day.
+#[derive(Debug, Clone, Copy)]
+enum Clock {
+    System,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the clock of the previews and the screens' tests")
+    )]
+    Fixed {
+        now: DateTime<Utc>,
+        zone: FixedOffset,
+    },
 }
 
 impl Clock {
-    const SYSTEM: Self = Self {
-        now: Utc::now,
-        zone: local_zone,
-    };
+    fn now(&self) -> DateTime<Utc> {
+        match self {
+            Self::System => Utc::now(),
+            Self::Fixed { now, .. } => *now,
+        }
+    }
+
+    /// The system's time zone, as it is now (it changes with daylight
+    /// saving).
+    fn zone(&self) -> FixedOffset {
+        match self {
+            Self::System => *Local::now().offset(),
+            Self::Fixed { zone, .. } => *zone,
+        }
+    }
 }
 
-/// The system's time zone, as it is now (it changes with daylight saving).
-fn local_zone() -> FixedOffset {
-    *Local::now().offset()
-}
-
-struct LogEntry {
-    /// When it happened, in the time zone it's shown in.
-    at: DateTime<FixedOffset>,
+/// A line of the log, and when it came, for the strip's 4 seconds.
+struct Logged {
+    entry: LogEntry,
     received: Instant,
-    kind: EventKind,
-    text: String,
 }
 
 enum Overlay {
@@ -85,8 +110,12 @@ enum Overlay {
     Login(LoginView),
     Games(GamesView),
     Log(LogView),
-    /// A game's details on windows too narrow for the side panel.
+    /// The chosen game's details.
     Detail,
+    /// This session's cards.
+    Haul,
+    /// The market: where every price comes from.
+    Market,
     ConfirmQuit,
 }
 
@@ -117,6 +146,17 @@ struct LogView {
     follow: bool,
 }
 
+/// The domain values a frame is built from, as they stand: owned, so a
+/// `Snapshot` can borrow them.
+struct Known {
+    prefs: Preferences,
+    account: Option<SignedIn>,
+    library: SteamLibrary,
+    prices: Arc<PriceBook>,
+    wallet: Option<Wallet>,
+    basis: Basis,
+}
+
 /// Everything a frame needs, computed once per draw.
 struct Ctx<'a> {
     app: &'a App,
@@ -124,6 +164,8 @@ struct Ctx<'a> {
     account: Option<&'a SignedIn>,
     prefs: &'a Preferences,
     now: DateTime<Utc>,
+    progress: &'a Progress,
+    strip: Strip,
 }
 
 impl Ctx<'_> {
@@ -151,26 +193,38 @@ pub struct App {
     games: Games,
     library: Library,
     onboarding: Onboarding,
+    market: Market,
     setup: SetupView,
 
     /// The farmer's last word on what it's doing.
     status: Option<FarmingStatus>,
-    log: Vec<LogEntry>,
+    /// The time to finish, as last worked out, and what it was worked out
+    /// for: the session's drops and the farm order.
+    forecast: Option<Forecast>,
+    forecast_for: (usize, Vec<u32>),
+    /// What the session's first estimate said the cards would be worth on
+    /// completion, kept as it's made for the end-of-library summary.
+    estimated: Option<Money>,
+    /// The line that told of Steam's pause on prices: the strip's alert
+    /// while the pause lasts.
+    paused_by: Option<LogEntry>,
+    log: Vec<Logged>,
     clock: Clock,
-    /// Card drops received per game when first seen this session, to count
-    /// the drops since.
-    baseline: HashMap<u32, u32>,
 
     /// Game under the cursor, by app ID, so it stays put when the queue
     /// re-sorts.
     selected: Option<u32>,
     queue_offset: usize,
     show_done: bool,
+    /// ≈ DONE IN as clock times rather than time left (t).
+    clock_times: bool,
     paused_by_user: bool,
 
     overlay: Option<Overlay>,
     /// Short-lived confirmation shown above the footer.
     flash: Option<(String, Instant)>,
+    /// The flash says a change didn't stick.
+    flash_failed: bool,
     tick: usize,
     width: u16,
     quit: bool,
@@ -184,6 +238,7 @@ impl App {
         games: Games,
         library: Library,
         onboarding: Onboarding,
+        market: Market,
     ) -> Self {
         Self {
             account,
@@ -192,17 +247,23 @@ impl App {
             games,
             library,
             onboarding,
+            market,
             setup: SetupView::default(),
             status: None,
+            forecast: None,
+            forecast_for: (0, Vec::new()),
+            estimated: None,
+            paused_by: None,
             log: Vec::new(),
-            clock: Clock::SYSTEM,
-            baseline: HashMap::new(),
+            clock: Clock::System,
             selected: None,
             queue_offset: 0,
             show_done: false,
+            clock_times: false,
             paused_by_user: false,
             overlay: None,
             flash: None,
+            flash_failed: false,
             tick: 0,
             width: 0,
             quit: false,
@@ -217,11 +278,12 @@ impl App {
 
         if !self.onboarding.is_active() {
             // Farming starts by itself; there's nothing else to do until it does.
-            self.farming.start();
+            self.start_farming();
         }
         let result = self.event_loop(&mut terminal).await;
         self.login.cancel();
         self.farming.stop().await;
+        self.market.stop().await;
 
         disable_raw_mode()?;
         execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -252,6 +314,18 @@ impl App {
         while let Some(ev) = self.farming.try_recv() {
             self.on_farming_event(ev);
         }
+        while let Some(news) = self.market.try_recv() {
+            let line = {
+                let known = self.known();
+                market_line(&news, &self.snapshot(&known))
+            };
+            match news.event.kind {
+                MarketEventKind::Paused(_) => self.paused_by = Some(line.clone()),
+                MarketEventKind::Resumed => self.paused_by = None,
+                _ => {}
+            }
+            self.push_entry(line);
+        }
         self.library.poll();
         if let Some(Overlay::Login(v)) = &self.overlay {
             let done = matches!(v.outcome, Some(Ok(_)))
@@ -267,38 +341,111 @@ impl App {
         {
             self.flash = None;
         }
+        self.update_forecast();
+        self.ask_the_market();
         self.sync_selection();
     }
 
     fn on_farming_event(&mut self, ev: FarmingEvent) {
         if let Some(s) = ev.status {
-            for g in s.library.games() {
-                self.baseline.entry(g.app_id).or_insert(g.drops.received);
+            // A card dropped: its game's prices are looked at again, if
+            // they're over an hour old.
+            let before = self
+                .status
+                .as_ref()
+                .map_or(0, |old| old.session.drops.len());
+            let dropped: Vec<u32> = s
+                .session
+                .drops
+                .iter()
+                .skip(before)
+                .map(|d| d.app_id)
+                .collect();
+            for app_id in dropped {
+                self.market.refresh(app_id);
             }
             self.status = Some(s);
         }
         if !ev.message.is_empty() {
-            self.push_log(ev.kind, ev.message);
+            self.push_log(LogKind::of(ev.kind), ev.message);
         }
     }
 
-    /// Cards dropped since steamcards started.
+    /// Cards dropped this session.
     fn dropped(&self) -> u32 {
-        let Some(s) = &self.status else {
-            return 0;
+        self.status.as_ref().map_or(0, |s| {
+            u32::try_from(s.session.drops.len()).unwrap_or(u32::MAX)
+        })
+    }
+
+    /// Works the time to finish out again when a card has dropped, the farm
+    /// order has changed, or a minute has passed, and only while farming
+    /// runs: farming time is what it counts, so it holds still otherwise.
+    fn update_forecast(&mut self) {
+        let Some(status) = &self.status else {
+            return;
         };
-        s.library
-            .games()
+        if status.library.is_empty() {
+            return;
+        }
+        let now = self.clock.now();
+        let runs = {
+            let known = self.known();
+            Activity::of(&self.snapshot(&known)).runs()
+        };
+        let key = (status.session.drops.len(), status.order.clone());
+        let due = self
+            .forecast
+            .as_ref()
+            .is_none_or(|f| key != self.forecast_for || now - f.made_at >= FORECAST_EVERY);
+        if !due || (!runs && self.forecast.is_some()) {
+            return;
+        }
+        self.forecast = Some(forecast(
+            &status.session,
+            &status.library,
+            &status.order,
+            now,
+        ));
+        self.forecast_for = key;
+        if self.estimated.is_none() && status.session.first_forecast.is_some() {
+            let known = self.known();
+            self.estimated = Values::build(&self.snapshot(&known)).map(|v| v.completion.value);
+        }
+    }
+
+    /// Tells the market what to price, most urgent first: the game being
+    /// farmed, then the games with cards this session, the newest first,
+    /// then the farm order. While values are on the instant basis, the
+    /// cards held have their order books looked up.
+    fn ask_the_market(&mut self) {
+        let Some(status) = &self.status else {
+            return;
+        };
+        let mut wanted: Vec<u32> = status.playing.clone();
+        for d in status.session.drops.iter().rev() {
+            if !wanted.contains(&d.app_id) {
+                wanted.push(d.app_id);
+            }
+        }
+        for &id in &status.order {
+            if !wanted.contains(&id) {
+                wanted.push(id);
+            }
+        }
+        let held: Vec<String> = status
+            .session
+            .drops
             .iter()
-            .map(|g| {
-                let before = self
-                    .baseline
-                    .get(&g.app_id)
-                    .copied()
-                    .unwrap_or(g.drops.received);
-                g.drops.received.saturating_sub(before)
+            .filter_map(|d| match &d.card {
+                farming::DropCard::Identified(asset) => Some(asset.market_hash_name.clone()),
+                _ => None,
             })
-            .sum()
+            .collect();
+        self.market.want(wanted);
+        if self.market.basis() == Basis::Instant && !held.is_empty() {
+            self.market.ask_offers(held, self.clock.now());
+        }
     }
 
     fn on_login_update(&mut self, u: LoginUpdate) {
@@ -318,12 +465,12 @@ impl App {
                     } else {
                         format!(" as {name}")
                     };
-                    self.push_log(EventKind::Info, format!("Signed in to Steam{who}"));
+                    self.push_log(LogKind::Info, format!("Signed in to Steam{who}"));
                     // Another account's farming is a session of its own.
                     self.farming.signed_in();
                     self.library.invalidate();
                     self.status = None;
-                    self.baseline.clear();
+                    self.forecast = None;
                     if self.onboarding.is_active() {
                         // Farming waits for the end of onboarding; next up is
                         // moving on, whatever was said about needing an account.
@@ -332,12 +479,12 @@ impl App {
                     } else if !self.paused_by_user {
                         // A new sign-in starts a new farmer.
                         self.farming.pause();
-                        self.farming.start();
+                        self.start_farming();
                     }
                     v.outcome = Some(Ok(name));
                 }
                 Some(e) => {
-                    self.push_log(EventKind::Error, format!("Couldn't sign in: {e}"));
+                    self.push_log(LogKind::Error, format!("Couldn't sign in: {e}"));
                     v.outcome = Some(Err(e));
                 }
             }
@@ -346,12 +493,15 @@ impl App {
         self.overlay = Some(Overlay::Login(v));
     }
 
-    fn push_log(&mut self, kind: EventKind, text: String) {
-        self.log.push(LogEntry {
-            at: (self.clock.now)().with_timezone(&(self.clock.zone)()),
+    fn push_log(&mut self, kind: LogKind, text: String) {
+        let at = self.clock.now();
+        self.push_entry(LogEntry { at, kind, text });
+    }
+
+    fn push_entry(&mut self, entry: LogEntry) {
+        self.log.push(Logged {
+            entry,
             received: Instant::now(),
-            kind,
-            text,
         });
         if self.log.len() > MAX_LOG {
             self.log.drain(..self.log.len() - MAX_LOG);
@@ -360,6 +510,33 @@ impl App {
 
     fn flash(&mut self, msg: impl Into<String>) {
         self.flash = Some((msg.into(), Instant::now()));
+        self.flash_failed = false;
+    }
+
+    /// A flash that says a change didn't stick.
+    fn flash_failure(&mut self, msg: impl Into<String>) {
+        self.flash(msg);
+        self.flash_failed = true;
+    }
+
+    /// What the strip shows: a flash for 4 seconds, a new event for as
+    /// long, an alert while it lasts, else the newest event.
+    fn strip(&self, s: &Snapshot<'_>) -> Strip {
+        let flash = self
+            .flash
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() < FLASH_FOR)
+            .map(|(text, _)| Flash {
+                text: text.clone(),
+                failed: self.flash_failed,
+            });
+        let newest = self
+            .log
+            .iter()
+            .rev()
+            .find(|l| l.entry.kind != LogKind::Progress)
+            .map(|l| (&l.entry, l.received.elapsed() < FLASH_FOR));
+        Strip::build(s, flash, newest, self.paused_by.as_ref())
     }
 
     /// The library as it's best known: the farmer's, whose hours and drops
@@ -371,14 +548,45 @@ impl App {
         }
     }
 
+    /// The domain values this frame is built from.
+    fn known(&self) -> Known {
+        Known {
+            prefs: self.farming.preferences(),
+            account: self.account.get(),
+            library: self.known_library(),
+            prices: self.market.book(),
+            wallet: self.market.wallet(),
+            basis: self.market.basis(),
+        }
+    }
+
+    /// What every view model is built from this frame.
+    fn snapshot<'a>(&'a self, known: &'a Known) -> Snapshot<'a> {
+        Snapshot {
+            status: self.status.as_ref(),
+            library: &known.library,
+            run: if self.farming.is_running() {
+                Run::Running
+            } else if self.paused_by_user {
+                Run::Paused
+            } else {
+                Run::Stopped
+            },
+            account: known.account.as_ref(),
+            prefs: &known.prefs,
+            forecast: self.forecast.as_ref(),
+            prices: &known.prices,
+            wallet: known.wallet,
+            basis: known.basis,
+            pause: self.market.pause(),
+            now: self.clock.now(),
+            zone: self.clock.zone(),
+        }
+    }
+
     fn queue(&self) -> Queue {
-        let prefs = self.farming.preferences();
-        let (order, playing, mode) = match (&self.status, self.farming.is_running()) {
-            (Some(s), true) => (s.order.clone(), s.playing.clone(), s.mode),
-            (Some(s), false) => (s.order.clone(), Vec::new(), None),
-            (None, _) => (Vec::new(), Vec::new(), None),
-        };
-        Queue::build(&self.known_library(), &order, &playing, mode, &prefs)
+        let known = self.known();
+        Queue::build(&self.snapshot(&known), self.selected)
     }
 
     /// Games the cursor can land on, top to bottom.
@@ -422,6 +630,14 @@ impl App {
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
+    /// Starts farming, and pricing with it.
+    fn start_farming(&mut self) {
+        self.farming.start();
+        if self.farming.is_running() {
+            self.market.start();
+        }
+    }
+
     fn set_tier(&mut self, tier: Tier) {
         let Some(e) = self.selected_entry() else {
             return;
@@ -437,7 +653,7 @@ impl App {
             return self.didnt_stick(err);
         }
         self.flash(match tier {
-            Tier::Priority(n) => format!("{name} is now priority #{n}."),
+            Tier::Priority(n) => format!("{name} is priority #{n}: farmed first."),
             Tier::Indifferent => format!("{name} is back to indifferent."),
             Tier::Skip => format!("Skipped {name}: it won't be farmed."),
         });
@@ -445,7 +661,46 @@ impl App {
 
     /// Says a change didn't happen, rather than confirming one that didn't.
     fn didnt_stick(&mut self, e: PreferencesError) {
-        self.flash(format!("That didn't stick — {e}. Try again?"));
+        self.flash_failure(format!("That didn't stick: {e}."));
+    }
+
+    /// Values money on the next basis: list, then net, then instant.
+    fn next_basis(&mut self) {
+        match self.market.next_basis() {
+            Ok(Basis::List) => self.flash("Values are now list prices: what buyers pay."),
+            Ok(Basis::Net) => self.flash(
+                "Values are now after fees: what you'd get listing each card at its lowest price.",
+            ),
+            Ok(Basis::Instant) => {
+                self.flash("Values are now what selling at once gets: the best offer, after fees.")
+            }
+            Err(MarketError::Unavailable) => {
+                self.flash_failure("That didn't stick: the market settings couldn't be saved.")
+            }
+            Err(e) => self.flash_failure(format!("That didn't stick: {e}.")),
+        }
+    }
+
+    /// ≈ DONE IN as clock times, or as time left.
+    fn toggle_clock_times(&mut self) {
+        self.clock_times = !self.clock_times;
+        self.flash(if self.clock_times {
+            "≈ DONE IN shows clock times."
+        } else {
+            "≈ DONE IN shows the time left."
+        });
+    }
+
+    /// The chosen game's details; its cards' order books are looked up for
+    /// their sell-now prices.
+    fn open_details(&mut self) -> Option<Overlay> {
+        let app_id = self.selected?;
+        let hashes = {
+            let known = self.known();
+            ChosenGame::market_hash_names(&self.snapshot(&known), app_id)
+        };
+        self.market.ask_offers(hashes, self.clock.now());
+        Some(Overlay::Detail)
     }
 
     fn open_card_page(&mut self) {
@@ -465,7 +720,7 @@ impl App {
             self.paused_by_user = true;
             self.flash("Paused: nothing is played until you carry on. Press p.");
         } else if self.account.is_signed_in() {
-            self.farming.start();
+            self.start_farming();
             self.paused_by_user = false;
             self.flash("Farming started.");
         } else {
@@ -516,7 +771,7 @@ impl App {
         self.enter_step();
         if !self.onboarding.is_active() {
             self.paused_by_user = false;
-            self.farming.start();
+            self.start_farming();
             self.flash("Farming started. Press g to choose games, ? for help.");
         }
     }
@@ -555,9 +810,11 @@ impl App {
             Ok(()) => {
                 self.farming.pause();
                 self.farming.end_session();
+                self.market.cancel();
                 self.paused_by_user = false;
                 self.status = None;
-                self.baseline.clear();
+                self.forecast = None;
+                self.estimated = None;
                 self.library.invalidate();
                 self.onboarding.signed_out();
                 self.enter_step();
@@ -630,6 +887,7 @@ impl App {
                 self.setup.cursor = moved(self.setup.cursor, code, self.picks().len());
             }
             (Step::Start, KeyCode::Char('v')) => self.toggle_appear_online(),
+            (Step::Start, KeyCode::Char('b')) => self.next_basis(),
             _ => {}
         }
     }
@@ -651,9 +909,11 @@ impl App {
             KeyCode::Char('x') => self.set_tier(Tier::Skip),
             KeyCode::Char('o') => self.open_card_page(),
             KeyCode::Char('c') => self.show_done = !self.show_done,
-            KeyCode::Enter if self.width < WIDE && self.selected.is_some() => {
-                self.overlay = Some(Overlay::Detail);
-            }
+            KeyCode::Enter => self.overlay = self.open_details(),
+            KeyCode::Char('h') => self.overlay = Some(Overlay::Haul),
+            KeyCode::Char('m') => self.overlay = Some(Overlay::Market),
+            KeyCode::Char('b') => self.next_basis(),
+            KeyCode::Char('t') => self.toggle_clock_times(),
             KeyCode::Char('a') => self.overlay = Some(Overlay::Account { confirm: false }),
             KeyCode::Char('g') => self.overlay = Some(self.open_games()),
             KeyCode::Char('l') => {
@@ -750,8 +1010,14 @@ impl App {
             Overlay::Detail => {
                 match k.code {
                     KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => return None,
-                    KeyCode::Up => self.move_selection(-1),
-                    KeyCode::Down => self.move_selection(1),
+                    KeyCode::Up => {
+                        self.move_selection(-1);
+                        return self.open_details();
+                    }
+                    KeyCode::Down => {
+                        self.move_selection(1);
+                        return self.open_details();
+                    }
                     KeyCode::Char(c @ '1'..='9') => {
                         self.set_tier(Tier::Priority(c as usize - '0' as usize))
                     }
@@ -764,6 +1030,24 @@ impl App {
                 }
                 Some(Overlay::Detail)
             }
+
+            Overlay::Haul => match k.code {
+                KeyCode::Esc | KeyCode::Char('h' | 'q') => None,
+                KeyCode::Char('b') => {
+                    self.next_basis();
+                    Some(Overlay::Haul)
+                }
+                _ => Some(Overlay::Haul),
+            },
+
+            Overlay::Market => match k.code {
+                KeyCode::Esc | KeyCode::Char('m' | 'q') => None,
+                KeyCode::Char('b') => {
+                    self.next_basis();
+                    Some(Overlay::Market)
+                }
+                _ => Some(Overlay::Market),
+            },
         }
     }
 
@@ -817,6 +1101,8 @@ impl App {
             }
             KeyCode::Char('o') => self.toggle_only_priority(),
             KeyCode::Char('r') => self.library.refresh(),
+            KeyCode::Char('v') => self.toggle_appear_online(),
+            KeyCode::Char('b') => self.next_basis(),
             code => v.cursor = moved(v.cursor, code, all.len()),
         }
         Some(Overlay::Games(v))
@@ -827,20 +1113,26 @@ impl App {
     fn draw(&mut self, f: &mut Frame<'_>) {
         let area = f.area();
         self.width = area.width;
-        if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-            dashboard::too_small(f, area);
+        let known = self.known();
+        if layout::size_class(area.width, area.height) == layout::SizeClass::TooSmall {
+            small::render(
+                f,
+                &self.snapshot(&known),
+                theme::SPINNER[self.tick % theme::SPINNER.len()],
+            );
             return;
         }
-        let prefs = self.farming.preferences();
-        let queue = self.queue();
-        let account = self.account.get();
+        let queue = Queue::build(&self.snapshot(&known), self.selected);
+        let progress = Progress::build(&self.snapshot(&known), self.estimated);
         let (queue_offset, log_scroll) = {
             let cx = Ctx {
                 app: self,
                 queue: &queue,
-                account: account.as_ref(),
-                prefs: &prefs,
-                now: (self.clock.now)(),
+                account: known.account.as_ref(),
+                prefs: &known.prefs,
+                now: self.clock.now(),
+                progress: &progress,
+                strip: self.strip(&self.snapshot(&known)),
             };
             let queue_offset = match self.onboarding.step() {
                 Some(step) => {
@@ -849,7 +1141,7 @@ impl App {
                 }
                 None => dashboard::render(f, area, &cx),
             };
-            let log_scroll = overlays::render(f, area, &cx);
+            let log_scroll = overlays::render(f, area, &cx, &self.snapshot(&known));
             (queue_offset, log_scroll)
         };
         self.queue_offset = queue_offset;

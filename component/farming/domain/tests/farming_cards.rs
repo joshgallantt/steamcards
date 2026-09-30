@@ -340,6 +340,11 @@ async fn badges_that_cant_be_read_are_tried_again_in_five_minutes() {
         player.reads(EventKind::Error).await,
         "Couldn't read your badges: steamcommunity.com didn't answer (503 Service Unavailable)"
     );
+    let again = player.sees(Status::Error).await.next_look;
+    assert!(
+        again.is_some_and(|at| at - chrono::Utc::now() > chrono::TimeDelta::minutes(4)),
+        "it says when it tries again: {again:?}"
+    );
     let failed = Instant::now();
     player.steam.go_down(false);
     player.reads(EventKind::Playing).await;
@@ -361,6 +366,15 @@ async fn a_lost_connection_is_tried_again_after_a_minute() {
     assert_eq!(
         player.reads(EventKind::Warning).await,
         "the connection to Steam dropped — trying again in a minute"
+    );
+    let status = player.sees(Status::Error).await;
+    assert_eq!(status.note, "the connection to Steam dropped");
+    let wait = status.next_look.map(|at| at - chrono::Utc::now());
+    assert!(
+        wait.is_some_and(
+            |w| w > chrono::TimeDelta::seconds(50) && w <= chrono::TimeDelta::seconds(60)
+        ),
+        "it says when it tries again: {wait:?}"
     );
     let lost = Instant::now();
     player.reads(EventKind::Playing).await;
