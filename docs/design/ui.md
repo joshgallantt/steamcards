@@ -1683,21 +1683,22 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `FarmingStatus.session: FarmingSession` | this session, reported with every status | Progress, the haul, pips, the forecast | new |
 | `FarmingStatus.set_aside: Vec<SetAside { app_id, times, since }>` | games put behind the others after 10 hours without a drop (today private to the farmer) | STATUS "set aside", the details | new |
 | `FarmingStatus.look_every: Option<Duration>` | the look interval in force | "looks every 5 min: it's the last card" | new |
-| `FarmingSession { account, started_at, drops_left_at_start, games_at_start, drops, stretches, finished, first_forecast }` | one session of farming (it replaces the TUI's `baseline` map) | the header's time, session progress, the haul, Done's "✓ 16:48", the end-of-library check | new |
+| `FarmingSession { started_at, drops_left_at_start, games_at_start, drops, stretches, finished, first_forecast }` | one session of farming (it replaces the TUI's `baseline` map); it holds no account, since signing out ends it | the header's time, session progress, the haul, Done's "✓ 16:48", the end-of-library check | new |
 | `Stretch { app_ids, mode, from, to }` | what was played, how, and when | T and T_g for the forecast; the track; "on it 38m" | new |
 | `Drop { at, app_id, card: DropCard, copy: Option<u32> }` | one card that dropped: each copy is its own drop | the haul, pips, the track | new |
-| `DropCard::{Identifying { since }, Identified(CardAsset), NameOnly { name, foil }}` | what's known of it; `NameOnly` is fallback C, never sellable | "⠋ finding out which card", the name, ★ | new |
+| `DropCard::{Identifying, Identified(CardAsset), NameOnly { name, foil }, Unknown}` | what's known of it (`Drop.at` says since when); `NameOnly` is fallback C, never sellable; `Unknown` when nothing could tell | "⠋ finding out which card", the name, ★ | new |
 | `Drop.copy` | which copy of that card this made the account hold: 1 the first, 2 a spare | "2nd copy"; spares this session | new |
 | `Forecast { eta, band: Option<(Duration, Duration)>, assumed, hours_term, rate, per_game: Vec<(u32, Duration)>, made_at }` | the time to finish (research §3.1) | Progress, ≈ DONE IN, "last card ≈ 17:55" | new |
 | `forecast(&FarmingSession, &SteamLibrary, order: &[u32], now) -> Forecast` | pure, beside `ranking.rs`: Gamma–Poisson with a 30-minute prior and an 80% band | the above | new |
 | `hours_to_go(&Game) -> f64` | the 3-hour rule, made public (`HOURS_BEFORE_DROPS` is `pub(crate)` today) | "ready", "needs 0.8h" | new |
 | `Signal::NewItems(Vec<NewItem { asset_id, app_id, gained_at }>)` | Steam's pushed item announcements, with their ids (research §2.5) | identifying drops | exists; the payload is new |
 | `EventKind::Dropped`; `EventKind::Identified` | a drop; its card named a moment later | the strip, the log | `Dropped` exists; `Identified` new |
-| `FarmCards` | farms until cancelled, reporting events and status | everything | exists |
+| `FarmCards` | farms until cancelled, reporting events and status; each run carries on the session | everything | exists |
+| `EndSession` | ends the session: the next run of `FarmCards` starts a new one | signing out | new |
 
-**The session's life.** A session starts when farming starts for an account. It carries on through a pause and through signing in again to the same account: the farming component keeps it between runs of `FarmCards`. Signing out, another account, or quitting steamcards ends it (§9 asks whether it should outlive a restart).
+**The session's life.** A session starts when farming first starts. It carries on through a pause and through signing in again: the farming component keeps it between runs of `FarmCards`, in a `SessionKeeper` it shares with `EndSession`, with what the farmer knows beside it (hours counted, games set aside). Signing out ends it (the screens call `EndSession`), as should signing in as another account; quitting steamcards ends it too (§9 asks whether it should outlive a restart).
 
-**How a drop is identified** (research §2.2): Steam pushes `NewItems` with asset ids; the farmer asks `DescribeCards` for them; each `Drop` goes from `Identifying` to `Identified`. The card page read 2 seconds later keeps drops left true. `Drop.copy` is the card's `owned` count from the read before the drop, plus one, and one more for each earlier copy of it in the same look; so a look that finds two new cards makes two drops, each with its own copy number.
+**How a drop is identified** (research §2.2): Steam pushes `NewItems` with asset ids; the card page read 2 seconds later keeps drops left true, and a drop is recorded for each card they went down by; the farmer asks `DescribeCards` about the items announced for that game (or for no game in particular); each `Drop` goes from `Identifying` to `Identified`. Drops still unnamed are named by the card page's counts against the set read before (`NameOnly`), and any left are `Unknown`. `Drop.copy` is the card's `owned` count from the read before the drop, plus one, and one more for each earlier copy of it in the same look; so a look that finds two new cards makes two drops, each with its own copy number. The set counts normal cards only, so a foil's copy counts this session's foils of that name.
 
 ### 6.3 market (a new component, with `domain`, `data` and `di` like the others)
 
@@ -1833,7 +1834,7 @@ Before listing, the checks Valve's page makes (research §4.1): a wallet currenc
 
 1. **Formatting and ladders, pure.** `tui/format.rs`: money per currency, durations, the estimate steps, clock forms. `tui/layout.rs`: `size_class(w, h)`, `right_width`, `queue_cols(inner)`, `header_ladder(state)`, the footer's hints, the chosen game's forms, `popup_area(kind, layout)`. Unit-tested on their own, as `hints` and `rule` are today.
 2. **library.** The derived methods (`drops_received`, `drops_total`, `games_done`, `spares`, `missing`), `CardAsset`, `DescribeCards`. `steam-api`: `unseen_items` in `ClientItemAnnouncements` (research §2.5), the Econ describe call.
-3. **farming.** `FarmingSession`, `Stretch`, `Drop` with `copy`, `DropCard`, `forecast()`, `hours_to_go()`, `set_aside` and `look_every` in `FarmingStatus`, `EventKind::Identified`. The session kept across runs of `FarmCards`.
+3. **farming.** `FarmingSession`, `Stretch`, `Drop` with `copy`, `DropCard`, `forecast()`, `hours_to_go()`, `set_aside` and `look_every` in `FarmingStatus`, `EventKind::Identified`. The session kept across runs of `FarmCards`, until `EndSession`.
 4. **market.** `Money`, `Currency`, `Wallet`, fees, `PriceQuote`, `Price`, `SetPrices`, `PriceBook`, `Basis`, `MarketSettings`, `MarketPause`, `Held`, `Estimate`, the pure valuations, and `test_support` doubles: fixed prices, pending prices, a paused queue, stale sets. Then `market-data`: the one market queue in `steam-api` (5 s gaps, the pause and its doubling, kept across restarts), `search/render`, `orderbook`, the wallet from CM message 5528.
 5. **View models** (below), each built fresh from domain state on every frame, as `Queue` is today.
 6. **Screens.** The dashboard by size class, the pop-ups and their placement, the too-small screen.

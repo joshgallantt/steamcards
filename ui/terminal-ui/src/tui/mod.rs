@@ -546,12 +546,13 @@ impl App {
         })
     }
 
-    /// Forgets the sign-in and stops farming: it's back to onboarding's
-    /// sign-in step, as there's nothing to farm with.
+    /// Forgets the sign-in and stops farming, ending its session: it's back
+    /// to onboarding's sign-in step, as there's nothing to farm with.
     fn sign_out(&mut self) {
         match self.account.sign_out() {
             Ok(()) => {
                 self.farming.pause();
+                self.farming.end_session();
                 self.paused_by_user = false;
                 self.status = None;
                 self.baseline.clear();

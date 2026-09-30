@@ -1,8 +1,8 @@
 //! A stand-in for Steam, for tests here and in the data crates: a CM server
-//! on this computer that signs in, signs on, plays and describes the items
-//! it holds as a test tells it to, and remembers what it was sent. It speaks
-//! Steam's own messages over a real WebSocket, so the code under test is the
-//! code that runs.
+//! on this computer that signs in, signs on, plays, announces new items and
+//! describes the items it holds as a test tells it to, and remembers what it
+//! was sent. It speaks Steam's own messages over a real WebSocket, so the
+//! code under test is the code that runs.
 
 use std::{
     collections::{HashSet, VecDeque},
@@ -18,10 +18,11 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{
     EResult, Endpoints,
+    cm::UnseenItem,
     inventory::{COMMUNITY_CONTEXT, STEAM_APP},
     packet::{Packet, pack_multi},
     proto::{
-        Asset, BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
+        self, Asset, BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
         ClientItemAnnouncements, ClientLoggedOff, ClientLogon, ClientLogonResponse,
         ClientPlayingSessionState, GenerateAccessTokenResponse, GetInventoryItemsRequest,
         GetInventoryItemsResponse, Header, ItemDescription, ItemTag, PollAuthSessionStatusResponse,
@@ -129,6 +130,18 @@ impl HeldItem {
     }
 }
 
+/// A trading card from `game` among the account's community items, just
+/// arrived, as Steam lists a new item.
+pub fn unseen_card(asset_id: u64, game: u32) -> UnseenItem {
+    UnseenItem {
+        asset_id,
+        app_id: STEAM_APP,
+        context_id: COMMUNITY_CONTEXT,
+        gained_at: u32::try_from(now()).ok(),
+        source_app_id: Some(game),
+    }
+}
+
 /// An ask to describe items, as the stand-in heard it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InventoryAsk {
@@ -160,6 +173,11 @@ struct State {
     /// Asset IDs asked about so far.
     asked_about: HashSet<u64>,
     inventory_asks: Vec<InventoryAsk>,
+    /// New items not seen yet: Steam lists them until the inventory is
+    /// viewed.
+    unseen: Vec<UnseenItem>,
+    /// How often a session asked what's new.
+    announcement_asks: usize,
     clients: Vec<mpsc::UnboundedSender<Vec<u8>>>,
 }
 
@@ -200,6 +218,8 @@ impl FakeSteam {
             inventory: Vec::new(),
             asked_about: HashSet::new(),
             inventory_asks: Vec::new(),
+            unseen: Vec::new(),
+            announcement_asks: 0,
             clients: Vec::new(),
         }));
         let stop = CancellationToken::new();
@@ -307,15 +327,44 @@ impl FakeSteam {
         ));
     }
 
-    /// New items arrive in the inventory.
+    /// Steam says how many new items there are, and not which.
     pub fn new_items(&self, count: u32) {
         self.push(&Packet::encode(
             emsg::CLIENT_ITEM_ANNOUNCEMENTS,
             &Header::default(),
             &ClientItemAnnouncements {
                 count_new_items: Some(count),
+                unseen_items: Vec::new(),
             },
         ));
+    }
+
+    /// These items arrive, and Steam announces them: it lists every item
+    /// not seen yet, these among them.
+    pub fn announce(&self, items: Vec<UnseenItem>) {
+        let frame = {
+            let mut s = self.state();
+            s.unseen.extend(items);
+            announcement(&s.unseen)
+        };
+        self.push(&frame);
+    }
+
+    /// These items arrived before any session signed on, and haven't been
+    /// seen: Steam lists them when asked.
+    pub fn already_unseen(&self, items: Vec<UnseenItem>) {
+        self.state().unseen.extend(items);
+    }
+
+    /// The inventory is viewed: nothing is new any more, and Steam says so.
+    pub fn inventory_viewed(&self) {
+        self.state().unseen.clear();
+        self.push(&announcement(&[]));
+    }
+
+    /// How often a session asked Steam what's new.
+    pub fn announcement_asks(&self) -> usize {
+        self.state().announcement_asks
     }
 
     /// Steam signs every session off, saying why.
@@ -449,6 +498,10 @@ impl State {
             emsg::CLIENT_LOG_OFF => {
                 self.log_offs += 1;
                 vec![signed_off(EResult::OK), Vec::new()]
+            }
+            emsg::CLIENT_REQUEST_ITEM_ANNOUNCEMENTS => {
+                self.announcement_asks += 1;
+                vec![announcement(&self.unseen)]
             }
             _ => Vec::new(),
         }
@@ -612,6 +665,28 @@ fn description(item: &HeldItem, class: u64) -> ItemDescription {
             .collect(),
         market_fee_app: i32::try_from(item.market_fee_app).ok(),
     }
+}
+
+/// `ClientItemAnnouncements`, counting and listing `unseen`.
+fn announcement(unseen: &[UnseenItem]) -> Vec<u8> {
+    Packet::encode(
+        emsg::CLIENT_ITEM_ANNOUNCEMENTS,
+        &Header::default(),
+        &ClientItemAnnouncements {
+            count_new_items: u32::try_from(unseen.len()).ok(),
+            unseen_items: unseen
+                .iter()
+                .map(|item| proto::UnseenItem {
+                    appid: Some(item.app_id),
+                    context_id: Some(item.context_id),
+                    asset_id: Some(item.asset_id),
+                    amount: Some(1),
+                    rtime32_gained: item.gained_at,
+                    source_appid: item.source_app_id,
+                })
+                .collect(),
+        },
+    )
 }
 
 /// `ClientLoggedOff`, saying why.

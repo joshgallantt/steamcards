@@ -3,14 +3,16 @@
 
 use std::{sync::Arc, time::Duration};
 
+use chrono::DateTime;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use farming::{PlayRepository, Signal};
+use farming::{NewItem, PlayRepository, Signal};
 use farming_data::SteamPlayRepository;
 use keep_awake::KeepAwake;
 use steam_api::{
     EResult, Session,
-    test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
+    cm::UnseenItem,
+    test_support::{ACCOUNT, FakeSteam, STEAM_ID, token, unseen_card},
 };
 
 fn session(steam: &FakeSteam, name: &str) -> Arc<Session> {
@@ -49,6 +51,28 @@ async fn signal(repo: &SteamPlayRepository) -> Signal {
         .expect("a signal within a second")
 }
 
+/// Plays `app_id`, and waits for Steam to say what was new already.
+async fn plays(repo: &SteamPlayRepository, session: &Session, app_id: u32) {
+    repo.play(&[app_id], false).await.unwrap();
+    eventually(|| {
+        session
+            .current()
+            .is_some_and(|c| c.new_at_sign_on().is_some())
+    })
+    .await;
+}
+
+/// A card Steam listed, as farming hears of it.
+fn heard(card: UnseenItem) -> NewItem {
+    NewItem {
+        asset_id: card.asset_id,
+        app_id: card.source_app_id,
+        gained_at: card
+            .gained_at
+            .and_then(|at| DateTime::from_timestamp(at.into(), 0)),
+    }
+}
+
 #[tokio::test]
 async fn games_are_played_and_told_again_only_when_they_change() {
     let steam = FakeSteam::start().await;
@@ -79,8 +103,9 @@ async fn appearing_online_is_said_and_unsaid() {
 #[tokio::test]
 async fn steams_news_arrives_as_signals() {
     let steam = FakeSteam::start().await;
-    let repo = SteamPlayRepository::new(session(&steam, "signals"), Arc::new(KeepAwake::off()));
-    repo.play(&[620], false).await.unwrap();
+    let session = session(&steam, "signals");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 620).await;
 
     steam.block(true, 730);
     assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
@@ -91,10 +116,107 @@ async fn steams_news_arrives_as_signals() {
     assert_eq!(repo.blocked(), None);
 
     steam.new_items(1);
-    assert_eq!(signal(&repo).await, Signal::NewItems);
+    assert_eq!(signal(&repo).await, Signal::NewItems(Vec::new()));
 
     steam.hang_up();
     assert!(matches!(signal(&repo).await, Signal::Lost(_)));
+}
+
+#[tokio::test]
+async fn each_new_item_is_passed_on_once() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "items-once");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 960_910).await;
+
+    let madison = unseen_card(31_002, 960_910);
+    steam.announce(vec![madison]);
+    assert_eq!(signal(&repo).await, Signal::NewItems(vec![heard(madison)]));
+
+    let scott = unseen_card(31_003, 960_910);
+    steam.announce(vec![scott]);
+    assert_eq!(
+        signal(&repo).await,
+        Signal::NewItems(vec![heard(scott)]),
+        "Steam lists Madison again, until the inventory is viewed"
+    );
+}
+
+#[tokio::test]
+async fn items_new_before_signing_on_are_not_passed_on() {
+    let steam = FakeSteam::start().await;
+    let earlier = unseen_card(31_001, 960_910);
+    steam.already_unseen(vec![earlier]);
+    let session = session(&steam, "items-before");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 960_910).await;
+
+    let madison = unseen_card(31_002, 960_910);
+    steam.announce(vec![madison]);
+
+    assert_eq!(signal(&repo).await, Signal::NewItems(vec![heard(madison)]));
+}
+
+#[tokio::test]
+async fn a_count_alone_says_to_look_when_it_goes_up() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "count");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 620).await;
+
+    steam.new_items(1);
+    assert_eq!(signal(&repo).await, Signal::NewItems(Vec::new()));
+
+    steam.new_items(1);
+    steam.block(true, 730);
+    assert_eq!(
+        signal(&repo).await,
+        Signal::Blocked(Some(730)),
+        "the same count again is nothing new"
+    );
+
+    steam.new_items(2);
+    assert_eq!(signal(&repo).await, Signal::NewItems(Vec::new()));
+}
+
+#[tokio::test]
+async fn items_in_other_inventories_are_not_passed_on() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "other-items");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 620).await;
+
+    let hat = UnseenItem {
+        app_id: 440,
+        context_id: 2,
+        ..unseen_card(4_001, 440)
+    };
+    steam.announce(vec![hat]);
+
+    assert_eq!(
+        signal(&repo).await,
+        Signal::NewItems(Vec::new()),
+        "no card, though one more new item: a look is cheap"
+    );
+}
+
+#[tokio::test]
+async fn a_new_connection_passes_on_only_what_is_new_since() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "items-again");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 960_910).await;
+    let madison = unseen_card(31_002, 960_910);
+    steam.announce(vec![madison]);
+    assert_eq!(signal(&repo).await, Signal::NewItems(vec![heard(madison)]));
+
+    steam.hang_up();
+    assert!(matches!(signal(&repo).await, Signal::Lost(_)));
+    plays(&repo, &session, 960_910).await;
+    let scott = unseen_card(31_003, 960_910);
+    steam.announce(vec![scott]);
+
+    assert_eq!(signal(&repo).await, Signal::NewItems(vec![heard(scott)]));
 }
 
 #[tokio::test]

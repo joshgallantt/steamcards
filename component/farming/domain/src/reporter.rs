@@ -46,18 +46,22 @@ impl Reporter {
     /// Status with a note, keeping the last library and order on screen.
     pub(crate) fn stage(&self, status: Status, note: &str) {
         let last = self.last.lock().unwrap().clone();
-        self.send(
-            EventKind::Info,
-            String::new(),
-            Some(FarmingStatus {
-                status,
-                note: note.to_owned(),
-                playing: Vec::new(),
-                mode: None,
-                blocked_by: None,
-                next_look: None,
-                ..last
-            }),
-        );
+        self.status(FarmingStatus {
+            status,
+            note: note.to_owned(),
+            playing: Vec::new(),
+            mode: None,
+            blocked_by: None,
+            next_look: None,
+            look_every: None,
+            ..last
+        });
+    }
+
+    /// The last status again, with what changed.
+    pub(crate) fn amend(&self, change: impl FnOnce(&mut FarmingStatus)) {
+        let mut last = self.last.lock().unwrap().clone();
+        change(&mut last);
+        self.status(last);
     }
 }

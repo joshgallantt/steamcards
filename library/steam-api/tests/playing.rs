@@ -7,7 +7,7 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
     EResult, Session,
-    cm::{Blocked, Event},
+    cm::{Announcement, Blocked, Event},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
 use tokio::sync::broadcast;
@@ -30,12 +30,18 @@ fn signed_in(steam: &FakeSteam, name: &str) -> (Session, Arc<ConfigFile>) {
     (session, store)
 }
 
-/// The next event, within a second.
+/// The next event, within a second, but for Steam's answer to what's new
+/// at sign-on, which comes when it comes.
 async fn next(events: &mut broadcast::Receiver<Event>) -> Event {
-    tokio::time::timeout(Duration::from_secs(1), events.recv())
-        .await
-        .expect("an event within a second")
-        .expect("the connection's events")
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(1), events.recv())
+            .await
+            .expect("an event within a second")
+            .expect("the connection's events");
+        if !matches!(&event, Event::NewItems(a) if a.at_sign_on) {
+            return event;
+        }
+    }
 }
 
 /// Waits until `check` holds, or a second has passed.
@@ -122,10 +128,19 @@ async fn new_items_and_sign_offs_are_heard() {
     let steam = FakeSteam::start().await;
     let (session, _) = signed_in(&steam, "events");
     let conn = session.connection().await.unwrap();
+    // Steam answers what's new at sign-on first, in its own time.
+    eventually(|| conn.new_at_sign_on().is_some()).await;
     let mut events = conn.events();
 
     steam.new_items(2);
-    assert_eq!(next(&mut events).await, Event::NewItems(2));
+    assert_eq!(
+        next(&mut events).await,
+        Event::NewItems(Announcement {
+            count: 2,
+            items: Vec::new(),
+            at_sign_on: false,
+        })
+    );
 
     steam.sign_off(EResult::LOGGED_IN_ELSEWHERE);
     assert_eq!(

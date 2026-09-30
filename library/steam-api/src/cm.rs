@@ -12,7 +12,7 @@ use std::{
     fmt,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -27,12 +27,13 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{
     DEVICE_NAME, EResult,
+    inventory::{COMMUNITY_CONTEXT, STEAM_APP},
     packet::{Packet, unpack_multi},
     proto::{
         self, ClientChangeStatus, ClientGamesPlayed, ClientHeartBeat, ClientHello,
         ClientItemAnnouncements, ClientLogOff, ClientLoggedOff, ClientLogon, ClientLogonResponse,
-        ClientPlayingSessionState, GamePlayed, Header, IpAddress, PERSONA_OFFLINE, PERSONA_ONLINE,
-        PROTOCOL_VERSION, emsg,
+        ClientPlayingSessionState, ClientRequestItemAnnouncements, GamePlayed, Header, IpAddress,
+        PERSONA_OFFLINE, PERSONA_ONLINE, PROTOCOL_VERSION, emsg,
     },
 };
 
@@ -63,12 +64,48 @@ pub enum Event {
     /// Another device playing on this account blocks this session from
     /// playing, or no longer does.
     PlayingBlocked(Blocked),
-    /// New items arrived in the inventory. A card may have dropped.
-    NewItems(u32),
+    /// Steam announced the account's new items. A card may have dropped.
+    NewItems(Announcement),
     /// Steam signed this session off.
     LoggedOff(EResult),
     /// The connection closed.
     Closed,
+}
+
+/// Steam's word on the account's new items: how many, and which, when it
+/// lists them. It counts and lists an item until the inventory is viewed,
+/// so an item comes again with the next.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Announcement {
+    pub count: u32,
+    pub items: Vec<UnseenItem>,
+    /// Steam's answer to asking at sign-on: what was new already, before
+    /// this session.
+    pub at_sign_on: bool,
+}
+
+/// An item Steam lists as new.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnseenItem {
+    pub asset_id: u64,
+    /// The app whose inventory holds it: 753, Steam's own, for community
+    /// items such as trading cards.
+    pub app_id: u32,
+    pub context_id: u64,
+    /// When it arrived, in seconds since 1970, when Steam says.
+    pub gained_at: Option<u32>,
+    /// The game it came from, when Steam says: a card's is the game whose
+    /// set it's from.
+    pub source_app_id: Option<u32>,
+}
+
+impl UnseenItem {
+    /// Whether it's one of the account's community items, which
+    /// [`Session::describe_items`](crate::Session::describe_items) can
+    /// describe.
+    pub fn is_community_item(&self) -> bool {
+        (self.app_id, self.context_id) == (STEAM_APP, COMMUNITY_CONTEXT)
+    }
 }
 
 /// Whether another device's game stops this session from playing.
@@ -122,6 +159,10 @@ struct State {
     logon: Mutex<Option<oneshot::Sender<Packet>>>,
     signed_on: Mutex<Option<SignedOn>>,
     blocked: Mutex<Option<Blocked>>,
+    /// Asked at sign-on what's new, and not answered yet.
+    asked_new_items: AtomicBool,
+    /// The answer, once it came.
+    new_at_sign_on: Mutex<Option<Announcement>>,
     events: broadcast::Sender<Event>,
     next_job: AtomicU64,
     log: DebugLog,
@@ -152,6 +193,8 @@ impl Connection {
             logon: Mutex::default(),
             signed_on: Mutex::default(),
             blocked: Mutex::default(),
+            asked_new_items: AtomicBool::new(false),
+            new_at_sign_on: Mutex::default(),
             events,
             next_job: AtomicU64::new(1),
             log: log.clone(),
@@ -270,6 +313,14 @@ impl Connection {
         .find(|&s| s > 0)
         .map_or(HEARTBEAT, |s| Duration::from_secs(s as u64));
         self.heartbeat(every);
+        // What's new in the inventory already, as ASF and node-steam-user
+        // ask at sign-on: the answer tells new items from those before.
+        self.state.asked_new_items.store(true, Ordering::Relaxed);
+        self.send(
+            emsg::CLIENT_REQUEST_ITEM_ANNOUNCEMENTS,
+            self.header(),
+            &ClientRequestItemAnnouncements {},
+        )?;
         Ok(())
     }
 
@@ -340,6 +391,12 @@ impl Connection {
     /// Steam last said; `None` until it says.
     pub fn blocked(&self) -> Option<Blocked> {
         *self.state.blocked.lock().unwrap()
+    }
+
+    /// The new items Steam listed when asked at sign-on: those already there
+    /// before this session. `None` until it answers.
+    pub fn new_at_sign_on(&self) -> Option<Announcement> {
+        self.state.new_at_sign_on.lock().unwrap().clone()
     }
 
     pub fn is_signed_on(&self) -> bool {
@@ -501,9 +558,25 @@ impl State {
                 if let Ok(a) =
                     proto::decode::<ClientItemAnnouncements>("item announcement", &packet.body)
                 {
-                    let _ = self
-                        .events
-                        .send(Event::NewItems(a.count_new_items.unwrap_or_default()));
+                    // The first after asking is the answer: nothing is played
+                    // until a moment after signing on, so no card drops
+                    // before it comes.
+                    let at_sign_on = self.asked_new_items.swap(false, Ordering::Relaxed);
+                    // Whether Steam lists the items for card drops is still
+                    // to be seen (research: market-and-session.md, section 6).
+                    self.log.line(&format!(
+                        "new items{}: {a:?}",
+                        if at_sign_on { " at sign-on" } else { "" }
+                    ));
+                    let announced = Announcement {
+                        count: a.count_new_items.unwrap_or_default(),
+                        items: a.unseen_items.iter().filter_map(unseen).collect(),
+                        at_sign_on,
+                    };
+                    if at_sign_on {
+                        *self.new_at_sign_on.lock().unwrap() = Some(announced.clone());
+                    }
+                    let _ = self.events.send(Event::NewItems(announced));
                 }
             }
             emsg::CLIENT_LOGGED_OFF => {
@@ -526,5 +599,77 @@ impl State {
         *self.signed_on.lock().unwrap() = None;
         self.log.line("connection closed");
         let _ = self.events.send(Event::Closed);
+    }
+}
+
+/// An item as Steam lists it; `None` without an asset ID. Valve's messages
+/// leave a field out, or send 0, when they don't say.
+fn unseen(item: &proto::UnseenItem) -> Option<UnseenItem> {
+    Some(UnseenItem {
+        asset_id: item.asset_id.filter(|&id| id != 0)?,
+        app_id: item.appid.unwrap_or_default(),
+        context_id: item.context_id.unwrap_or_default(),
+        gained_at: item.rtime32_gained.filter(|&at| at != 0),
+        source_app_id: item.source_appid.filter(|&app| app != 0),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_item_steam_lists_says_what_it_says_and_no_more() {
+        let listed = proto::UnseenItem {
+            appid: Some(753),
+            context_id: Some(6),
+            asset_id: Some(31_002),
+            amount: Some(1),
+            rtime32_gained: Some(1_790_000_000),
+            source_appid: Some(960_910),
+        };
+        assert_eq!(
+            unseen(&listed),
+            Some(UnseenItem {
+                asset_id: 31_002,
+                app_id: 753,
+                context_id: 6,
+                gained_at: Some(1_790_000_000),
+                source_app_id: Some(960_910),
+            })
+        );
+
+        let unsaid = proto::UnseenItem {
+            rtime32_gained: Some(0),
+            source_appid: None,
+            ..listed.clone()
+        };
+        let item = unseen(&unsaid).unwrap();
+        assert_eq!((item.gained_at, item.source_app_id), (None, None));
+
+        let no_id = proto::UnseenItem {
+            asset_id: Some(0),
+            ..listed
+        };
+        assert_eq!(unseen(&no_id), None, "nothing to tell it by");
+    }
+
+    #[test]
+    fn only_community_items_are_the_ones_described() {
+        let card = UnseenItem {
+            asset_id: 31_002,
+            app_id: 753,
+            context_id: 6,
+            gained_at: None,
+            source_app_id: Some(960_910),
+        };
+        let hat = UnseenItem {
+            app_id: 440,
+            context_id: 2,
+            ..card
+        };
+
+        assert!(card.is_community_item());
+        assert!(!hat.is_community_item(), "a Team Fortress 2 item");
     }
 }
