@@ -19,8 +19,9 @@ use crate::{
     },
 };
 
-/// Steam's own app, whose inventory holds the community items.
-pub(crate) const STEAM_APP: u32 = 753;
+/// Steam's own app, whose inventory holds the community items, and whose
+/// market sells them.
+pub const STEAM_APP: u32 = 753;
 /// Where in Steam's app the community items are.
 pub(crate) const COMMUNITY_CONTEXT: u64 = 6;
 
@@ -137,7 +138,7 @@ fn item(asset_id: u64, d: &ItemDescription) -> InventoryItem {
 
 /// A card's name as its game's set lists it: its market name without the
 /// suffix Steam adds, if any. The market's search names cards the same way.
-pub(crate) fn card_name(market_name: &str) -> String {
+pub fn card_name(market_name: &str) -> String {
     SUFFIXES
         .iter()
         .find_map(|s| market_name.strip_suffix(s))

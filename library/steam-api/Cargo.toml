@@ -35,6 +35,4 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 steam-api = { path = ".", features = ["test-support"] }
-# The market's pace, on paused time.
-tokio = { workspace = true, features = ["test-util"] }
 wiremock.workspace = true

@@ -186,7 +186,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── price/         What cards are worth: prices and the wallet.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
-│   ├── steam-api/     The CM connection, QR sign-in, the site's pages, the market.
+│   ├── steam-api/     The CM connection, QR sign-in, the pages several components read.
 │   ├── config-file/   The one JSON file: the saved sign-in and preferences.
 │   ├── debug-log/     The opt-in debug log.
 │   └── keep-awake/    Keeping the computer awake while games play.

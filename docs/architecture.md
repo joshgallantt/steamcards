@@ -256,14 +256,25 @@ composition root builds **one** and hands it to every data crate: when the
 farmer's sign-on is refused, the account screen shows the sign-in as expired
 straight away, and signing in again clears it.
 
-**So is the market's pace.** The same `SteamClient` holds the one market queue
-every `/market/` request goes through, one at a time (research §1.3): signed
-in, 5 seconds apart and up to a second more; signed out, 12. A 429 pauses
-every market request for 10 minutes, then one goes to see, doubling the
-pause to an hour at most; `price-data` keeps the pause in the config file,
-so it outlasts a restart. A server error is asked once more, 30 seconds
-later; the site's quick retries never apply to the market. The `SteamClient`
-also keeps the wallet Steam tells of as it signs on (CM message 5528).
+**So is the market's pace.** `SteamMarketClient`, in `price-data`, holds the
+one market queue every `/market/` request goes through, one at a time
+(research §1.3): signed in, 5 seconds apart and up to a second more; signed
+out, 12. The price component's DI builds the one client. A 429 pauses every
+market request for 10 minutes, then one goes to see, doubling the pause to an
+hour at most; the price store keeps the pause in the config file, so it
+outlasts a restart. A server error is asked once more, 30 seconds later; the
+site's quick retries never apply to the market. The `SteamClient` keeps the
+wallet Steam tells of as it signs on (CM message 5528).
+
+**Each data crate has the same shape.** A `Default…Repository` satisfies the
+domain's contract through a client or a store: a trait, with the
+implementation that names the technology beside it (`SteamGameClient`,
+`FilePreferencesStore`). What a crate reads or keeps in a shape of its own
+is a DTO in `dto/`, mapped onto the domain there (`PreferencesDto`,
+`PriceSetDto`, `BadgeDto`). A page only one component reads is read in its
+data crate: the badge pages in `game-data`, the market in `price-data`. What
+several read, `steam-api` reads once. Each DI takes the client or store and
+builds its repository itself.
 
 ---
 
@@ -271,7 +282,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, single requests to the site for the market (whose pages and queue `price-data` keeps), and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `JsonFile`, a file of its own for what can be lost, like the market's prices beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
@@ -343,7 +354,7 @@ over an in-memory Steam whose cards drop as its games are played: ten hours
 without a drop costs milliseconds. The market's run the real watcher on
 paused time over an in-memory market that pauses as Steam's queue does, and
 value the design's own session by hand. The market queue's real pace, minutes
-and all, is tested on paused time in `steam-api`; over real requests to
+and all, is tested on paused time in `price-data`; over real requests to
 wiremock it runs at a quick pace, since paused time and real sockets don't
 mix.
 
@@ -428,7 +439,7 @@ graph TD
     CD --> CARD & GAME & SA
     PD --> PREF & GAME & CF
     FD --> FARM & SES & GAME & CARD & SA & KA
-    PRD --> PRICE & GAME & MON & SA & CF
+    PRD --> PRICE & GAME & MON & SA & CF & DL
     CARD --> GAME
     PREF --> GAME
     SES --> GAME & CARD

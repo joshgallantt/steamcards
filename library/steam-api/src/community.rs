@@ -5,7 +5,7 @@
 //!
 //! Requests keep a polite gap between them, and a busy site is asked again a
 //! couple of times before giving up. The market's requests are asked once
-//! only: its queue decides what a busy answer means (see `market`).
+//! only: its queue, in `price-data`, decides what a busy answer means.
 
 use std::{fmt, time::Duration};
 
@@ -45,11 +45,11 @@ impl fmt::Debug for WebLogin {
 
 /// What the site answered, whatever it was.
 #[derive(Debug, Clone)]
-pub(crate) struct Reply {
-    pub(crate) status: StatusCode,
+pub struct Reply {
+    pub status: StatusCode,
     /// A web page, where something else was asked for.
-    pub(crate) html: bool,
-    pub(crate) body: String,
+    pub html: bool,
+    pub body: String,
 }
 
 pub(crate) struct Community {
@@ -119,8 +119,8 @@ impl Community {
 
     /// One request for `path` (with its query), signed in as `who` or signed
     /// out, and nothing more: whatever the answer, it's not asked again. The
-    /// market's requests come here, and its queue decides what a busy answer
-    /// means.
+    /// market's requests come here, and its queue, in `price-data`, decides
+    /// what a busy answer means.
     pub(crate) async fn get_once(
         &self,
         path: &str,

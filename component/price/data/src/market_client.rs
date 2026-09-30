@@ -1,16 +1,15 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use game::AppId;
 use money::{Currency, Money};
 use price::{Lookup, MarketPause, Price, PriceQuote, PricedCard, QuoteSource, Wallet};
-use steam_api::{
-    SteamClient,
-    market::{self as steam, Listed, Market, OrderBook},
+use steam_api::SteamClient;
+
+use crate::market::{
+    Listed, MAX_SET_PAGES, MarketPace, MarketQueue, OrderBook, QUERY_ACTION, orderbook_path,
+    read_order_book, read_search, search_path,
 };
 
 /// How long to wait for Steam to tell of the wallet once signed on, a tenth
@@ -43,15 +42,26 @@ pub trait MarketClient: Send + Sync {
     fn resume(&self, pause: MarketPause);
 }
 
-/// The market as the Steam session sees it: every request through its one
-/// market queue.
+/// The market as the Steam session sees it, signed in: every request through
+/// one queue, at the market's pace.
 pub struct SteamMarketClient {
     steam: Arc<SteamClient>,
+    /// Every request to the market goes through here, one at a time.
+    queue: MarketQueue,
 }
 
 impl SteamMarketClient {
     pub fn new(steam: Arc<SteamClient>) -> Self {
-        Self { steam }
+        Self::with_pace(steam, MarketPace::default())
+    }
+
+    /// The same, with the market's requests at another pace: for tests that
+    /// can't wait minutes.
+    pub fn with_pace(steam: Arc<SteamClient>, pace: MarketPace) -> Self {
+        Self {
+            steam,
+            queue: MarketQueue::new(pace),
+        }
     }
 
     /// The wallet's currency, which the market's prices are read in. Steam
@@ -71,6 +81,86 @@ impl SteamMarketClient {
         }
         Err("Steam hasn't said the wallet's currency yet".into())
     }
+
+    /// A game's cards as the market lists them now, normal cards or foils,
+    /// with their lowest listings: every page of `search/render`, signed in,
+    /// each through the market's queue. A card is listed once, should a
+    /// page repeat one. Without a sign-in to ask as, the market goes
+    /// unasked.
+    async fn search(&self, app_id: u32, foil: bool) -> anyhow::Result<Lookup<Vec<Listed>>> {
+        let who = match self.steam.web_login(false).await {
+            Ok(who) => who,
+            Err(e) => return Ok(Lookup::Unanswered(e.to_string())),
+        };
+        let mut listed: Vec<Listed> = Vec::new();
+        let mut start = 0;
+        for _ in 0..MAX_SET_PAGES {
+            let path = search_path(app_id, foil, start);
+            let reply = match self
+                .queue
+                .send(true, || self.steam.get_once(&path, Some(&who), &[]))
+                .await?
+            {
+                Lookup::Found(reply) => reply,
+                Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
+                Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
+            };
+            let page = read_search(&reply.body)?;
+            let read = u32::try_from(page.listed.len()).unwrap_or(u32::MAX);
+            for card in page.listed {
+                if !listed.iter().any(|l| l.hash_name == card.hash_name) {
+                    listed.push(card);
+                }
+            }
+            start += if page.page_size > 0 {
+                page.page_size
+            } else {
+                read
+            };
+            if read == 0 || start >= page.total {
+                break;
+            }
+        }
+        Ok(Lookup::Found(listed))
+    }
+
+    /// A card's order book, by its market hash name: asked for signed in,
+    /// since only then is it expected to answer in the wallet's currency,
+    /// and signed out when the answer to that is a web page, as it is for
+    /// some sessions (research §1.1, D5).
+    async fn order_book(&self, market_hash_name: &str) -> anyhow::Result<Lookup<OrderBook>> {
+        let path = orderbook_path(market_hash_name);
+        let who = match self.steam.web_login(false).await {
+            Ok(who) => who,
+            Err(e) => return Ok(Lookup::Unanswered(e.to_string())),
+        };
+        let signed_in = self
+            .queue
+            .send(true, || {
+                self.steam.get_once(&path, Some(&who), &[QUERY_ACTION])
+            })
+            .await?;
+        let reply = match signed_in {
+            Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
+            Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
+            Lookup::Found(reply) if !reply.html => reply,
+            Lookup::Found(_) => {
+                self.steam
+                    .log()
+                    .line("the order book came as a web page signed in: asking signed out");
+                match self
+                    .queue
+                    .send(false, || self.steam.get_once(&path, None, &[QUERY_ACTION]))
+                    .await?
+                {
+                    Lookup::Found(reply) => reply,
+                    Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
+                    Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
+                }
+            }
+        };
+        read_order_book(&reply.body).map(Lookup::Found)
+    }
 }
 
 #[async_trait]
@@ -84,10 +174,10 @@ impl MarketClient for SteamMarketClient {
             Ok(currency) => currency,
             Err(why) => return Ok(Lookup::Unanswered(why)),
         };
-        let listed = match self.steam.market_search(app_id.0, foil).await? {
-            Market::Answer(listed) => listed,
-            Market::Paused(pause) => return Ok(Lookup::Paused(to_pause(pause))),
-            Market::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
+        let listed = match self.search(app_id.0, foil).await? {
+            Lookup::Found(listed) => listed,
+            Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
+            Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
         };
         let now = Utc::now();
         Ok(Lookup::Found(
@@ -100,10 +190,10 @@ impl MarketClient for SteamMarketClient {
     }
 
     async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
-        Ok(match self.steam.order_book(market_hash_name).await? {
-            Market::Answer(book) => Lookup::Found(to_offers(book, Utc::now())),
-            Market::Paused(pause) => Lookup::Paused(to_pause(pause)),
-            Market::Unanswered(why) => Lookup::Unanswered(why),
+        Ok(match self.order_book(market_hash_name).await? {
+            Lookup::Found(book) => Lookup::Found(to_offers(book, Utc::now())),
+            Lookup::Paused(pause) => Lookup::Paused(pause),
+            Lookup::Unanswered(why) => Lookup::Unanswered(why),
         })
     }
 
@@ -123,11 +213,11 @@ impl MarketClient for SteamMarketClient {
     }
 
     fn pause(&self) -> Option<MarketPause> {
-        self.steam.market_pause().map(to_pause)
+        self.queue.pause()
     }
 
     fn resume(&self, pause: MarketPause) {
-        self.steam.resume_market_pause(to_steam_pause(pause));
+        self.queue.resume(pause);
     }
 }
 
@@ -210,24 +300,8 @@ fn to_offers(book: OrderBook, now: DateTime<Utc>) -> Price {
     })
 }
 
-fn to_pause(pause: steam::MarketPause) -> MarketPause {
-    MarketPause {
-        until: DateTime::<Utc>::from(pause.until),
-        step: pause.step,
-    }
-}
-
-fn to_steam_pause(pause: MarketPause) -> steam::MarketPause {
-    steam::MarketPause {
-        until: SystemTime::from(pause.until),
-        step: pause.step,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::time::UNIX_EPOCH;
-
     use super::*;
 
     fn at(seconds: i64) -> DateTime<Utc> {
@@ -351,15 +425,5 @@ mod tests {
             ..only_offers
         };
         assert_eq!(to_offers(nothing, now), Price::NoMarket);
-    }
-
-    #[test]
-    fn steams_pause_is_the_markets_pause() {
-        let pause = steam::MarketPause {
-            until: UNIX_EPOCH + Duration::from_secs(1_790_712_345),
-            step: Duration::from_secs(20 * 60),
-        };
-        assert_eq!(to_pause(pause).until, at(1_790_712_345));
-        assert_eq!(to_steam_pause(to_pause(pause)), pause);
     }
 }

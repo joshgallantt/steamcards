@@ -21,11 +21,15 @@ steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+rand.workspace = true
+reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+# The market's pace, on paused time.
+tokio = { workspace = true, features = ["test-util"] }
 steam-api = { workspace = true, features = ["test-support"] }
 tokio-util.workspace = true
 wiremock.workspace = true

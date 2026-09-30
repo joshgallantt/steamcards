@@ -19,10 +19,9 @@ use price::{
     KeepPricesUpToDateUseCase, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository,
     PriceSettings, QuoteSource, SetGamesToPriceUseCase, SetPrices, Wallet, system_clock,
 };
-use price_data::{DefaultPriceRepository, FilePriceStore, SteamMarketClient};
+use price_data::{DefaultPriceRepository, FilePriceStore, MarketPace, SteamMarketClient};
 use steam_api::{
     EResult, SteamClient,
-    market::MarketPace,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
 use tokio::sync::mpsc;
@@ -74,19 +73,23 @@ impl Disk {
         let file = Arc::new(ConfigFile::open(self.config.clone()).unwrap());
         let mut endpoints = steam.endpoints();
         endpoints.community = site.uri();
-        let session = Arc::new(
-            SteamClient::with_endpoints(file.clone(), &DebugLog::off(), endpoints)
-                .with_market_pace(MarketPace {
-                    signed_in: Duration::from_millis(1),
-                    jitter: Duration::ZERO,
-                    signed_out: Duration::from_millis(1),
-                    first_pause: Duration::from_secs(20 * 60),
-                    longest_pause: Duration::from_secs(60 * 60),
-                    after_server_error: Duration::from_millis(10),
-                }),
-        );
+        let session = Arc::new(SteamClient::with_endpoints(
+            file.clone(),
+            &DebugLog::off(),
+            endpoints,
+        ));
         let store = FilePriceStore::open(file, self.prices.clone());
-        let client = SteamMarketClient::new(session.clone());
+        let client = SteamMarketClient::with_pace(
+            session.clone(),
+            MarketPace {
+                signed_in: Duration::from_millis(1),
+                jitter: Duration::ZERO,
+                signed_out: Duration::from_millis(1),
+                first_pause: Duration::from_secs(20 * 60),
+                longest_pause: Duration::from_secs(60 * 60),
+                after_server_error: Duration::from_millis(10),
+            },
+        );
         (
             DefaultPriceRepository::new(Arc::new(client), Arc::new(store), DebugLog::off()),
             session,

@@ -3,20 +3,18 @@
 //! market's queue does when the market turns a request down. The queue's
 //! real pace, minutes and all, is tested on paused time beside it; these run
 //! at a quick one over real requests.
-//!
-//! Also the wallet, which Steam tells over the CM connection.
 
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{sync::Arc, time::Duration};
 
+use chrono::{TimeDelta, Utc};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
+use game::AppId;
+use money::{Currency, Money};
+use price::{Lookup, MarketPause, Price, PriceQuote};
+use price_data::{MarketClient, MarketPace, SteamMarketClient};
 use steam_api::{
     EResult, SteamClient,
-    cm::WalletInfo,
-    market::{Listed, Market, MarketPace, OrderBook},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
 use wiremock::{
@@ -38,16 +36,15 @@ fn quick() -> MarketPace {
 }
 
 /// Waits until a moment after Steam's pause ends, by its own end.
-async fn past(pause: steam_api::market::MarketPause) {
-    let left = pause
-        .until
-        .duration_since(SystemTime::now())
-        .unwrap_or_default();
+async fn past(pause: MarketPause) {
+    let left = (pause.until - Utc::now()).to_std().unwrap_or_default();
     tokio::time::sleep(left + Duration::from_millis(50)).await;
 }
 
-/// A session signed in as the stand-in's account, with the site at `site`.
-fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamClient {
+/// The market as a session signed in as the stand-in's account sees it,
+/// with the site at `site`, and a wallet in dollars.
+fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamMarketClient {
+    steam.wallet_in(1);
     let dir = std::env::temp_dir().join(format!("steamcards-market-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -61,10 +58,12 @@ fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamClient {
         .unwrap();
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
-    SteamClient::with_endpoints(store, &DebugLog::off(), endpoints).with_market_pace(quick())
+    let session = SteamClient::with_endpoints(store, &DebugLog::off(), endpoints);
+    SteamMarketClient::with_pace(Arc::new(session), quick())
 }
 
-/// A page of `search/render`: `total` cards in all, these on this page.
+/// A page of `search/render`: `total` cards in all, these on this page, in
+/// dollars.
 fn page(total: u32, start: u32, cards: &[(&str, i64)]) -> ResponseTemplate {
     let results: Vec<_> = cards
         .iter()
@@ -107,6 +106,18 @@ fn search() -> wiremock::MockBuilder {
         .and(query_param("sort_dir", "asc"))
 }
 
+/// A known price's quote.
+fn quote(price: &Price) -> PriceQuote {
+    match price {
+        Price::Known(quote) => quote.clone(),
+        other => panic!("not known: {other:?}"),
+    }
+}
+
+fn dollars(cents: i64) -> Money {
+    Money::new(cents, Currency::USD)
+}
+
 #[tokio::test]
 async fn a_sets_cards_are_read_a_page_at_a_time_signed_in() {
     let steam = FakeSteam::start().await;
@@ -129,24 +140,20 @@ async fn a_sets_cards_are_read_a_page_at_a_time_signed_in() {
         .respond_with(page(12, 10, &[("Intro (Trading Card)", 8), ("The Lab", 8)]))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "pages");
+    let market = signed_in(&steam, &site, "pages");
 
-    let Market::Answer(listed) = session.market_search(620, false).await.unwrap() else {
-        panic!("not paused");
+    let Lookup::Found(cards) = market.look_up_set(AppId(620), false).await.unwrap() else {
+        panic!("found");
     };
 
-    assert_eq!(listed.len(), 12, "both pages");
+    assert_eq!(cards.len(), 12, "both pages");
+    assert_eq!(cards[10].name, "Intro", "named as the set names it");
+    assert_eq!(cards[10].market_hash_name, "620-Intro (Trading Card)");
+    let intro = quote(&cards[10].price);
     assert_eq!(
-        listed[10],
-        Listed {
-            hash_name: "620-Intro (Trading Card)".into(),
-            name: "Intro".into(),
-            sell_price: 8,
-            sell_price_text: "$0.08".into(),
-            sell_listings: 40,
-            item_type: "Portal 2 Trading Card".into(),
-        },
-        "named as the set names it"
+        (intro.ask, intro.ask_depth),
+        (Some(dollars(8)), Some(40)),
+        "its lowest listing"
     );
     assert_eq!(site.received_requests().await.unwrap().len(), 2);
 }
@@ -161,15 +168,15 @@ async fn foils_are_asked_for_by_their_border() {
         .respond_with(page(1, 0, &[("Chell (Foil)", 29)]))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "foils");
+    let market = signed_in(&steam, &site, "foils");
 
-    let Market::Answer(listed) = session.market_search(620, true).await.unwrap() else {
-        panic!("not paused");
+    let Lookup::Found(foils) = market.look_up_set(AppId(620), true).await.unwrap() else {
+        panic!("found");
     };
 
-    assert_eq!(listed[0].name, "Chell");
-    assert_eq!(listed[0].hash_name, "620-Chell (Foil)");
-    assert_eq!(listed[0].item_type, "Portal 2 Foil Trading Card");
+    assert_eq!(foils[0].name, "Chell");
+    assert_eq!(foils[0].market_hash_name, "620-Chell (Foil)");
+    assert_eq!(quote(&foils[0].price).ask, Some(dollars(29)));
 }
 
 #[tokio::test]
@@ -180,9 +187,9 @@ async fn a_market_that_doesnt_list_the_cards_says_so() {
         .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"success":false}"#))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "unlisted");
+    let market = signed_in(&steam, &site, "unlisted");
 
-    let e = session.market_search(620, false).await.unwrap_err();
+    let e = market.look_up_set(AppId(620), false).await.unwrap_err();
 
     assert_eq!(e.to_string(), "the market didn't list the cards");
 }
@@ -214,32 +221,28 @@ async fn order_books_are_read_in_either_shape() {
         .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"data":{"success":false}}"#))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "books");
+    let market = signed_in(&steam, &site, "books");
+    let offers = |book: Lookup<Price>| {
+        let Lookup::Found(price) = book else {
+            panic!("found");
+        };
+        let quote = quote(&price);
+        (quote.ask, quote.bid, quote.ask_depth, quote.bid_depth)
+    };
+    let pounds = |pence| Some(Money::new(pence, Currency::GBP));
 
     assert_eq!(
-        session.order_book("620-Chell").await.unwrap(),
-        Market::Answer(OrderBook {
-            lowest_ask: 5,
-            highest_bid: 4,
-            sell_orders: 4662,
-            buy_orders: 41763,
-            currency: 2,
-        }),
+        offers(market.look_up_offers("620-Chell").await.unwrap()),
+        (pounds(5), pounds(4), Some(4662), Some(41763)),
         "wrapped in an outer data"
     );
     assert_eq!(
-        session.order_book("220-G-Man").await.unwrap(),
-        Market::Answer(OrderBook {
-            lowest_ask: 11,
-            highest_bid: 8,
-            sell_orders: 2005,
-            buy_orders: 34378,
-            currency: 2,
-        }),
+        offers(market.look_up_offers("220-G-Man").await.unwrap()),
+        (pounds(11), pounds(8), Some(2005), Some(34378)),
         "bare"
     );
     assert!(
-        session.order_book("730-SAS").await.is_err(),
+        market.look_up_offers("730-SAS").await.is_err(),
         "a name it doesn't know"
     );
 }
@@ -265,19 +268,16 @@ async fn an_order_book_that_comes_as_a_page_signed_in_is_asked_for_signed_out() 
         ))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "fallback");
+    let market = signed_in(&steam, &site, "fallback");
 
-    let book = session.order_book("730-FBI").await.unwrap();
+    let Lookup::Found(price) = market.look_up_offers("730-FBI").await.unwrap() else {
+        panic!("found");
+    };
 
+    let fbi = quote(&price);
     assert_eq!(
-        book,
-        Market::Answer(OrderBook {
-            lowest_ask: 4,
-            highest_bid: 3,
-            sell_orders: 156_076,
-            buy_orders: 2,
-            currency: 1,
-        }),
+        (fbi.ask, fbi.bid, fbi.ask_depth, fbi.bid_depth),
+        (Some(dollars(4)), Some(dollars(3)), Some(156_076), Some(2)),
         "in whichever currency the signed-out answer says"
     );
     let asked = site.received_requests().await.unwrap();
@@ -303,16 +303,16 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
         .respond_with(page(1, 0, &[("Chell", 6)]))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "paused");
+    let market = signed_in(&steam, &site, "paused");
     let requests = || async { site.received_requests().await.unwrap().len() };
 
-    let Market::Paused(first) = session.market_search(620, false).await.unwrap() else {
+    let Lookup::Paused(first) = market.look_up_set(AppId(620), false).await.unwrap() else {
         panic!("paused");
     };
     assert_eq!(first.step, Duration::from_millis(400));
     assert!(matches!(
-        session.order_book("620-Chell").await.unwrap(),
-        Market::Paused(_)
+        market.look_up_offers("620-Chell").await.unwrap(),
+        Lookup::Paused(_)
     ));
     assert_eq!(
         requests().await,
@@ -321,23 +321,19 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     );
 
     past(first).await;
-    let Market::Paused(again) = session.market_search(620, false).await.unwrap() else {
+    let Lookup::Paused(again) = market.look_up_set(AppId(620), false).await.unwrap() else {
         panic!("paused");
     };
     assert_eq!(again.step, Duration::from_millis(800), "twice as long");
-    assert_eq!(session.market_pause(), Some(again));
+    assert_eq!(market.pause(), Some(again));
     assert_eq!(requests().await, 2, "one request to see");
 
     past(again).await;
     assert!(matches!(
-        session.market_search(620, false).await.unwrap(),
-        Market::Answer(_)
+        market.look_up_set(AppId(620), false).await.unwrap(),
+        Lookup::Found(_)
     ));
-    assert_eq!(
-        session.market_pause(),
-        None,
-        "over once a request gets through"
-    );
+    assert_eq!(market.pause(), None, "over once a request gets through");
 }
 
 #[tokio::test]
@@ -345,12 +341,12 @@ async fn without_a_sign_in_the_market_goes_unasked() {
     let steam = FakeSteam::start().await;
     steam.refuse_logon(EResult::TRY_ANOTHER_CM);
     let site = MockServer::start().await;
-    let session = signed_in(&steam, &site, "unasked");
+    let market = signed_in(&steam, &site, "unasked");
 
-    let answer = session.market_search(620, false).await.unwrap();
+    let answer = market.look_up_set(AppId(620), false).await.unwrap();
 
     assert!(
-        matches!(&answer, Market::Unanswered(why) if why.contains("TryAnotherCM")),
+        matches!(&answer, Lookup::Unanswered(why) if why.contains("TryAnotherCM")),
         "{answer:?}"
     );
     assert!(site.received_requests().await.unwrap().is_empty());
@@ -360,17 +356,17 @@ async fn without_a_sign_in_the_market_goes_unasked() {
 async fn a_pause_from_before_a_restart_is_kept() {
     let steam = FakeSteam::start().await;
     let site = MockServer::start().await;
-    let session = signed_in(&steam, &site, "kept");
-    let pause = steam_api::market::MarketPause {
-        until: SystemTime::now() + Duration::from_secs(20 * 60),
+    let market = signed_in(&steam, &site, "kept");
+    let pause = MarketPause {
+        until: Utc::now() + TimeDelta::minutes(20),
         step: Duration::from_secs(20 * 60),
     };
 
-    session.resume_market_pause(pause);
+    market.resume(pause);
 
     assert!(matches!(
-        session.market_search(620, false).await.unwrap(),
-        Market::Paused(p) if p.step == pause.step
+        market.look_up_set(AppId(620), false).await.unwrap(),
+        Lookup::Paused(p) if p.step == pause.step
     ));
     assert!(site.received_requests().await.unwrap().is_empty());
 }
@@ -383,82 +379,15 @@ async fn a_server_error_is_asked_once_more_then_reported() {
         .respond_with(ResponseTemplate::new(502))
         .mount(&site)
         .await;
-    let session = signed_in(&steam, &site, "server-error");
+    let market = signed_in(&steam, &site, "server-error");
 
-    let answer = session.market_search(620, false).await.unwrap();
+    let answer = market.look_up_set(AppId(620), false).await.unwrap();
 
     assert_eq!(
         answer,
-        Market::Unanswered("steamcommunity.com's market said 502 Bad Gateway, twice".into()),
+        Lookup::Unanswered("steamcommunity.com's market said 502 Bad Gateway, twice".into()),
         "no answer: nothing wrong with the cards asked for"
     );
     assert_eq!(site.received_requests().await.unwrap().len(), 2);
-    assert_eq!(session.market_pause(), None, "not a pause");
-}
-
-/// Waits until the signed-on connection has heard of the wallet.
-async fn wallet_told(session: &SteamClient) {
-    for _ in 0..100 {
-        if session.current().and_then(|c| c.wallet()).is_some() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("Steam never told of the wallet");
-}
-
-#[tokio::test]
-async fn the_wallet_is_kept_when_the_connection_goes_unasked() {
-    let steam = FakeSteam::start().await;
-    steam.wallet_in(2);
-    let site = MockServer::start().await;
-    let session = signed_in(&steam, &site, "wallet-kept");
-    let pounds = WalletInfo {
-        has_wallet: true,
-        currency: 2,
-    };
-
-    session.connection().await.unwrap();
-    wallet_told(&session).await;
-    session.disconnect().await;
-    assert_eq!(session.wallet(), Some(pounds), "signed off: a pause");
-
-    session.connection().await.unwrap();
-    wallet_told(&session).await;
-    steam.hang_up();
-    steam.wallet_unsaid();
-    while session.current().is_some() {
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    session.connection().await.unwrap();
-    assert_eq!(
-        session.wallet(),
-        Some(pounds),
-        "a lost connection's, until a new one says"
-    );
-}
-
-#[tokio::test]
-async fn the_wallet_is_what_steam_says_as_a_session_signs_on() {
-    let steam = FakeSteam::start().await;
-    steam.wallet_in(2);
-    let site = MockServer::start().await;
-    let session = signed_in(&steam, &site, "wallet");
-    assert_eq!(session.wallet(), None, "not signed on yet");
-
-    session.connection().await.unwrap();
-
-    let pounds = WalletInfo {
-        has_wallet: true,
-        currency: 2,
-    };
-    assert_eq!(session.wallet(), Some(pounds));
-    session.disconnect().await;
-    assert_eq!(
-        session.wallet(),
-        Some(pounds),
-        "kept when the connection goes"
-    );
-    session.forget().unwrap();
-    assert_eq!(session.wallet(), None, "forgotten with the sign-in");
+    assert_eq!(market.pause(), None, "not a pause");
 }
