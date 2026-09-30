@@ -549,7 +549,7 @@ None of them shows an ETA that learns from real drops, which card dropped, or an
 
 | # | Question or risk | Why it matters | How to settle it |
 | --- | --- | --- | --- |
-| 1 | Does Steam fill in `unseen_items` for card drops in a session like steamcards'? Does it depend on the "new item" notification setting? Is there a cap (xPaw's TODO mentions "if reaching 100")? | It is the main route for identifying drops | Log 5576 on the next few drops. Fallback A covers any gap |
+| 1 | Does Steam fill in `unseen_items` for card drops in a session like steamcards'? Does it depend on the "new item" notification setting? Is there a cap (xPaw's TODO mentions "if reaching 100")? | It is the main route for identifying drops | **Answered live, 2026-09-30: yes.** Asked at sign-on, Steam listed two unseen card drops with `appid` 753, `context_id` 6, `asset_id`, `rtime32_gained` and `source_appid` (the game) all filled in. With nothing unseen, it didn't answer at all, so an answer only counts if it comes promptly. The cap is still unknown |
 | 2 | The currency of signed-in search/render is untested | USD set prices can't be added to totals in the wallet currency | Make one signed-in request from a non-USD wallet |
 | 3 | Does search/render list a card that has no listings? | It decides whether a missing card is "no market" or a failure | Find a set with an unlisted card |
 | 4 | The signed-in order book sometimes returns HTML (SEE PR #333, open) | The fallback answers in the IP country's currency | Check the content type, and count how often it happens |

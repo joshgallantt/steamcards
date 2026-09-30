@@ -157,10 +157,12 @@ done, and move it into a numbered section if it grows.
       numbered from the account's counts, the market's failures are told
       from a market it couldn't ask, and another account's sign-in ends
       the session.
-- [ ] Try it on the real account. The first real drops and prices answer
-      the research's open questions 1 to 3 (§6); `STEAMCARDS_DEBUG` keeps
-      what Steam announces of each drop, and the foil badge page's markup
-      is still modelled, not seen.
+- [~] Try it on the real account (2026-09-30). The wallet's currency came through, prices are looked up at the intended pace, and Steam lists
+      unseen card drops with their asset IDs and games (research §6,
+      question 1, answered). With nothing unseen it doesn't answer at
+      all, which misfiled the first drop; fixed. Still to see: prices in
+      another currency (question 2), unlisted cards (question 3), and the
+      foil badge page's markup.
 - [ ] If the first drops show Steam's announcements leave asset IDs out
       (research §6, question 1), build the inventory fallback (§2.3 A):
       the community inventory read over CM at sign-on, then diffed as
