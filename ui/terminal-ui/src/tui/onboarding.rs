@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use super::{
-    CONTINUE_ROW, Ctx, dashboard,
+    CONTINUE_ROW, Ctx, format, overlays,
     theme::{self, ACCENT, BAD, BUSY, GOOD},
     widgets::{
         centered, first_fit, fit, flash_line, hints, keycap, scroll, selected_row, spread, width,
@@ -219,7 +219,7 @@ fn sign_in(cx: &Ctx<'_>, w: usize, room: usize) -> Card {
         Span::raw(" "),
         Span::styled(fit("Steam", 9), theme::steam()),
     ];
-    left.extend(dashboard::account_badge(cx));
+    left.extend(overlays::account_badge(cx));
     let right = if cursor == 0 {
         vec![Span::raw(format!("{} › ", sign_in_label(cx)))]
     } else {
@@ -407,7 +407,7 @@ pub(super) fn game_facts(r: &GameRow, room: usize) -> Vec<Span<'static>> {
         1 => "1 card to drop".to_owned(),
         n => format!("{n} cards to drop"),
     };
-    let played = dashboard::hours(r.hours);
+    let played = format::hours(r.hours);
     first_fit(
         vec![
             vec![dim(format!("  {left} · {played} played "))],
@@ -428,7 +428,7 @@ fn start(cx: &Ctx<'_>, w: usize, room: usize) -> Card {
         Span::raw(" "),
         Span::styled(fit("Steam", LABEL), theme::steam()),
     ];
-    spans.extend(dashboard::account_badge(cx));
+    spans.extend(overlays::account_badge(cx));
     head.push(Line::from(spans));
 
     let games: Vec<String> = cx

@@ -502,12 +502,14 @@ fn gap_span(n: usize) -> Span<'static> {
 }
 
 /// Whether every hint fits in `w` columns, none dropped.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn all_fit(pairs: &[Hint], w: usize) -> bool {
     pairs.iter().map(Hint::cost).sum::<usize>() + 2 * pairs.len().saturating_sub(1) <= w
 }
 
 /// Hints as lines, as many to a line as fit, for keys that don't all fit in
 /// a pop-up's border.
+#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn pack_hints(pairs: &[Hint], w: usize) -> Fits<Vec<Line<'static>>> {
     let mut out = Vec::new();
     let mut cur: Vec<Hint> = Vec::new();

@@ -2,7 +2,11 @@
 // the account, signing in, games, the full log, a game's details (narrow
 // windows), help, and quit confirmation.
 
-use crate::viewmodel::{Haul, MarketView, Priced, Snapshot};
+use std::time::Duration;
+
+use crate::viewmodel::{Haul, LogKind, MarketView, Priced, QueueEntry, Snapshot};
+use farming::Mode;
+use preferences::Tier;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -12,11 +16,11 @@ use ratatui::{
 };
 
 use super::{
-    Ctx, GamesView, LogView, LoginView, Overlay, dashboard, format, layout, onboarding,
-    theme::{self, ACCENT, BAD, BUSY, GOOD, SELECT},
+    Ctx, GamesView, LogView, Logged, LoginView, Overlay, format, layout, onboarding,
+    theme::{self, ACCENT, BAD, BUSY, GOOD, LINK, SELECT},
     widgets::{
-        centered, fit, flash_line, hints, keycap, qr, scroll, selected_row, spread, truncate,
-        wrap_text,
+        centered, fit, flash_line, hints, keycap, qr, rule, scroll, selected_row, spread, truncate,
+        wrap_list, wrap_text,
     },
 };
 
@@ -174,7 +178,7 @@ fn account(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, confirm: bool) {
         Span::raw(" "),
         Span::styled(fit("Steam", 9), theme::steam()),
     ];
-    left.extend(dashboard::account_badge(cx));
+    left.extend(account_badge(cx));
     let mut right = match cx.account {
         Some(a) if a.expired => vec![Span::styled("sign in again", theme::fg(BAD))],
         Some(_) if cx.app.farming.is_running() => vec![Span::styled("farming", theme::fg(GOOD))],
@@ -516,7 +520,7 @@ fn log(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, v: &LogView) -> (usize, usiz
     } else {
         let lines: Vec<Line<'_>> = cx.app.log[off..(off + h).min(n)]
             .iter()
-            .map(|e| dashboard::log_line(e, cx.app.clock.zone(), false))
+            .map(|e| log_line(e, cx.app.clock.zone(), false))
             .collect();
         f.render_widget(Paragraph::new(lines), inner);
     }
@@ -531,9 +535,9 @@ fn detail(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
     };
     let w = area.width.saturating_sub(4).min(78);
     let inner_w = w.saturating_sub(6) as usize;
-    let mut lines = dashboard::detail_info(e, cx, inner_w);
+    let mut lines = detail_info(e, cx, inner_w);
     lines.push(Line::default());
-    lines.extend(dashboard::tier_controls(e, inner_w));
+    lines.extend(tier_controls(e, inner_w));
     let keys = hints(
         &[("↑↓", "previous / next game", 1), ("esc", "close", 0)],
         inner_w,
@@ -788,4 +792,342 @@ fn confirm_quit(f: &mut Frame<'_>, area: Rect) {
     let keys = hints(&[("y", "quit", 0), ("n", "keep farming", 0)], 50);
     let inner = modal(f, area, 60, fit_height(lines.len()), "Quit", keys);
     f.render_widget(Paragraph::new(lines), inner);
+}
+
+// ── What the old pop-ups draw with ───────────────────────────────────────────
+//
+// Kept from the old dashboard until the pop-ups are drawn as the spec draws
+// them: the account's badge, a game's details and its farm priority, and a
+// line of the log.
+
+/// Hours a game needs before its cards drop: what the farmer works to.
+const HOURS_BEFORE_DROPS: f64 = 3.0;
+/// Width of the field labels in the details pop-up.
+const LABEL: usize = 10;
+/// Log lines older than this fade.
+const FRESH: Duration = Duration::from_secs(20);
+
+/// What a game is doing, drawn the same way everywhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum State {
+    /// Played on its own: its cards are dropping.
+    Farming,
+    /// Played with others, building hours.
+    Hours,
+    Queued,
+    Done,
+}
+
+impl State {
+    fn of(e: &QueueEntry) -> Self {
+        if !e.game.has_drops_left() {
+            Self::Done
+        } else {
+            match e.playing {
+                Some(Mode::Cards) => Self::Farming,
+                Some(Mode::Hours) => Self::Hours,
+                None => Self::Queued,
+            }
+        }
+    }
+
+    fn style(self) -> Style {
+        match self {
+            Self::Farming => theme::strong(GOOD),
+            Self::Hours | Self::Done => theme::fg(GOOD),
+            Self::Queued => theme::dim(),
+        }
+    }
+}
+
+/// "● cardfarmer", "✕ sign-in expired" or "○ not signed in".
+pub(super) fn account_badge(cx: &Ctx<'_>) -> Vec<Span<'static>> {
+    match cx.account {
+        Some(a) if a.expired => vec![Span::styled(
+            format!("{} sign-in expired", theme::FAILED),
+            theme::fg(BAD),
+        )],
+        Some(a) => {
+            let who = if a.name.is_empty() {
+                "signed in"
+            } else {
+                a.name.as_str()
+            };
+            vec![Span::styled(
+                format!("{} {who}", theme::SIGNED_IN),
+                theme::fg(GOOD),
+            )]
+        }
+        None => vec![dim(format!("{} not signed in", theme::IDLE))],
+    }
+}
+
+/// Everything about one game — its state and what that means, hours, drops,
+/// its card set — for the side panel or the pop-up.
+fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'static>> {
+    let g = &e.game;
+    let state = State::of(e);
+    let mut out = Vec::new();
+
+    let badge = match g.badge_level {
+        0 => "no badge yet".to_owned(),
+        n => format!("badge level {n}"),
+    };
+    out.push(Line::from(vec![
+        dim(format!("App {}", g.app_id)),
+        dim("  ·  "),
+        dim(badge),
+    ]));
+    out.push(Line::default());
+
+    // The same state the queue shows, then what it means for this game.
+    let others = cx
+        .queue
+        .entries()
+        .filter(|x| x.playing.is_some() && x.game.app_id != g.app_id)
+        .count();
+    let first = cx
+        .app
+        .status
+        .as_ref()
+        .and_then(|s| s.order.first().copied());
+    let (headline, meaning): (Span<'static>, String) = match state {
+        State::Farming => (
+            Span::styled(format!("{} Farming now", theme::FARMING), state.style()),
+            "Played on its own, so its cards can drop. Its card page is looked at every quarter \
+             of an hour, and as soon as Steam says new items arrived."
+                .to_owned(),
+        ),
+        State::Hours => (
+            Span::styled(
+                if others == 0 {
+                    format!("{} Building hours", theme::HOURS)
+                } else {
+                    format!("{} Building hours, with {others} others", theme::HOURS)
+                },
+                state.style(),
+            ),
+            format!(
+                "Its cards can drop once it has 3 hours on record: {} to go.",
+                format::hours((HOURS_BEFORE_DROPS - g.hours).max(0.0))
+            ),
+        ),
+        State::Done => (
+            Span::styled(
+                format!("{} Every card has dropped", theme::DONE),
+                state.style(),
+            ),
+            String::new(),
+        ),
+        State::Queued if e.tier == Tier::Skip => (
+            Span::styled(format!("{} Skipped", theme::SKIPPED), theme::fg(BAD)),
+            "Never farmed. Press 0 to farm it after your priorities, or 1-9 to rank it.".to_owned(),
+        ),
+        State::Queued if !e.wanted => (
+            Span::styled("Not farmed", theme::bold()),
+            "\"Only priority\" is on, and it isn't one of your priority games.".to_owned(),
+        ),
+        State::Queued if first == Some(g.app_id) => (
+            Span::styled("Next up", theme::bold()),
+            "Farmed as soon as what's playing now is done.".to_owned(),
+        ),
+        State::Queued => (
+            Span::styled("Queued", theme::bold()),
+            match e.tier {
+                Tier::Priority(_) => "Farmed before everything ranked below it.".to_owned(),
+                _ => "Farmed after your priority games.".to_owned(),
+            },
+        ),
+    };
+    out.push(Line::from(headline));
+    out.extend(
+        wrap_text(&meaning, w)
+            .into_iter()
+            .filter(|l| !l.is_empty())
+            .map(|l| Line::styled(l, theme::dim())),
+    );
+    out.push(Line::default());
+
+    let mut played = vec![Span::raw(format!("{} on record", format::hours(g.hours)))];
+    if g.hours < HOURS_BEFORE_DROPS && g.has_drops_left() && w >= LABEL + 30 {
+        played.push(dim("  ·  cards drop from 3h"));
+    }
+    out.push(field("Hours", played));
+    out.push(field(
+        "Drops",
+        if g.has_drops_left() {
+            vec![
+                Span::raw(format!("{} of {}", g.drops.received, g.drops.total())),
+                dim(format!("  ·  {} to go", g.drops.remaining)),
+            ]
+        } else {
+            vec![Span::styled(
+                format!("all {} dropped", g.drops.total()),
+                theme::fg(GOOD),
+            )]
+        },
+    ));
+    let collected = if g.cards.is_empty() {
+        vec![dim("not looked at yet")]
+    } else {
+        vec![Span::raw(format!(
+            "{} of {} collected",
+            g.cards_collected(),
+            g.cards.len()
+        ))]
+    };
+    out.push(field("Cards", collected));
+    let mut page = vec![dim(fit("Page", LABEL))];
+    page.push(keycap("o"));
+    page.push(dim(" open its card page"));
+    out.push(Line::from(page));
+
+    if !g.cards.is_empty() {
+        out.push(Line::default());
+        out.push(rule(
+            vec![Span::styled("Cards", theme::heading())],
+            vec![vec![dim(if g.has_full_set() {
+                "a full set".to_owned()
+            } else {
+                format!("{} of {}", g.cards_collected(), g.cards.len())
+            })]],
+            w,
+            theme::dim(),
+        ));
+        let names: Vec<String> = g
+            .cards
+            .iter()
+            .map(|c| match c.owned {
+                0 => c.name.clone(),
+                1 => format!("{} {}", theme::DONE, c.name),
+                n => format!("{} {} ×{n}", theme::DONE, c.name),
+            })
+            .collect();
+        out.extend(
+            wrap_list(&names, w, 3)
+                .into_iter()
+                .map(|l| Line::styled(l, theme::plain())),
+        );
+    }
+    out
+}
+
+/// The game's tier as a set of radio buttons, each with the key that picks
+/// it — so ranking is discoverable right where the game is shown.
+fn tier_controls(e: &QueueEntry, w: usize) -> Vec<Line<'static>> {
+    let mut out = vec![rule(
+        vec![Span::styled("Farm priority", theme::heading())],
+        Vec::new(),
+        w,
+        theme::dim(),
+    )];
+    if !e.game.has_drops_left() {
+        let done = format!(
+            " {} Nothing left to farm: every card has dropped.",
+            theme::DONE
+        );
+        out.extend(
+            wrap_text(&done, w)
+                .into_iter()
+                .map(|l| Line::styled(l, theme::fg(GOOD))),
+        );
+        return out;
+    }
+    let priority = match e.tier {
+        Tier::Priority(n) => format!("Priority #{n}"),
+        _ => "Priority".to_owned(),
+    };
+    let options = [
+        (
+            matches!(e.tier, Tier::Priority(_)),
+            priority,
+            "1-9",
+            theme::strong(BUSY),
+        ),
+        (
+            e.tier == Tier::Indifferent,
+            "Indifferent".to_owned(),
+            "0",
+            theme::bold(),
+        ),
+        (
+            e.tier == Tier::Skip,
+            "Skip".to_owned(),
+            "x",
+            theme::strong(BAD),
+        ),
+    ];
+    const OPTION: usize = 13;
+    // The descriptions come as a set — long, short, or none — so the three
+    // lines always match.
+    let room = w.saturating_sub(3 + OPTION + 1 + 5 + 2);
+    let sets = [
+        [
+            "farmed first, in rank order",
+            "after your priorities",
+            "never farmed",
+        ],
+        ["farmed first", "after priorities", "never farmed"],
+    ];
+    let whats = sets
+        .iter()
+        .find(|set| set.iter().all(|d| d.len() <= room))
+        .copied()
+        .unwrap_or(["", "", ""]);
+    for ((on, label, key, style), what) in options.into_iter().zip(whats) {
+        let (radio, label_style) = if on {
+            (Span::styled(format!(" {} ", theme::RADIO_ON), style), style)
+        } else {
+            (dim(format!(" {} ", theme::RADIO_OFF)), theme::plain())
+        };
+        out.push(Line::from(vec![
+            radio,
+            Span::styled(fit(&label, OPTION), label_style),
+            Span::raw(" "),
+            keycap(&format!("{key:^3}")),
+            Span::raw("  "),
+            dim(what),
+        ]));
+    }
+    out
+}
+
+fn field(label: &str, value: Vec<Span<'static>>) -> Line<'static> {
+    let mut spans = vec![dim(fit(label, LABEL))];
+    spans.extend(value);
+    Line::from(spans)
+}
+
+/// A log entry: time, icon, text. `fade` greys out older entries.
+fn log_line(e: &Logged, zone: chrono::FixedOffset, fade: bool) -> Line<'static> {
+    let kind = e.entry.kind;
+    let style = match kind {
+        LogKind::Dropped | LogKind::Playing => theme::fg(GOOD),
+        LogKind::MovedOn => theme::fg(LINK),
+        LogKind::Waiting | LogKind::Warning => theme::fg(BUSY),
+        LogKind::Error => theme::fg(BAD),
+        LogKind::Info | LogKind::Progress => theme::dim(),
+    };
+    let stale = fade && e.received.elapsed() > FRESH;
+    let text_style = match kind {
+        _ if stale => theme::dim(),
+        LogKind::Progress => theme::dim(),
+        LogKind::Dropped => theme::fg(GOOD),
+        LogKind::Error => theme::fg(BAD),
+        _ => theme::plain(),
+    };
+    let at = e.entry.at.with_timezone(&zone);
+    let time = if fade {
+        at.format("%H:%M")
+    } else {
+        at.format("%H:%M:%S")
+    };
+    Line::from(vec![
+        dim(format!(" {time}  ")),
+        Span::styled(
+            format!("{} ", kind.glyph()),
+            if stale { theme::dim() } else { style },
+        ),
+        Span::styled(e.entry.text.clone(), text_style),
+    ])
 }

@@ -6,18 +6,15 @@
 mod dashboard;
 #[cfg(test)]
 mod fixtures;
-#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
 pub(crate) mod format;
 #[cfg(test)]
 mod golden;
-#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
 mod layout;
 mod onboarding;
 mod overlays;
 #[cfg(test)]
 mod preview;
 mod small;
-#[cfg_attr(not(test), expect(dead_code, reason = "drawn by the dashboard stage"))]
 mod text;
 mod theme;
 mod widgets;
@@ -49,8 +46,6 @@ use crate::viewmodel::{
 };
 
 const MAX_LOG: usize = 1000;
-/// Below this width the details panel folds into a pop-up (enter).
-const WIDE: u16 = 100;
 const FLASH_FOR: Duration = Duration::from_secs(4);
 const LOGIN_DONE_FOR: Duration = Duration::from_millis(1500);
 /// How old the library may be when a screen showing it opens.
@@ -163,7 +158,6 @@ struct Ctx<'a> {
     queue: &'a Queue,
     account: Option<&'a SignedIn>,
     prefs: &'a Preferences,
-    now: DateTime<Utc>,
     progress: &'a Progress,
     strip: Strip,
 }
@@ -179,10 +173,6 @@ impl Ctx<'_> {
 
     fn signed_in(&self) -> bool {
         self.account.is_some()
-    }
-
-    fn expired(&self) -> bool {
-        self.account.is_some_and(|a| a.expired)
     }
 }
 
@@ -226,7 +216,6 @@ pub struct App {
     /// The flash says a change didn't stick.
     flash_failed: bool,
     tick: usize,
-    width: u16,
     quit: bool,
 }
 
@@ -265,7 +254,6 @@ impl App {
             flash: None,
             flash_failed: false,
             tick: 0,
-            width: 0,
             quit: false,
         }
     }
@@ -369,13 +357,6 @@ impl App {
         if !ev.message.is_empty() {
             self.push_log(LogKind::of(ev.kind), ev.message);
         }
-    }
-
-    /// Cards dropped this session.
-    fn dropped(&self) -> u32 {
-        self.status.as_ref().map_or(0, |s| {
-            u32::try_from(s.session.drops.len()).unwrap_or(u32::MAX)
-        })
     }
 
     /// Works the time to finish out again when a card has dropped, the farm
@@ -1112,7 +1093,6 @@ impl App {
 
     fn draw(&mut self, f: &mut Frame<'_>) {
         let area = f.area();
-        self.width = area.width;
         let known = self.known();
         if layout::size_class(area.width, area.height) == layout::SizeClass::TooSmall {
             small::render(
@@ -1122,26 +1102,26 @@ impl App {
             );
             return;
         }
-        let queue = Queue::build(&self.snapshot(&known), self.selected);
-        let progress = Progress::build(&self.snapshot(&known), self.estimated);
         let (queue_offset, log_scroll) = {
+            let s = self.snapshot(&known);
+            let queue = Queue::build(&s, self.selected);
+            let progress = Progress::build(&s, self.estimated);
             let cx = Ctx {
                 app: self,
                 queue: &queue,
                 account: known.account.as_ref(),
                 prefs: &known.prefs,
-                now: self.clock.now(),
                 progress: &progress,
-                strip: self.strip(&self.snapshot(&known)),
+                strip: self.strip(&s),
             };
             let queue_offset = match self.onboarding.step() {
                 Some(step) => {
                     onboarding::render(f, area, &cx, step);
                     self.queue_offset
                 }
-                None => dashboard::render(f, area, &cx),
+                None => dashboard::render(f, &cx, &s),
             };
-            let log_scroll = overlays::render(f, area, &cx, &self.snapshot(&known));
+            let log_scroll = overlays::render(f, area, &cx, &s);
             (queue_offset, log_scroll)
         };
         self.queue_offset = queue_offset;

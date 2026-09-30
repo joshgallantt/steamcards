@@ -507,7 +507,7 @@ Stray has just been ranked #1. It's short of 3 hours, so the farmer plays it tog
 
 ```mockup 120x30 building hours with the 12-game group
  steamcards   ● farming for 8h 17m · since 09:14              Steam ● alice · appears offline · keeping awake   [?] help
-╭ Progress ───────────────── 2.1 drops an hour, learnt from 16 in 7h 40m farming alone · incl. ≈ 3h of building hours ─╮
+╭ Progress ───────────────── 2.1 drops an hour, learnt from 16 in 7h 33m farming alone · incl. ≈ 3h of building hours ─╮
 │ ≈ 4d 21h to finish · around Sun 4 Oct · 80%: 3d 13h – 6d 15h                   VALUE · list prices  [b]              │
 │ This session  16 of 252 drops  ━━────────────────────────  6% · 5 of 62 games  ≥ £1.45 this session · 3 unpriced     │
 │ Your library  183 of 421 drops ━━━━━━━━━━━─────────────── 43% · 5 of 63 games  ≈ £15.34 still to drop                │
@@ -689,15 +689,15 @@ Hades is being played on the user's PC. The header says "waiting" and why; Progr
 
 ### e. Nothing left to farm, with the session's summary, 120 × 30
 
-The end of the library, five days on. Progress becomes the session's summary, and checks the estimate against what happened: the first estimate with a likely range, made after the second card, against the time it took. For a session longer than a day the track shows days and foils, not every drop. The Done section is open (c), newest first, with when each game finished.
+The end of the library, five days on. Progress becomes the session's summary, and checks the estimate against what happened: the first estimate with a likely range, made after the second card, against the time it took. For a session longer than a day the track shows days and foils, not every drop. The Done section is open (c), newest first, with when each game finished. With nothing left to farm, this session's cards come before the chosen game's prices: the chosen game takes its richest form that leaves the haul 6 cards, so here its set is one line.
 
 ```mockup 120x30 nothing left to farm, with the session's summary
  steamcards   ○ nothing to farm                                               Steam ● alice · appears offline   [?] help
 ╭ Progress ──────────────────────────────────────────────────────────────────────────────────── Tue 09:14 – Sun 17:44 ─╮
-│ ○ Nothing left to farm: all done or skipped. It looks again at 01:44, or as soon as you rank or unskip a game.       │
+│ ○ Nothing left to farm: all done or skipped. It looks again at Mon 01:44, or as soon as you rank or unskip a game.   │
 │ THIS SESSION                            THE ESTIMATE                              VALUE · list prices  [b]           │
 │ 252 of 252 drops, from 62 games         said ≈ 5d 6h at 10:12 on Tue, after the   ≥ £17.31 · 4 cards not priced      │
-│ in 5d 8h 30m · 2.1 drops an hour        second card; it took 5d 8h from then,     ★ 2 foils: Thanatos, The Lamb      │
+│ in 5d 8h · 2.1 drops an hour            second card; it took 5d 8h from then,     ★ 2 foils: Thanatos, The Lamb      │
 │ Your library: 419 of 421 drops          inside its 80% band, 2d 18h – 10d 1h      estimated ≈ £16.79, excl. foils    │
 │ Tue 09:14 ────★──────┼─────────────────┼────────────────┼────────★────────┼─────────────────┼───────────── Sun 17:44 │
 │               Tue            Wed              Thu               Fri               Sat            Sun                 │
@@ -710,7 +710,7 @@ The end of the library, five days on. Progress becomes the session's summary, an
 │    ✕   Counter-Strike 2           350h   0/2 ○○                  never ││  ○ Priority     [1-9]  farmed first        │
 │ ── DONE · 62 this session, newest first ──────────────── [c] to hide ─ ││  ◉ Indifferent  [ 0 ]  after priorities    │
 │ ›✓     Vampire Survivors          5.1h   5/5 ◆◆◆◆◆             ✓ 17:44 ││  ○ Skip         [ x ]  never farmed        │
-│  ✓     Warframe                    18h   6/6 ◆◆◆◆◆◆            ✓ 15:12 │╰ [enter] all   [o] card page ───────────────╯
+│  ✓     Warframe                    18h   6/6 ●●◆◆◆◆            ✓ 15:12 │╰ [enter] all   [o] card page ───────────────╯
 │  ✓     Valheim                    3.9h   5/5 ◆◆◆◆◆             ✓ 12:31 │╭ This session · 252 ───────────── ≥ £17.31 ─╮
 │  ✓     Terraria                   4.1h   5/5 ◆◆◆◆◆             ✓ 09:58 ││ 14:36 Excalibur · Warframe           £0.04 │
 │  ✓     Spiritfarer                3.8h   5/5 ◆◆◆◆◆             ✓ 07:40 ││ 15:12 Mag · Warframe                 £0.03 │
@@ -718,7 +718,7 @@ The end of the library, five days on. Progress becomes the session's summary, an
 │  ✓     Return of the Obra Dinn    3.9h   5/5 ◆◆◆◆◆             ✓ 02:47 ││ 16:20 Imelda · Vampire Survivors     £0.04 │
 │  ✓     Raft                       4.2h   5/5 ◆◆◆◆◆             ✓ 00:13 ││ 16:51 Pasqualina · Vampire Survivors £0.05 │
 │  ✓     Pentiment                  3.7h   5/5 ◆◆◆◆◆           Sat 21:50 ││ 17:18 Gennaro · Vampire Survivors    £0.04 │
-│  ✓     Oddworld: Soulstorm        4.0h   5/5 ◆◆◆◆◆           Sat 19:24 ││ 17:44 Antonio (2nd) · Vampire Survivors  … │
+│  ✓     Oddworld: Soulstorm        4.0h   5/5 ◆◆◆◆◆           Sat 19:24 ││ 17:44 Antonio, 2nd copy · Vampire…   £0.05 │
 ╰ ● had ◆ this session ★ foil ○ to come ───────────────────── 52 more ↓ ─╯╰ 245 earlier ↑ · [h] all ────── 4 unpriced ─╯
  17:44  ✓ Every card has dropped for Vampire Survivors — nothing left to farm
  [↑↓] choose  [enter] details  │  [h] haul  [m] market  [g] games  [a] account  [l] log  [p] pause  [?] help  [q] quit
@@ -809,7 +809,7 @@ The connection was lost: steamcards tries again by itself.
 │        Desperados III                   3.4h   5/9 ●●●●●○○○○             13h │
 │        Graveyard Keeper                 3.4h   5/9 ●●●●●○○○○             15h │
 ╰ ▶ farming  ▷ hours  ✕ skipped  ● had ◆ today ★ foil ○ to come ─── 47 more ↓ ─╯
- 17:30  ✕ Lost touch with Steam (connection reset): trying every minute
+ 17:30  ✕ Lost touch with Steam (the connection was reset): trying every minute
  [↑↓] choose  [enter] details  │  [h] haul  [p] pause  [?] help  [q] quit
 ```
 
