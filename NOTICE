@@ -14,3 +14,9 @@ were rewritten in Rust for steamcards; no ASF source code is included.
 
 Steam's message definitions follow Valve's own .proto files, as published by
 SteamDatabase (https://github.com/SteamDatabase/Protobufs).
+
+The market's currencies, how amounts are written in them, and Steam's fee
+rules (component/market/domain/src/money.rs and model.rs) follow Valve's own
+scripts for steamcommunity.com, global.js and economy_common.js, as published
+by SteamTracking (https://github.com/SteamTracking/SteamTracking). They were
+rewritten in Rust for steamcards.

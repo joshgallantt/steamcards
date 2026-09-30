@@ -1,6 +1,6 @@
 [package]
 name = "config-file"
-description = "The one JSON file steamcards keeps: the saved Steam sign-in and preferences."
+description = "The JSON files steamcards keeps: the saved Steam sign-in, the preferences and the market's settings, and the market's prices."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

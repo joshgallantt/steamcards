@@ -1,15 +1,26 @@
-//! The one JSON file steamcards keeps. Where it lives is the composition
-//! root's decision; this crate opens the path it is given.
+//! The JSON files steamcards keeps: the config file, with the saved sign-in,
+//! the preferences and the market's settings, and beside it, the market's
+//! prices (see [`PriceCache`]). Where they live is the composition root's
+//! decision; this crate opens the paths it is given.
 //!
-//! Storage only: it knows the file's shape, not what any of it means. What a
+//! Storage only: it knows the files' shape, not what any of it means. What a
 //! valid sign-in is belongs to the Steam client; what a preference means
-//! belongs to the `preferences` component.
+//! belongs to the `preferences` component, and a price to `market`.
 //!
-//! The file holds a sign-in, so on macOS and Linux only its owner can read it.
+//! The config file holds a sign-in, so on macOS and Linux only its owner can
+//! read it.
 
-use std::{fs, path::PathBuf, sync::Mutex};
+mod prices;
+
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use serde::{Deserialize, Serialize};
+
+pub use prices::{PriceCache, StoredCard, StoredPrice, StoredSet};
 
 /// The saved Steam sign-in, as stored.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,6 +56,32 @@ pub struct StoredPreferences {
     pub appear_online: bool,
 }
 
+/// The market's settings, and Steam's pause on market requests, as stored.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StoredMarket {
+    /// The value basis: "list", "net" or "instant". Empty for the default.
+    pub basis: String,
+    /// Steam's pause on market requests, when there is one.
+    pub pause: Option<StoredPause>,
+}
+
+/// Steam's pause on market requests, as stored.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoredPause {
+    /// When it ends, in seconds since the epoch.
+    pub until: i64,
+    /// How long it is, in seconds.
+    pub step: u64,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+struct MarketDto {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    basis: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pause: Option<StoredPause>,
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct SteamDto {
     #[serde(default)]
@@ -71,6 +108,8 @@ struct FileDto {
     only_priority: bool,
     #[serde(default)]
     appear_online: bool,
+    #[serde(default)]
+    market: MarketDto,
 }
 
 pub struct ConfigFile {
@@ -113,6 +152,24 @@ impl ConfigFile {
         })
     }
 
+    pub fn market(&self) -> StoredMarket {
+        let m = self.model.lock().unwrap();
+        StoredMarket {
+            basis: m.market.basis.clone(),
+            pause: m.market.pause,
+        }
+    }
+
+    /// Writes first, then keeps, as the preferences are saved.
+    pub fn save_market_basis(&self, basis: String) -> anyhow::Result<()> {
+        self.update(|m| m.market.basis = basis)
+    }
+
+    /// Writes first, then keeps. `None` once there's no pause.
+    pub fn save_market_pause(&self, pause: Option<StoredPause>) -> anyhow::Result<()> {
+        self.update(|m| m.market.pause = pause)
+    }
+
     fn update(&self, change: impl FnOnce(&mut FileDto)) -> anyhow::Result<()> {
         let mut model = self.model.lock().unwrap();
         let mut next = model.clone();
@@ -123,20 +180,25 @@ impl ConfigFile {
     }
 
     fn persist(&self, model: &FileDto) -> anyhow::Result<()> {
-        if let Some(dir) = self.path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        let data = serde_json::to_vec_pretty(model)?;
-        let tmp = self.path.with_extension("json.tmp");
-        write_private(&tmp, &data)?;
-        fs::rename(&tmp, &self.path)?;
-        Ok(())
+        write_whole(&self.path, &serde_json::to_vec_pretty(model)?)
     }
+}
+
+/// Writes `data` as the whole of the file at `path`, or nothing: to a file
+/// beside it first, then renamed over it.
+fn write_whole(path: &Path, data: &[u8]) -> anyhow::Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    write_private(&tmp, data)?;
+    fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 /// Writes `data` to `path`, readable and writable by its owner alone.
 #[cfg(unix)]
-fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
     use std::{io::Write, os::unix::fs::OpenOptionsExt};
 
     // A file left over from a failed write may have looser permissions.
@@ -152,7 +214,7 @@ fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
 /// Writes `data` to `path`. Elsewhere than macOS and Linux, the folder's own
 /// permissions decide who can read it.
 #[cfg(not(unix))]
-fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
     fs::write(path, data)
 }
 
@@ -258,6 +320,52 @@ mod tests {
         assert_eq!(creds.login_id, 7);
         assert_eq!(file.preferences().priority_games, [620]);
         assert!(file.preferences().only_priority);
+    }
+
+    #[test]
+    fn the_market_settings_and_steams_pause_are_kept_with_the_rest() {
+        let path = temp("market");
+        let file = ConfigFile::open(path.clone()).unwrap();
+        file.save_credentials(signed_in()).unwrap();
+        file.save_market_basis("net".into()).unwrap();
+        let pause = StoredPause {
+            until: 1_790_712_345,
+            step: 1_200,
+        };
+        file.save_market_pause(Some(pause)).unwrap();
+
+        let reopened = ConfigFile::open(path.clone()).unwrap();
+        assert_eq!(
+            reopened.market(),
+            StoredMarket {
+                basis: "net".into(),
+                pause: Some(pause),
+            }
+        );
+        assert_eq!(
+            reopened.credentials(),
+            Some(signed_in()),
+            "and nothing else changed"
+        );
+        let json: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            json["market"],
+            serde_json::json!({"basis": "net", "pause": {"until": 1_790_712_345, "step": 1_200}})
+        );
+
+        reopened.save_market_pause(None).unwrap();
+        assert_eq!(ConfigFile::open(path).unwrap().market().pause, None);
+    }
+
+    #[test]
+    fn a_file_from_before_the_market_reads_with_its_defaults() {
+        let path = temp("before-market");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, r#"{"priority_games":[620]}"#).unwrap();
+        assert_eq!(
+            ConfigFile::open(path).unwrap().market(),
+            StoredMarket::default()
+        );
     }
 
     #[cfg(unix)]

@@ -53,6 +53,18 @@ fn allowed(from: Layer) -> &'static [Layer] {
     }
 }
 
+/// Which components each domain crate may use: the arrows between components
+/// (docs/design/ui.md §6.6). Farming and the market never meet: whatever
+/// shows a session's cards joins the two.
+fn components(domain: &str) -> Option<&'static [&'static str]> {
+    Some(match domain {
+        "account" | "library" | "preferences" => &[],
+        "farming" => &["library", "preferences"],
+        "market" => &["library"],
+        _ => return None,
+    })
+}
+
 /// Read at run time, not compile time, so a moved checkout still finds itself.
 #[expect(
     clippy::disallowed_methods,
@@ -90,7 +102,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        20,
+        23,
         "a crate was added or removed; place it in a layer above"
     );
 
@@ -115,6 +127,44 @@ fn every_dependency_points_inward() {
     assert!(
         wrong.is_empty(),
         "dependencies pointing the wrong way:\n{}",
+        wrong.join("\n")
+    );
+}
+
+#[test]
+fn components_use_only_the_components_they_name() {
+    let out = metadata();
+    let meta: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let packages = meta["packages"].as_array().unwrap();
+    let is_domain =
+        |p: &serde_json::Value| layer(p["manifest_path"].as_str().unwrap()) == Layer::Domain;
+    let domains: Vec<&str> = packages
+        .iter()
+        .filter(|p| is_domain(p))
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+
+    let mut wrong = Vec::new();
+    for p in packages.iter().filter(|p| is_domain(p)) {
+        let name = p["name"].as_str().unwrap();
+        let Some(may) = components(name) else {
+            wrong.push(format!("{name}: a component the table above doesn't have"));
+            continue;
+        };
+        for dep in p["dependencies"].as_array().unwrap() {
+            let dep_name = dep["name"].as_str().unwrap();
+            let is_dev = dep["kind"].as_str() == Some("dev");
+            if is_dev || dep_name == name || !domains.contains(&dep_name) {
+                continue;
+            }
+            if !may.contains(&dep_name) {
+                wrong.push(format!("{name} → {dep_name}"));
+            }
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "components using ones they don't name:\n{}",
         wrong.join("\n")
     );
 }

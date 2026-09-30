@@ -21,6 +21,7 @@ pub(crate) mod emsg {
     pub(crate) const CLIENT_LOGGED_OFF: u32 = 757;
     pub(crate) const CLIENT_GAMES_PLAYED_WITH_DATA_BLOB: u32 = 5410;
     pub(crate) const CLIENT_LOGON: u32 = 5514;
+    pub(crate) const CLIENT_WALLET_INFO_UPDATE: u32 = 5528;
     pub(crate) const CLIENT_ITEM_ANNOUNCEMENTS: u32 = 5576;
     pub(crate) const CLIENT_REQUEST_ITEM_ANNOUNCEMENTS: u32 = 5577;
     pub(crate) const CLIENT_PLAYING_SESSION_STATE: u32 = 9600;
@@ -208,6 +209,18 @@ pub(crate) struct UnseenItem {
 /// of. Nothing in it: the answer is a `ClientItemAnnouncements`.
 #[derive(Clone, PartialEq, Message)]
 pub(crate) struct ClientRequestItemAnnouncements {}
+
+/// `CMsgClientWalletInfoUpdate`: the account's Steam wallet, which Steam
+/// tells a session as it signs on. Its currency is the one the market
+/// answers in, signed in.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ClientWalletInfoUpdate {
+    #[prost(bool, optional, tag = "1")]
+    pub(crate) has_wallet: Option<bool>,
+    /// `ECurrency`.
+    #[prost(int32, optional, tag = "3")]
+    pub(crate) currency: Option<i32>,
+}
 
 /// `EAuthTokenPlatformType_SteamClient`: a sign-in for the Steam client,
 /// whose token signs on to a CM server.

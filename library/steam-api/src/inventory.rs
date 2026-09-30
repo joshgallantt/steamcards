@@ -128,15 +128,21 @@ fn item(asset_id: u64, d: &ItemDescription) -> InventoryItem {
         app_id: game(d),
         trading_card: tagged(d, "item_class", "item_class_2"),
         foil: tagged(d, "cardborder", "cardborder_1"),
-        name: SUFFIXES
-            .iter()
-            .find_map(|s| market_name.strip_suffix(s))
-            .unwrap_or(market_name)
-            .to_owned(),
+        name: card_name(market_name),
         market_hash_name: d.market_hash_name.clone().unwrap_or_default(),
         marketable: d.marketable.unwrap_or_default(),
         tradable: d.tradable.unwrap_or_default(),
     }
+}
+
+/// A card's name as its game's set lists it: its market name without the
+/// suffix Steam adds, if any. The market's search names cards the same way.
+pub(crate) fn card_name(market_name: &str) -> String {
+    SUFFIXES
+        .iter()
+        .find_map(|s| market_name.strip_suffix(s))
+        .unwrap_or(market_name)
+        .to_owned()
 }
 
 /// The game an item is from: its `Game` tag, as ASF reads it; else the app

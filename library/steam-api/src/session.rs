@@ -1,7 +1,8 @@
 //! The saved Steam sign-in, and everything that talks to Steam as it: the
-//! signed-on CM connection and steamcommunity.com. The composition root
-//! builds one, and the account screen and the farmer share it, so when Steam
-//! rejects the sign-in, both know at once.
+//! signed-on CM connection, steamcommunity.com and its market. The
+//! composition root builds one, and the account screen and the farmer share
+//! it, so when Steam rejects the sign-in, both know at once. Its one market
+//! queue is shared the same way.
 
 use std::{
     collections::HashSet,
@@ -21,10 +22,14 @@ use crate::{
     Endpoints,
     auth::{self, Approved},
     badges::{BadgeGame, Seen, read_badge_page, read_game_cards_page, seen_by},
-    cm::{Connection, LogOn, Refused},
+    cm::{Connection, LogOn, Refused, WalletInfo},
     community::{Community, WebLogin},
     directory,
     inventory::{self, Described, InventoryItem},
+    market::{
+        self, Listed, MAX_SET_PAGES, Market, MarketPace, MarketPause, MarketQueue, OrderBook,
+        QUERY_ACTION,
+    },
     token,
 };
 
@@ -52,6 +57,11 @@ pub struct Session {
     connecting: tokio::sync::Mutex<()>,
     /// A token for steamcommunity.com, and when it stops working.
     web: Mutex<Option<(String, i64)>>,
+    /// Every request to the market goes through here, one at a time.
+    market: MarketQueue,
+    /// The account's wallet, as Steam last said: kept when the connection
+    /// goes.
+    wallet: Mutex<Option<WalletInfo>>,
 }
 
 impl Session {
@@ -79,7 +89,16 @@ impl Session {
             live: Mutex::default(),
             connecting: tokio::sync::Mutex::default(),
             web: Mutex::default(),
+            market: MarketQueue::new(MarketPace::default()),
+            wallet: Mutex::default(),
         }
+    }
+
+    /// The same, with the market's requests at another pace: for tests that
+    /// can't wait minutes.
+    pub fn with_market_pace(mut self, pace: MarketPace) -> Self {
+        self.market = MarketQueue::new(pace);
+        self
     }
 
     /// Debug lines about Steam, for everything that talks to it.
@@ -144,6 +163,8 @@ impl Session {
         self.set_rejected(false);
         *self.web.lock().unwrap() = token::read(&approved.access_token)
             .map(|t| (approved.access_token.clone(), t.expires_at));
+        // Perhaps another account's: the next sign-on says.
+        *self.wallet.lock().unwrap() = None;
         self.disconnect().await;
         Ok(())
     }
@@ -155,6 +176,7 @@ impl Session {
         self.store.forget_credentials()?;
         self.set_rejected(false);
         *self.web.lock().unwrap() = None;
+        *self.wallet.lock().unwrap() = None;
         let live = self.live.lock().unwrap().take();
         let Some(creds) = creds else {
             return Ok(());
@@ -298,6 +320,103 @@ impl Session {
             }
         }
         Ok(wanted.iter().filter_map(|id| found.remove(id)).collect())
+    }
+
+    /// The account's wallet, as Steam last said: it says as a session signs
+    /// on. Kept when the connection goes, and forgotten with the sign-in.
+    pub fn wallet(&self) -> Option<WalletInfo> {
+        let live = self.live.lock().unwrap().clone();
+        let mut kept = self.wallet.lock().unwrap();
+        if let Some(wallet) = live.and_then(|conn| conn.wallet()) {
+            *kept = Some(wallet);
+        }
+        *kept
+    }
+
+    /// A game's cards as the market lists them now, normal cards or foils,
+    /// with their lowest listings: every page of `search/render`, signed in,
+    /// each through the market's queue. A card is listed once, should a
+    /// page repeat one.
+    pub async fn market_search(
+        &self,
+        app_id: u32,
+        foil: bool,
+    ) -> anyhow::Result<Market<Vec<Listed>>> {
+        let who = self.web_login(false).await?;
+        let mut listed: Vec<Listed> = Vec::new();
+        let mut start = 0;
+        for _ in 0..MAX_SET_PAGES {
+            let path = market::search_path(app_id, foil, start);
+            let reply = match self
+                .market
+                .send(true, || self.community.get_once(&path, Some(&who), &[]))
+                .await?
+            {
+                Market::Answer(reply) => reply,
+                Market::Paused(pause) => return Ok(Market::Paused(pause)),
+            };
+            let page = market::read_search(&reply.body)?;
+            let read = u32::try_from(page.listed.len()).unwrap_or(u32::MAX);
+            for card in page.listed {
+                if !listed.iter().any(|l| l.hash_name == card.hash_name) {
+                    listed.push(card);
+                }
+            }
+            start += if page.page_size > 0 {
+                page.page_size
+            } else {
+                read
+            };
+            if read == 0 || start >= page.total {
+                break;
+            }
+        }
+        Ok(Market::Answer(listed))
+    }
+
+    /// A card's order book, by its market hash name: asked for signed in,
+    /// since only then is it expected to answer in the wallet's currency,
+    /// and signed out when the answer to that is a web page, as it is for
+    /// some sessions (research §1.1, D5).
+    pub async fn order_book(&self, market_hash_name: &str) -> anyhow::Result<Market<OrderBook>> {
+        let path = market::orderbook_path(market_hash_name);
+        let who = self.web_login(false).await?;
+        let signed_in = self
+            .market
+            .send(true, || {
+                self.community.get_once(&path, Some(&who), &[QUERY_ACTION])
+            })
+            .await?;
+        let reply = match signed_in {
+            Market::Paused(pause) => return Ok(Market::Paused(pause)),
+            Market::Answer(reply) if !reply.html => reply,
+            Market::Answer(_) => {
+                self.log
+                    .line("the order book came as a web page signed in: asking signed out");
+                match self
+                    .market
+                    .send(false, || {
+                        self.community.get_once(&path, None, &[QUERY_ACTION])
+                    })
+                    .await?
+                {
+                    Market::Answer(reply) => reply,
+                    Market::Paused(pause) => return Ok(Market::Paused(pause)),
+                }
+            }
+        };
+        market::read_order_book(&reply.body).map(Market::Answer)
+    }
+
+    /// Steam's pause on market requests, if there is one: while it lasts,
+    /// and once it's over, until a request gets through.
+    pub fn market_pause(&self) -> Option<MarketPause> {
+        self.market.pause()
+    }
+
+    /// Takes up Steam's pause on market requests from before a restart.
+    pub fn resume_market_pause(&self, pause: MarketPause) {
+        self.market.resume(pause);
     }
 
     async fn describe_once(&self, asset_ids: &[u64]) -> anyhow::Result<Described> {

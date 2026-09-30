@@ -1,6 +1,7 @@
 //! Steam, in Steam's own terms: a CM server connection, sign-in with a QR code
 //! the Steam app approves, playing games, the badge pages on
-//! steamcommunity.com, and the items in the account's inventory.
+//! steamcommunity.com, the items in the account's inventory, the account's
+//! wallet, and the market's prices, through one queue at the market's pace.
 //!
 //! No domain knowledge. The data crates map what this returns onto their
 //! domains; this crate never sees a domain type.
@@ -16,6 +17,7 @@ mod community;
 mod directory;
 mod eresult;
 pub mod inventory;
+pub mod market;
 mod packet;
 mod proto;
 mod session;
@@ -36,7 +38,7 @@ pub(crate) const DEVICE_NAME: &str = "steamcards";
 pub struct Endpoints {
     /// Steam's Web API, which lists the CM servers.
     pub api: String,
-    /// The community site, where the badge pages are.
+    /// The community site, where the badge pages and the market are.
     pub community: String,
     /// A CM server to use, in place of asking the Web API for one.
     pub cm: Option<String>,

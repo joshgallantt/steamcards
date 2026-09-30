@@ -1,6 +1,6 @@
 [package]
 name = "steam-api"
-description = "Steam in Steam's own vocabulary: the CM connection, sign-in, playing games, badge pages and the inventory's items."
+description = "Steam in Steam's own vocabulary: the CM connection, sign-in, playing games, badge pages, the inventory's items, the wallet and the market's prices."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -35,4 +35,6 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 steam-api = { path = ".", features = ["test-support"] }
+# The market's pace, on paused time.
+tokio = { workspace = true, features = ["test-util"] }
 wiremock.workspace = true

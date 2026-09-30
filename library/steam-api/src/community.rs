@@ -1,10 +1,11 @@
-//! steamcommunity.com, where the badge pages are. It takes the same sign-in
-//! as the Steam client, as a cookie: `steamLoginSecure`, the account's Steam
-//! ID and a token for the site (see `auth::web_token`). No web sign-in page
-//! is involved, as ASF's `ArchiWebHandler.Init` does it.
+//! steamcommunity.com, where the badge pages and the market are. It takes the
+//! same sign-in as the Steam client, as a cookie: `steamLoginSecure`, the
+//! account's Steam ID and a token for the site (see `auth::web_token`). No web
+//! sign-in page is involved, as ASF's `ArchiWebHandler.Init` does it.
 //!
 //! Requests keep a polite gap between them, and a busy site is asked again a
-//! couple of times before giving up.
+//! couple of times before giving up. The market's requests are asked once
+//! only: its queue decides what a busy answer means (see `market`).
 
 use std::time::Duration;
 
@@ -25,6 +26,15 @@ const BACK_OFF: Duration = Duration::from_millis(500);
 pub(crate) struct WebLogin {
     pub(crate) steam_id: u64,
     pub(crate) access_token: String,
+}
+
+/// What the site answered, whatever it was.
+#[derive(Debug, Clone)]
+pub(crate) struct Reply {
+    pub(crate) status: StatusCode,
+    /// A web page, where something else was asked for.
+    pub(crate) html: bool,
+    pub(crate) body: String,
 }
 
 pub(crate) struct Community {
@@ -53,10 +63,7 @@ impl Community {
     /// The page at `path` (with its query), fetched as `who`.
     pub(crate) async fn page(&self, path: &str, who: &WebLogin) -> anyhow::Result<String> {
         let url = format!("{}{path}", self.base);
-        let cookie = format!(
-            "steamLoginSecure={}%7C%7C{}; sessionid={}; Steam_Language=english",
-            who.steam_id, who.access_token, self.session_id
-        );
+        let cookie = self.cookie(who);
         let mut busy = None;
         for attempt in 1..=TRIES {
             self.wait_turn().await;
@@ -95,6 +102,54 @@ impl Community {
         ))
     }
 
+    /// One request for `path` (with its query), signed in as `who` or signed
+    /// out, and nothing more: whatever the answer, it's not asked again. The
+    /// market's requests come here, and its queue decides what a busy answer
+    /// means.
+    pub(crate) async fn get_once(
+        &self,
+        path: &str,
+        who: Option<&WebLogin>,
+        headers: &[(&str, &str)],
+    ) -> anyhow::Result<Reply> {
+        self.wait_turn().await;
+        let mut request = self.http.get(format!("{}{path}", self.base));
+        if let Some(who) = who {
+            request = request.header(header::COOKIE, self.cookie(who));
+        }
+        for &(name, value) in headers {
+            request = request.header(name, value);
+        }
+        let answer = request
+            .send()
+            .await
+            .map_err(|e| anyhow!("steamcommunity.com didn't answer ({e})"))?;
+        let status = answer.status();
+        let page = answer
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|t| t.to_str().ok())
+            .is_some_and(|t| t.contains("text/html"));
+        let body = answer
+            .text()
+            .await
+            .map_err(|e| anyhow!("steamcommunity.com's answer didn't arrive ({e})"))?;
+        let html = page || body.trim_start().starts_with('<');
+        self.log.line(&format!(
+            "{path}: {status}{}",
+            if html { ", a web page" } else { "" }
+        ));
+        Ok(Reply { status, html, body })
+    }
+
+    /// The cookie that signs a request in as `who`.
+    fn cookie(&self, who: &WebLogin) -> String {
+        format!(
+            "steamLoginSecure={}%7C%7C{}; sessionid={}; Steam_Language=english",
+            who.steam_id, who.access_token, self.session_id
+        )
+    }
+
     /// Waits until the gap since the last request has passed.
     async fn wait_turn(&self) {
         let mut last = self.last.lock().await;
@@ -109,7 +164,7 @@ impl Community {
 mod tests {
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
-        matchers::{header_regex, method, path},
+        matchers::{header, header_regex, method, path},
     };
 
     use super::*;
@@ -170,6 +225,53 @@ mod tests {
             community.page("/x", &who()).await.unwrap();
         }
         assert!(started.elapsed() >= GAP * 2, "two gaps between three pages");
+    }
+
+    #[tokio::test]
+    async fn a_market_request_is_asked_once_whatever_the_answer() {
+        let site = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(429))
+            .mount(&site)
+            .await;
+        let community = Community::new(reqwest::Client::new(), site.uri(), DebugLog::off());
+
+        let reply = community.get_once("/market/x", None, &[]).await.unwrap();
+
+        assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            site.received_requests().await.unwrap().len(),
+            1,
+            "no quick retries"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_market_request_signed_out_carries_no_cookie() {
+        let site = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(header("x-valve-request-type", "queryAction"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/html; charset=UTF-8")
+                    .set_body_string("<!DOCTYPE html><html></html>"),
+            )
+            .mount(&site)
+            .await;
+        let community = Community::new(reqwest::Client::new(), site.uri(), DebugLog::off());
+
+        let reply = community
+            .get_once(
+                "/market/x",
+                None,
+                &[("X-Valve-Request-Type", "queryAction")],
+            )
+            .await
+            .unwrap();
+
+        assert!(reply.html, "a web page, not the JSON asked for");
+        let asked = &site.received_requests().await.unwrap()[0];
+        assert!(!asked.headers.contains_key("cookie"));
     }
 
     #[tokio::test]
