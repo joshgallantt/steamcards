@@ -27,8 +27,8 @@ use crossterm::{
 use farming::{EventKind, FarmingEvent, FarmingSession, FarmingStatus, farm_order};
 use futures::StreamExt;
 use game::SteamLibrary;
-use market::{MarketEvent, MarketEventKind, PriceBook, Wallet};
 use preferences::{Preferences, PreferencesError, Tier};
+use price::{PriceBook, PriceEvent, PriceEventKind, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 
 use crate::viewmodel::{
@@ -303,10 +303,10 @@ impl App {
 
     /// The market's word, in the log: with the game's name where it gives
     /// only its app ID. Routine rounds go in the log only.
-    fn on_market_event(&mut self, ev: MarketEvent) {
+    fn on_market_event(&mut self, ev: PriceEvent) {
         let (kind, text) = match ev.kind {
-            MarketEventKind::Paused(_) => (EventKind::Warning, ev.message),
-            MarketEventKind::Failed(app_id) => {
+            PriceEventKind::Paused(_) => (EventKind::Warning, ev.message),
+            PriceEventKind::Failed(app_id) => {
                 let name = self.known_library().game(app_id).map(|g| g.name.clone());
                 let text = match name {
                     Some(name) => ev.message.replace(&format!("app {app_id}"), &name),
@@ -314,8 +314,8 @@ impl App {
                 };
                 (EventKind::Warning, text)
             }
-            MarketEventKind::Resumed => (EventKind::Info, ev.message),
-            MarketEventKind::AllPriced { .. } | MarketEventKind::Unanswered { .. } => {
+            PriceEventKind::Resumed => (EventKind::Info, ev.message),
+            PriceEventKind::AllPriced { .. } | PriceEventKind::Unanswered { .. } => {
                 (EventKind::Progress, ev.message)
             }
         };

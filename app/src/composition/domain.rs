@@ -2,8 +2,8 @@ use account_di::AccountComponent;
 use card_di::CardComponent;
 use farming_di::FarmingComponent;
 use game_di::GameComponent;
-use market_di::MarketComponent;
 use preferences_di::PreferencesComponent;
+use price_di::PriceComponent;
 
 use super::DataAssembler;
 
@@ -13,7 +13,7 @@ pub(crate) struct DomainAssembler {
     pub game: GameComponent,
     pub preferences: PreferencesComponent,
     pub farming: FarmingComponent,
-    pub market: MarketComponent,
+    pub price: PriceComponent,
 }
 
 impl DomainAssembler {
@@ -32,14 +32,14 @@ impl DomainAssembler {
             card.describe.clone(),
             preferences.get.clone(),
         );
-        let market =
-            MarketComponent::new(data.steam.clone(), data.config.clone(), data.prices.clone());
+        let price =
+            PriceComponent::new(data.steam.clone(), data.config.clone(), data.prices.clone());
         Self {
             account,
             game,
             preferences,
             farming,
-            market,
+            price,
         }
     }
 }

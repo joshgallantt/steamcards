@@ -1261,6 +1261,6 @@ mod tests {
             },
             badge_level: 0,
         };
-        assert_eq!(value_to_come(&g, &market::PriceBook::default(), None), None);
+        assert_eq!(value_to_come(&g, &price::PriceBook::default(), None), None);
     }
 }

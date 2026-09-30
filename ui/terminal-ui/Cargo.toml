@@ -18,7 +18,7 @@ account.workspace = true
 farming.workspace = true
 game.workspace = true
 card.workspace = true
-market.workspace = true
+price.workspace = true
 money.workspace = true
 preferences.workspace = true
 anyhow.workspace = true
@@ -36,6 +36,6 @@ account = { workspace = true, features = ["test-support"] }
 farming = { workspace = true, features = ["test-support"] }
 game = { workspace = true, features = ["test-support"] }
 card = { workspace = true, features = ["test-support"] }
-market = { workspace = true, features = ["test-support"] }
+price = { workspace = true, features = ["test-support"] }
 preferences = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

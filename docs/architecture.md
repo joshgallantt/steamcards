@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `market` | Domain |
-| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `market-data` | Domain, Library |
-| DI | `account-di`, `game-di`, `card-di`, `preferences-di`, `farming-di`, `market-di` | Domain, Data, Library |
+| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `price` | Domain |
+| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
+| DI | `account-di`, `game-di`, `card-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `terminal-ui`, `headless` | Domain |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -29,8 +29,8 @@ Two things enforce this table:
    table doesn't allow. It also fails if a production dependency enables
    `test-support`, and if a domain crate uses a component its own table
    doesn't name: `card` may use `game`; `farming` `game`, `card` and
-   `preferences`; `market` `game`, `card` and `money`. So farming and the
-   market never meet.
+   `preferences`; `price` `game`, `card` and `money`. So farming and the
+   prices never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -80,8 +80,8 @@ The domain starts from its entities:
   A game's **`SetPrices`** hold its normal cards and foils as the market
   lists them; the **`PriceBook`** holds every set, and each card's best
   offers looked up.
-- **`Basis`** (list, net or instant) in **`MarketSettings`**, the market's own
-  settings; **`MarketPause`**, Steam's pause on price lookups, which outlasts
+- **`Basis`** (list, net or instant) in **`PriceSettings`**, the price
+  component's own settings; **`MarketPause`**, Steam's pause on price lookups, which outlasts
   a restart.
 - **`HeldCard`**: a card held, as far as its value goes: from a `CardAsset`,
   or just a name and a border. **`Held`** is what cards held are worth, at
@@ -101,7 +101,7 @@ component/<name>/domain/src/
 `farming` adds `ranking.rs` (what to play, and how: pure), `forecast.rs`
 (the time to finish: pure), `session.rs` (the session, kept between runs of
 the farmer, and which card each drop was), `rules.rs` (every number it runs
-on, with where it comes from) and `reporter.rs`. `market` adds
+on, with where it comes from) and `reporter.rs`. `price` adds `clock.rs`,
 `valuation.rs` (what cards are worth: pure, so every figure can be checked
 by hand) and `rules.rs`. `money` is its models alone, a file each:
 `Currency`, with Valve's table of currencies as a `match`, and `Money`.
@@ -144,11 +144,11 @@ constructor builds the real one over the repositories. Call sites read
 | | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | market | `GetPrices` (`get_prices`) | The price book now. |
 | | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
-| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `MarketEvent`s. |
+| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
 | | `RefreshPrices` (`refresh_prices`) | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
 | | `PriceOffers` (`price_offers`) | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
 | | `GetWallet` (`get_wallet`) | The wallet, once Steam has said. |
-| | `GetMarketSettings` (`get_market_settings`), `SetBasis` (`set_basis`) | The value basis, and choosing it. |
+| | `GetPriceSettings` (`get_price_settings`), `SetBasis` (`set_basis`) | The value basis, and choosing it. |
 
 The market's use cases that keep time take a `Clock`: the system's, or in a
 test, one that moves with tokio's paused time.
@@ -171,10 +171,10 @@ call.
 `farm_cards` and `end_session` share a `SessionKeeper`, which the DI crate
 makes: it keeps the session from one run of the farmer to the next.
 
-`market` depends on `game` and `card` for their entities alone: it values
-`CardAsset`s, a game's set and the drops still to come, handed to it. It never depends on
-`farming`, nor `farming` on it; whatever shows a session's cards joins the
-two.
+`price` depends on `game` and `card` for their entities alone: it values
+`CardAsset`s, a game's set and the drops still to come, handed to it. It
+never depends on `farming`, nor `farming` on it; whatever shows a session's
+cards joins the two.
 
 ### Repository contracts
 
@@ -185,11 +185,11 @@ two.
 | `CardRepository` | `card` | `SteamCardRepository` in `card-data` |
 | `PreferencesRepository` | `preferences` | `FilePreferencesRepository` in `preferences-data` |
 | `PlayRepository` | `farming` | `SteamPlayRepository` in `farming-data` |
-| `MarketRepository` | `market` | `SteamMarketRepository` in `market-data` |
+| `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
 
 Use cases return errors in the user's vocabulary (`LinkError::Refused`,
 `UnlinkError::Unavailable`, `PreferencesError::Unavailable`,
-`GameError::Unavailable`, `CardError::Unavailable`, `MarketError::Paused`).
+`GameError::Unavailable`, `CardError::Unavailable`, `PriceError::Paused`).
 Repository contracts
 return `anyhow::Result` with a reason written for the user; the use case
 decides what it means. Farming's failures are the log lines the user reads,
@@ -211,7 +211,7 @@ straight away, and signing in again clears it.
 every `/market/` request goes through, one at a time (research §1.3): signed
 in, 5 seconds apart and up to a second more; signed out, 12. A 429 pauses
 every market request for 10 minutes, then one goes to see, doubling the
-pause to an hour at most; `market-data` keeps the pause in the config file,
+pause to an hour at most; `price-data` keeps the pause in the config file,
 so it outlasts a restart. A server error is asked once more, 30 seconds
 later; the site's quick retries never apply to the market. The `Session`
 also keeps the wallet Steam tells of as it signs on (CM message 5528).
@@ -270,10 +270,10 @@ types are named, in three phases, each handed only the one before it:
 | Phase | Builds | From |
 | --- | --- | --- |
 | `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::Session`, `KeepAwake` | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `PreferencesComponent`, `FarmingComponent`, `MarketComponent` | `DataAssembler` |
+| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
-`MarketComponent` takes the `Session`, the `ConfigFile` and a `PriceCache`
+`PriceComponent` takes the `Session`, the `ConfigFile` and a `PriceCache`
 whose file sits beside the config (`prices.json`); `Settings` works out
 where.
 
@@ -333,7 +333,7 @@ graph TD
         CDI[card-di]
         PDI[preferences-di]
         FDI[farming-di]
-        MDI[market-di]
+        PRDI[price-di]
     end
 
     subgraph DATA["component/*/data"]
@@ -342,7 +342,7 @@ graph TD
         CD[card-data]
         PD[preferences-data]
         FD[farming-data]
-        MD[market-data]
+        PRD[price-data]
     end
 
     subgraph DOMAIN["component/*/domain"]
@@ -352,7 +352,7 @@ graph TD
         CARD[card]
         PREF[preferences]
         FARM[farming]
-        MKT[market]
+        PRICE[price]
     end
 
     subgraph LIBS["library/"]
@@ -362,24 +362,24 @@ graph TD
         KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & GDI & CDI & PDI & FDI & MDI & CF & SA & DL & KA
-    TUI --> ACC & GAME & CARD & PREF & FARM & MKT & MON
+    APP --> TUI & HL & ADI & GDI & CDI & PDI & FDI & PRDI & CF & SA & DL & KA
+    TUI --> ACC & GAME & CARD & PREF & FARM & PRICE & MON
     HL --> ACC & FARM
     ADI --> AD
     GDI --> GD
     CDI --> CD
     PDI --> PD
     FDI --> FD
-    MDI --> MD
+    PRDI --> PRD
     AD --> ACC & SA
     GD --> GAME & SA
     CD --> CARD & GAME & SA
     PD --> PREF & CF
     FD --> FARM & SA & KA
-    MD --> MKT & MON & SA & CF
+    PRD --> PRICE & MON & SA & CF
     CARD --> GAME
     FARM --> GAME & CARD & PREF
-    MKT --> GAME & CARD & MON
+    PRICE --> GAME & CARD & MON
     SA --> CF & DL
     KA --> DL
 ```

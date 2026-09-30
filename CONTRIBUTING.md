@@ -182,7 +182,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── card/          Each game's cards: its set, its foils, and the copies you hold.
 │   ├── preferences/   What you want farmed first.
 │   ├── farming/       What to play, playing it, and this session's drops.
-│   ├── market/        What cards are worth: prices and the wallet.
+│   ├── price/         What cards are worth: prices and the wallet.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, badge pages, the market.
@@ -337,7 +337,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferences`
 
 ### What that buys
 
-- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `MarketRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one function per use case, so the games pop-up holds the preference functions it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the acceptance tests drive the real `farm_cards` over an in-memory Steam, and the farmer can't tell the difference.
@@ -352,7 +352,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `market` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `price` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
@@ -360,7 +360,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 | App | `steamcards` | Domain, DI, Library, Presentation |
 | Tooling | `xtask` | nothing in the workspace |
 
-The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using one it shouldn't (farming never uses market), and on production code enabling a `test-support` feature.
+The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using one it shouldn't (farming never uses price), and on production code enabling a `test-support` feature.
 
 **Rust features this codebase doesn't use:** extension traits, global `static` state, `Deref` as inheritance, reading the environment outside [`app/src/settings.rs`](app/src/settings.rs), glob imports, printing outside presentation, and `unsafe`. [`app/tests/language_rules.rs`](app/tests/language_rules.rs), the workspace lints and [`clippy.toml`](clippy.toml) check them. [docs/architecture.md](docs/architecture.md#rust-features-this-codebase-doesnt-use) says why each one is out, and what to do instead.
 

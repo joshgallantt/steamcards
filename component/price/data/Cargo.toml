@@ -1,0 +1,29 @@
+[package]
+name = "price-data"
+description = "Card prices from the Steam market, the wallet from Steam, and the market's settings and prices kept on disk, written to fit the price domain's PriceRepository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+price.workspace = true
+money.workspace = true
+config-file.workspace = true
+steam-api.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+debug-log.workspace = true
+serde_json.workspace = true
+steam-api = { workspace = true, features = ["test-support"] }
+tokio-util.workspace = true
+wiremock.workspace = true

@@ -1656,49 +1656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "market"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "card",
- "chrono",
- "game",
- "market",
- "money",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "market-data"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "config-file",
- "debug-log",
- "market",
- "money",
- "serde_json",
- "steam-api",
- "tokio",
- "tokio-util",
- "wiremock",
-]
-
-[[package]]
-name = "market-di"
-version = "0.1.0"
-dependencies = [
- "config-file",
- "market",
- "market-data",
- "steam-api",
-]
-
-[[package]]
 name = "markup5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2189,6 +2146,49 @@ dependencies = [
  "config-file",
  "preferences",
  "preferences-data",
+]
+
+[[package]]
+name = "price"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "card",
+ "chrono",
+ "game",
+ "money",
+ "price",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "price-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "config-file",
+ "debug-log",
+ "money",
+ "price",
+ "serde_json",
+ "steam-api",
+ "tokio",
+ "tokio-util",
+ "wiremock",
+]
+
+[[package]]
+name = "price-di"
+version = "0.1.0"
+dependencies = [
+ "config-file",
+ "price",
+ "price-data",
+ "steam-api",
 ]
 
 [[package]]
@@ -2935,8 +2935,8 @@ dependencies = [
  "game-di",
  "headless",
  "keep-awake",
- "market-di",
  "preferences-di",
+ "price-di",
  "serde_json",
  "steam-api",
  "terminal-ui",
@@ -3087,9 +3087,9 @@ dependencies = [
  "farming",
  "futures",
  "game",
- "market",
  "money",
  "preferences",
+ "price",
  "qrcode",
  "ratatui",
  "serde_json",

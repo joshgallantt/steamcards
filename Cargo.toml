@@ -24,9 +24,9 @@ members = [
     "component/farming/domain",
     "component/farming/data",
     "component/farming/di",
-    "component/market/domain",
-    "component/market/data",
-    "component/market/di",
+    "component/price/domain",
+    "component/price/data",
+    "component/price/di",
     "library/config-file",
     "library/debug-log",
     "library/keep-awake",
@@ -97,7 +97,7 @@ game = { path = "component/game/domain" }
 card = { path = "component/card/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
-market = { path = "component/market/domain" }
+price = { path = "component/price/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
@@ -105,7 +105,7 @@ game-data = { path = "component/game/data" }
 card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
-market-data = { path = "component/market/data" }
+price-data = { path = "component/price/data" }
 
 # DI
 account-di = { path = "component/account/di" }
@@ -113,7 +113,7 @@ game-di = { path = "component/game/di" }
 card-di = { path = "component/card/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
-market-di = { path = "component/market/di" }
+price-di = { path = "component/price/di" }
 
 # Library
 config-file = { path = "library/config-file" }

@@ -20,13 +20,13 @@ use farming::{
     test_support::idle_farmer,
 };
 use game::{CardDrops, Game, SteamLibrary, test_support::fixed_library};
-use market::{
-    PriceBook,
-    test_support::{fixed_prices, pounds, set_prices},
-};
 use preferences::{
     Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
     test_support::InMemoryPreferencesRepository,
+};
+use price::{
+    PriceBook,
+    test_support::{fixed_prices, pounds, set_prices},
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 

@@ -61,7 +61,7 @@ fn components(domain: &str) -> Option<&'static [&'static str]> {
         "money" | "account" | "game" | "preferences" => &[],
         "card" => &["game"],
         "farming" => &["game", "card", "preferences"],
-        "market" => &["game", "card", "money"],
+        "price" => &["game", "card", "money"],
         _ => return None,
     })
 }

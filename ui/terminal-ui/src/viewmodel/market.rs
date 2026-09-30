@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use market::{
-    GetPrices, GetWallet, MarketEvent, PriceBook, RefreshPrices, Wallet, WantPrices, WatchPrices,
+use price::{
+    GetPrices, GetWallet, PriceBook, PriceEvent, RefreshPrices, Wallet, WantPrices, WatchPrices,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -15,8 +15,8 @@ pub struct Market {
     watch: WatchPrices,
     refresh: RefreshPrices,
     wallet: GetWallet,
-    tx: mpsc::Sender<MarketEvent>,
-    events: mpsc::Receiver<MarketEvent>,
+    tx: mpsc::Sender<PriceEvent>,
+    events: mpsc::Receiver<PriceEvent>,
     watching: Option<CancellationToken>,
     /// The games last asked for, so the watcher hears only of a change.
     wanted: Vec<u32>,
@@ -75,7 +75,7 @@ impl Market {
         drop((self.refresh)(app_id));
     }
 
-    pub fn try_recv(&mut self) -> Option<MarketEvent> {
+    pub fn try_recv(&mut self) -> Option<PriceEvent> {
         self.events.try_recv().ok()
     }
 

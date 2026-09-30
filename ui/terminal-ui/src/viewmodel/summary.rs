@@ -3,10 +3,10 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use farming::{DropCard, FarmingSession, forecast};
 use game::{Game, SteamLibrary};
-use market::{
+use money::Money;
+use price::{
     Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
 };
-use money::Money;
 
 /// Cards are valued at their market price: what buyers pay, the lowest
 /// listing on the Steam market.
@@ -260,11 +260,11 @@ mod tests {
     use chrono::TimeZone;
     use farming::{Drop, Mode, Stretch};
     use game::CardDrops;
-    use market::{
+    use money::Currency;
+    use price::{
         PriceQuote, PricedCard, QuoteSource, SetPrices,
         test_support::{listing, pounds},
     };
-    use money::Currency;
 
     use super::*;
 

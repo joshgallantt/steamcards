@@ -42,11 +42,11 @@ impl PresentationAssembler {
             Library::new(d.game.read.clone()),
             Onboarding::new(d.account.get.clone()),
             Market::new(
-                d.market.prices.clone(),
-                d.market.want.clone(),
-                d.market.watch.clone(),
-                d.market.refresh.clone(),
-                d.market.wallet.clone(),
+                d.price.prices.clone(),
+                d.price.want.clone(),
+                d.price.watch.clone(),
+                d.price.refresh.clone(),
+                d.price.wallet.clone(),
             ),
         )
     }
