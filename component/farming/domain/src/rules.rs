@@ -28,8 +28,9 @@ pub(crate) const AFTER_NEW_ITEMS: Duration = Duration::from_secs(2);
 /// `MaxFarmingTime`.
 pub(crate) const GIVE_UP_AFTER: Duration = Duration::from_secs(10 * 60 * 60);
 
-/// A game put behind the others this often is left alone until the next
-/// run: Steam won't drop its cards (family-shared, free-to-play, private).
+/// A game put behind the others this often is left alone for the rest of
+/// the session: Steam won't drop its cards (family-shared, free-to-play,
+/// private).
 pub(crate) const GIVE_UP_TIMES: u8 = 2;
 
 /// After another device stops playing, how long before playing again, so as
@@ -51,6 +52,17 @@ pub(crate) const RETRY_CONNECT: Duration = Duration::from_secs(60);
 /// How often the farmer looks at the preferences while playing, so a change
 /// shows within moments.
 pub(crate) const TICK: Duration = Duration::from_secs(30);
+
+/// Until drops teach it otherwise, the time to finish assumes a card every
+/// 30 minutes, ASF's figure: as if 2 drops had come in an hour of farming
+/// alone. A few real drops outweigh it (research: market-and-session.md,
+/// section 3.1).
+pub(crate) const PRIOR_DROPS: f64 = 2.0;
+pub(crate) const PRIOR_HOURS: f64 = 1.0;
+
+/// The time to finish is given with the range it falls in 80% of the time:
+/// 1.28 standard deviations either side, on a log scale.
+pub(crate) const BAND_80: f64 = 1.28;
 
 /// Sale-event badges: earned by taking part in a sale, not by playing, so
 /// playing never drops their cards. ASF's `SalesBlacklist`.

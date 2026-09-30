@@ -1,6 +1,6 @@
 [package]
 name = "farming-di"
-description = "Builds the farming use case over the Steam session."
+description = "Builds the farming use cases over the Steam session: farming, and ending its session."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

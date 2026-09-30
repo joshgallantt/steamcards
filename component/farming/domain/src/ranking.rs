@@ -1,12 +1,13 @@
 //! What to play, and how. Pure: the library, the preferences and what's been
 //! set aside go in; an order and a plan come out.
 
-use std::collections::HashMap;
-
 use library::{Game, SteamLibrary};
 use preferences::Preferences;
 
-use crate::rules::{GIVE_UP_TIMES, HOURS_BEFORE_DROPS, MOST_AT_ONCE, SALE_EVENTS};
+use crate::{
+    SetAside,
+    rules::{GIVE_UP_TIMES, HOURS_BEFORE_DROPS, MOST_AT_ONCE, SALE_EVENTS},
+};
 
 /// What to play next.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,9 +20,15 @@ pub(crate) enum Plan {
     Nothing,
 }
 
+/// Hours a game still needs on record before its cards can drop: none once
+/// it has 3.
+pub fn hours_to_go(game: &Game) -> f64 {
+    (HOURS_BEFORE_DROPS - game.hours).max(0.0)
+}
+
 /// Whether a game has the hours its cards need to start dropping.
 pub(crate) fn can_drop(game: &Game) -> bool {
-    game.hours >= HOURS_BEFORE_DROPS
+    hours_to_go(game) <= 0.0
 }
 
 /// The games worth farming, by app ID, in the order they're farmed:
@@ -38,9 +45,14 @@ pub(crate) fn can_drop(game: &Game) -> bool {
 pub(crate) fn farm_order(
     library: &SteamLibrary,
     prefs: &Preferences,
-    set_aside: &HashMap<u32, u8>,
+    set_aside: &[SetAside],
 ) -> Vec<u32> {
-    let aside = |g: &Game| set_aside.get(&g.app_id).copied().unwrap_or(0);
+    let aside = |g: &Game| {
+        set_aside
+            .iter()
+            .find(|s| s.app_id == g.app_id)
+            .map_or(0, |s| s.times)
+    };
     let mut games: Vec<&Game> = library
         .with_drops_left()
         .filter(|g| prefs.wants(g.app_id) && !SALE_EVENTS.contains(&g.app_id))
@@ -69,11 +81,7 @@ pub(crate) fn farm_order(
 /// order, as many as Steam counts at once. Cards drop for one game at a
 /// time: playing several together only builds their hours (ASF, and Steam
 /// Game Idler since 6.2).
-pub(crate) fn plan(
-    library: &SteamLibrary,
-    prefs: &Preferences,
-    set_aside: &HashMap<u32, u8>,
-) -> Plan {
+pub(crate) fn plan(library: &SteamLibrary, prefs: &Preferences, set_aside: &[SetAside]) -> Plan {
     let order = farm_order(library, prefs, set_aside);
     let Some(first) = order.first().and_then(|&id| library.game(id)) else {
         return Plan::Nothing;
@@ -110,6 +118,7 @@ pub(crate) fn why_nothing(library: &SteamLibrary, prefs: &Preferences) -> &'stat
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
     use library::CardDrops;
 
     use super::*;
@@ -139,6 +148,27 @@ mod tests {
         }
     }
 
+    fn aside(app_id: u32, times: u8) -> SetAside {
+        SetAside {
+            app_id,
+            times,
+            since: DateTime::default(),
+        }
+    }
+
+    #[test]
+    fn a_game_needs_three_hours_before_its_cards_drop() {
+        assert_eq!(hours_to_go(&game(1, 0.0, 2)), 3.0);
+        assert!(
+            (hours_to_go(&game(1, 2.2, 2)) - 0.8).abs() < 1e-9,
+            "needs 0.8h"
+        );
+        assert_eq!(hours_to_go(&game(1, 3.0, 2)), 0.0);
+        assert_eq!(hours_to_go(&game(1, 350.0, 2)), 0.0, "never below none");
+        assert!(!can_drop(&game(1, 2.99, 2)));
+        assert!(can_drop(&game(1, 3.0, 2)));
+    }
+
     #[test]
     fn games_that_can_drop_go_first_fewest_drops_left_first() {
         let lib = library(vec![
@@ -147,14 +177,14 @@ mod tests {
             game(3, 8.0, 1),
             game(4, 2.9, 2),
         ]);
-        let order = farm_order(&lib, &Preferences::default(), &HashMap::new());
+        let order = farm_order(&lib, &Preferences::default(), &[]);
         assert_eq!(order, [3, 1, 4, 2], "then the most hours first");
     }
 
     #[test]
     fn the_users_priorities_come_before_everything() {
         let lib = library(vec![game(1, 5.0, 4), game(2, 0.5, 3), game(3, 8.0, 1)]);
-        let order = farm_order(&lib, &priorities(&[2, 1]), &HashMap::new());
+        let order = farm_order(&lib, &priorities(&[2, 1]), &[]);
         assert_eq!(order, [2, 1, 3]);
     }
 
@@ -171,32 +201,29 @@ mod tests {
             skipped_games: vec![3],
             ..Default::default()
         };
-        assert_eq!(farm_order(&lib, &prefs, &HashMap::new()), [5, 1]);
+        assert_eq!(farm_order(&lib, &prefs, &[]), [5, 1]);
 
         let only = Preferences {
             priority_games: vec![1],
             only_priority: true,
             ..Default::default()
         };
-        assert_eq!(farm_order(&lib, &only, &HashMap::new()), [1]);
+        assert_eq!(farm_order(&lib, &only, &[]), [1]);
     }
 
     #[test]
     fn a_game_set_aside_waits_behind_the_rest_then_is_left_alone() {
         let lib = library(vec![game(1, 5.0, 1), game(2, 5.0, 2)]);
-        let once = HashMap::from([(1, 1)]);
+        let once = [aside(1, 1)];
         assert_eq!(farm_order(&lib, &Preferences::default(), &once), [2, 1]);
-        let twice = HashMap::from([(1, 2)]);
+        let twice = [aside(1, 2)];
         assert_eq!(farm_order(&lib, &Preferences::default(), &twice), [2]);
     }
 
     #[test]
     fn a_game_that_can_drop_is_played_alone() {
         let lib = library(vec![game(1, 5.0, 2), game(2, 1.0, 3)]);
-        assert_eq!(
-            plan(&lib, &Preferences::default(), &HashMap::new()),
-            Plan::Cards(1)
-        );
+        assert_eq!(plan(&lib, &Preferences::default(), &[]), Plan::Cards(1));
     }
 
     #[test]
@@ -204,8 +231,7 @@ mod tests {
         let games: Vec<Game> = (1..=40)
             .map(|id| game(id, f64::from(id) / 100.0, 1))
             .collect();
-        let Plan::Hours(together) = plan(&library(games), &Preferences::default(), &HashMap::new())
-        else {
+        let Plan::Hours(together) = plan(&library(games), &Preferences::default(), &[]) else {
             panic!("not playing them together");
         };
         assert_eq!(together.len(), 32);
@@ -216,7 +242,7 @@ mod tests {
     fn a_priority_building_hours_leads_the_group_ahead_of_games_that_can_drop() {
         let lib = library(vec![game(1, 5.0, 2), game(2, 1.0, 3), game(3, 2.0, 1)]);
         assert_eq!(
-            plan(&lib, &priorities(&[2]), &HashMap::new()),
+            plan(&lib, &priorities(&[2]), &[]),
             Plan::Hours(vec![2, 3]),
             "the priority first, then the others building hours"
         );
@@ -225,10 +251,7 @@ mod tests {
     #[test]
     fn nothing_says_why() {
         let prefs = Preferences::default();
-        assert_eq!(
-            plan(&SteamLibrary::default(), &prefs, &HashMap::new()),
-            Plan::Nothing
-        );
+        assert_eq!(plan(&SteamLibrary::default(), &prefs, &[]), Plan::Nothing);
         assert_eq!(
             why_nothing(&SteamLibrary::default(), &prefs),
             "no games with trading cards on this account"

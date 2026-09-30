@@ -1276,7 +1276,7 @@ fn render_strip(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
 /// A log entry: time, icon, text. `fade` greys out older entries.
 pub(super) fn log_line(e: &LogEntry, fade: bool) -> Line<'static> {
     let (icon, style) = match e.kind {
-        EventKind::Dropped => (theme::DONE, theme::fg(GOOD)),
+        EventKind::Dropped | EventKind::Identified => (theme::DONE, theme::fg(GOOD)),
         EventKind::Playing => (theme::FARMING, theme::fg(GOOD)),
         EventKind::Switched => ("↻", theme::fg(LINK)),
         EventKind::Warning => ("!", theme::fg(BUSY)),
@@ -1287,7 +1287,7 @@ pub(super) fn log_line(e: &LogEntry, fade: bool) -> Line<'static> {
     let text_style = match e.kind {
         _ if stale => theme::dim(),
         EventKind::Progress => theme::dim(),
-        EventKind::Dropped => theme::fg(GOOD),
+        EventKind::Dropped | EventKind::Identified => theme::fg(GOOD),
         EventKind::Error => theme::fg(BAD),
         _ => theme::plain(),
     };

@@ -13,3 +13,5 @@ extend-exclude = [".git", "library/steam-api/tests/pages"]
 ratatui = "ratatui"
 # Valve's game, one of the three whose badge pages can't be trusted.
 Dota = "Dota"
+# The ending of an ordinal, as the farmer counts copies: "a 2nd copy".
+nd = "nd"

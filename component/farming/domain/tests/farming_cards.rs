@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use farming::{
     EventKind, FarmingEvent, FarmingStatus, Mode, Status, farm_cards, test_support::InMemorySteam,
 };
-use library::{look_at_game, read_library};
+use library::{describe_cards, look_at_game, read_library};
 use preferences::{Preferences, test_support::ChangingPreferences};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -43,8 +43,10 @@ impl Player {
         let farm = farm_cards(
             read_library(self.steam.clone()),
             look_at_game(self.steam.clone()),
+            describe_cards(self.steam.clone()),
             self.steam.clone(),
             self.prefs.get(),
+            Arc::default(),
         );
         let (tx, rx) = mpsc::channel(8192);
         self.farmer = Some(farm(self.token.clone(), tx));

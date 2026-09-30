@@ -1,14 +1,15 @@
 use std::time::{Duration, Instant};
 
 use account::GetAccount;
-use farming::{FarmCards, FarmingEvent};
+use farming::{EndSession, FarmCards, FarmingEvent};
 use preferences::{GetPreferences, Preferences, PreferencesError, SetGameTier, Tier};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-/// Runs the farmer, and pauses and resumes it.
+/// Runs the farmer, pauses and resumes it, and ends its session.
 pub struct Farming {
     farm: FarmCards,
+    end_session: EndSession,
     account: GetAccount,
     get_preferences: GetPreferences,
     set_tier: SetGameTier,
@@ -21,6 +22,7 @@ pub struct Farming {
 impl Farming {
     pub fn new(
         farm: FarmCards,
+        end_session: EndSession,
         account: GetAccount,
         get_preferences: GetPreferences,
         set_tier: SetGameTier,
@@ -28,6 +30,7 @@ impl Farming {
         let (tx, events) = mpsc::channel(1024);
         Self {
             farm,
+            end_session,
             account,
             get_preferences,
             set_tier,
@@ -71,6 +74,11 @@ impl Farming {
         self.running.is_some()
     }
 
+    /// Ends this session of farming: farming again starts a new one.
+    pub fn end_session(&self) {
+        (self.end_session)();
+    }
+
     /// How long farming has been running since it was last started.
     pub fn running_for(&self) -> Option<Duration> {
         self.started.map(|t| t.elapsed())
@@ -111,6 +119,7 @@ mod tests {
         });
         Farming::new(
             idle_farmer(),
+            Arc::new(|| {}),
             fixed_account(account),
             ChangingPreferences::default().get(),
             set_game_tier(Arc::new(InMemoryPreferencesRepository::default())),

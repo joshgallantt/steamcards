@@ -105,6 +105,7 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
         Login::new(refusing_link()),
         Farming::new(
             idle_farmer(),
+            Arc::new(|| {}),
             accounts.clone(),
             get.clone(),
             set_game_tier(repo.clone()),
@@ -134,6 +135,7 @@ fn farming_portal() -> FarmingStatus {
         blocked_by: None,
         next_look: Some(now() + chrono::Duration::minutes(12)),
         note: String::new(),
+        ..Default::default()
     }
 }
 

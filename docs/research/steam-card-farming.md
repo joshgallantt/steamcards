@@ -157,8 +157,8 @@ experiment.
   building hours, most hours first. A priority game still short of the
   threshold leads the group building hours.
 - **A game that drops nothing** for 10 hours (ASF's `MaxFarmingTime`) goes
-  behind the others; the second time, it's left alone until the next run,
-  with a hint at why (family-shared, free-to-play, private).
+  behind the others; the second time, it's left alone for the rest of the
+  session, with a hint at why (family-shared, free-to-play, private).
 - **Sale-event badges** (ASF's `SalesBlacklist`) are never played: those
   cards come from taking part in a sale.
 - **With nothing to farm,** sign off, and look again every 8 hours (ASF's

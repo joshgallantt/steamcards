@@ -22,6 +22,7 @@ pub(crate) mod emsg {
     pub(crate) const CLIENT_GAMES_PLAYED_WITH_DATA_BLOB: u32 = 5410;
     pub(crate) const CLIENT_LOGON: u32 = 5514;
     pub(crate) const CLIENT_ITEM_ANNOUNCEMENTS: u32 = 5576;
+    pub(crate) const CLIENT_REQUEST_ITEM_ANNOUNCEMENTS: u32 = 5577;
     pub(crate) const CLIENT_PLAYING_SESSION_STATE: u32 = 9600;
     pub(crate) const SERVICE_METHOD_CALL_FROM_CLIENT_NON_AUTHED: u32 = 9804;
     pub(crate) const CLIENT_HELLO: u32 = 9805;
@@ -172,13 +173,41 @@ pub(crate) struct ClientPlayingSessionState {
     pub(crate) playing_app: Option<u32>,
 }
 
-/// `CMsgClientItemAnnouncements`: new items in the inventory, such as a card
-/// that just dropped.
+/// `CMsgClientItemAnnouncements`: new items in the account's inventories,
+/// such as a card that just dropped. The count stays up, and the items stay
+/// listed, until the inventory is viewed.
 #[derive(Clone, PartialEq, Message)]
 pub(crate) struct ClientItemAnnouncements {
     #[prost(uint32, optional, tag = "1")]
     pub(crate) count_new_items: Option<u32>,
+    #[prost(message, repeated, tag = "2")]
+    pub(crate) unseen_items: Vec<UnseenItem>,
 }
+
+/// `CMsgClientItemAnnouncements.UnseenItem`: one new item, and where.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct UnseenItem {
+    /// The app whose inventory holds it: 753 for community items.
+    #[prost(uint32, optional, tag = "1")]
+    pub(crate) appid: Option<u32>,
+    #[prost(uint64, optional, tag = "2")]
+    pub(crate) context_id: Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub(crate) asset_id: Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub(crate) amount: Option<u64>,
+    /// When it arrived, in seconds since 1970.
+    #[prost(fixed32, optional, tag = "5")]
+    pub(crate) rtime32_gained: Option<u32>,
+    /// The game it came from.
+    #[prost(uint32, optional, tag = "6")]
+    pub(crate) source_appid: Option<u32>,
+}
+
+/// `CMsgClientRequestItemAnnouncements`: asks for the new items Steam knows
+/// of. Nothing in it: the answer is a `ClientItemAnnouncements`.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ClientRequestItemAnnouncements {}
 
 /// `EAuthTokenPlatformType_SteamClient`: a sign-in for the Steam client,
 /// whose token signs on to a CM server.

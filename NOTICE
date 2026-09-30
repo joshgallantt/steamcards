@@ -6,10 +6,11 @@ How steamcards farms trading cards follows ArchiSteamFarm
 (https://github.com/JustArchiNET/ArchiSteamFarm), Copyright 2015-2026
 Łukasz "JustArchi" Domeradzki, licensed under the Apache License 2.0:
 the badge-page selectors (library/steam-api/src/badges.rs), what an
-inventory item's tags say it is (library/steam-api/src/inventory.rs), and the
+inventory item's tags say it is (library/steam-api/src/inventory.rs), the
 farming rules and timings (component/farming/domain/src/rules.rs), including
-its list of sale-event app IDs. They were rewritten in Rust for steamcards;
-no ASF source code is included.
+its list of sale-event app IDs, and the hours its time to finish adds for
+games short of their hours (component/farming/domain/src/forecast.rs). They
+were rewritten in Rust for steamcards; no ASF source code is included.
 
 Steam's message definitions follow Valve's own .proto files, as published by
 SteamDatabase (https://github.com/SteamDatabase/Protobufs).

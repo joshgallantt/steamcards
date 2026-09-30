@@ -1,11 +1,15 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
-use farming::{PlayRepository, Signal};
+use chrono::DateTime;
+use farming::{NewItem, PlayRepository, Signal};
 use keep_awake::KeepAwake;
 use steam_api::{
     EResult, Session,
-    cm::{Connection, Event},
+    cm::{Announcement, Connection, Event, UnseenItem},
 };
 use tokio::sync::broadcast;
 
@@ -20,12 +24,44 @@ pub struct SteamPlayRepository {
     on: Mutex<Option<Played>>,
     /// What that connection says.
     news: tokio::sync::Mutex<Option<broadcast::Receiver<Event>>>,
+    /// The new items heard of, on any connection.
+    heard: Mutex<Heard>,
 }
 
 struct Played {
     conn: Arc<Connection>,
     games: Vec<u32>,
     online: bool,
+}
+
+/// What Steam has said is new. It says so again with every announcement
+/// until the inventory is viewed, so each item is passed on once.
+#[derive(Default)]
+struct Heard {
+    items: HashSet<u64>,
+    /// How many new items Steam last counted.
+    count: u32,
+}
+
+impl Heard {
+    /// Takes in an announcement: the community items it lists that weren't
+    /// heard of before. When it lists none such but counts more than
+    /// before, none: a card may have dropped all the same. `None` when
+    /// nothing is new, or when it's what was there already at sign-on.
+    fn hear(&mut self, a: &Announcement) -> Option<Vec<NewItem>> {
+        let fresh: Vec<NewItem> = a
+            .items
+            .iter()
+            .filter(|i| i.is_community_item() && self.items.insert(i.asset_id))
+            .map(new_item)
+            .collect();
+        let more = a.count > self.count;
+        self.count = a.count;
+        if a.at_sign_on {
+            return None;
+        }
+        (!fresh.is_empty() || more).then_some(fresh)
+    }
 }
 
 impl SteamPlayRepository {
@@ -35,6 +71,7 @@ impl SteamPlayRepository {
             awake,
             on: Mutex::default(),
             news: tokio::sync::Mutex::default(),
+            heard: Mutex::default(),
         }
     }
 }
@@ -50,8 +87,12 @@ impl PlayRepository for SteamPlayRepository {
                 .map(|p| (p.games.clone(), p.online))
         };
         if before.is_none() {
-            // A new connection: hear what it says from here on.
+            // A new connection: hear what it says from here on, what was
+            // new when it signed on included.
             *self.news.lock().await = Some(conn.events());
+            if let Some(already) = conn.new_at_sign_on() {
+                self.heard.lock().unwrap().hear(&already);
+            }
         }
         // A session is offline until it says otherwise.
         let was_online = before.as_ref().is_some_and(|(_, o)| *o);
@@ -103,8 +144,11 @@ impl PlayRepository for SteamPlayRepository {
             match rx.recv().await {
                 Ok(Event::PlayingBlocked(b)) if b.blocked => return Signal::Blocked(b.app_id),
                 Ok(Event::PlayingBlocked(_)) => return Signal::Unblocked,
-                Ok(Event::NewItems(n)) if n > 0 => return Signal::NewItems,
-                Ok(Event::NewItems(_)) => {}
+                Ok(Event::NewItems(announced)) => {
+                    if let Some(items) = self.heard.lock().unwrap().hear(&announced) {
+                        return Signal::NewItems(items);
+                    }
+                }
                 Ok(Event::LoggedOff(EResult::LOGON_SESSION_REPLACED)) => {
                     *news = None;
                     self.on.lock().unwrap().take();
@@ -123,6 +167,18 @@ impl PlayRepository for SteamPlayRepository {
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
             }
         }
+    }
+}
+
+/// An item Steam listed, as farming knows it: the game it came from is its
+/// source app.
+fn new_item(item: &UnseenItem) -> NewItem {
+    NewItem {
+        asset_id: item.asset_id,
+        app_id: item.source_app_id,
+        gained_at: item
+            .gained_at
+            .and_then(|at| DateTime::from_timestamp(i64::from(at), 0)),
     }
 }
 

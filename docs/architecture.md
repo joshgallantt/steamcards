@@ -55,6 +55,12 @@ The domain starts from its entities:
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
   priority", and whether to appear online while farming.
+- **`FarmingSession`**, in `farming`: this session of farming, from the first
+  run of the farmer until the user signs out or steamcards quits, through
+  pauses. It holds every `Drop` (one per copy that dropped, and which card it
+  was once that's known), the `Stretch`es of what was played and how, the
+  games finished, and what the library had left at the start. From it,
+  `forecast()` learns how long the rest should take.
 
 Each domain crate has the same shape:
 
@@ -67,8 +73,10 @@ component/<name>/domain/src/
 └── test_support.rs  doubles, behind the `test-support` feature
 ```
 
-`farming` adds `ranking.rs` (what to play, and how: pure), `rules.rs` (every
-number it runs on, with where it comes from) and `reporter.rs`.
+`farming` adds `ranking.rs` (what to play, and how: pure), `forecast.rs`
+(the time to finish: pure), `session.rs` (the session, kept between runs of
+the farmer, and which card each drop was), `rules.rs` (every number it runs
+on, with where it comes from) and `reporter.rs`.
 
 Entities are plain data with the rules that belong to the data itself
 (`SteamLibrary::drops_left`, `Game::has_full_set`, `Preferences::wants`). They
@@ -93,15 +101,20 @@ constructor builds the real one over the repositories. Call sites read
 | | `SetGameTier` (`set_game_tier`) | Moves a game between priority (at a rank), indifferent and skip. |
 | | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
 | | `SetAppearOnline` (`set_appear_online`) | Show as online while farming, or appear offline. |
-| farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. |
+| farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
+| | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it. |
 
 ### Use cases that call other use cases
 
 `farm_cards` needs the library and what the user wants. It takes
-`ReadLibrary`, `LookAtGame` and `GetPreferences`, not their repositories: so
-`farming` depends on `library` and `preferences` as domain components, and
-never learns where either comes from. When a tier changes, the farmer sees it
-within moments, through the same use case the screens call.
+`ReadLibrary`, `LookAtGame`, `DescribeCards` and `GetPreferences`, not their
+repositories: so `farming` depends on `library` and `preferences` as domain
+components, and never learns where either comes from. When a tier changes,
+the farmer sees it within moments, through the same use case the screens
+call.
+
+`farm_cards` and `end_session` share a `SessionKeeper`, which the DI crate
+makes: it keeps the session from one run of the farmer to the next.
 
 ### Repository contracts
 
@@ -136,7 +149,7 @@ straight away, and signing in again clears it.
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON file, readable by its owner only: `CredentialStore`, and the stored shape of preferences. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
