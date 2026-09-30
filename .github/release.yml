@@ -1,0 +1,11 @@
+# How GitHub writes a release's notes: the pull requests merged since the
+# last release, by title. Dependabot's updates (labelled "dependencies") get
+# a section of their own, below the rest.
+changelog:
+  categories:
+    - title: Changes
+      labels: ["*"]
+      exclude:
+        labels: [dependencies]
+    - title: Dependency updates
+      labels: [dependencies]

@@ -1,0 +1,266 @@
+# Publishes a release when its version tag (v1.2.3) is pushed, which
+# `cargo xtask release` does (CONTRIBUTING.md, "Cutting a release"):
+#
+# 1. Checks the tag matches Cargo.toml, and waits for the Tests workflow to
+#    pass on the tagged commit. Pushing the commit to main started it, so a
+#    release doesn't run the tests again.
+# 2. Builds steamcards for every platform, and checks each build runs and
+#    reports the tag's version.
+# 3. Publishes the archives, SHA256SUMS and (for a public repository)
+#    build-provenance attestations as a GitHub release. Its notes say how to
+#    install it, then list the pull requests merged since the last release,
+#    which GitHub writes (grouped as .github/release.yml says). A pre-release
+#    (v1.2.0-rc.1) is marked as one.
+# 4. For a public repository: installs the release with the install scripts,
+#    the way users do, on each platform, checks it runs, and uninstalls it
+#    again with the uninstall scripts.
+#
+# It never pushes to main: only the maintainer does, and `cargo xtask release`
+# points the Homebrew formula at the new archives once this has finished.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Each job asks for what it needs.
+permissions: {}
+
+# One release at a time. A second waits for the first; neither is cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The install scripts compare `steamcards --version` with the tag, so
+      # the two have to agree.
+      - name: The tag matches Cargo.toml
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but Cargo.toml says $version."
+            exit 1
+          fi
+
+  # Tests runs on every commit pushed to main, the release commit among
+  # them. This waits for that run on the tagged commit, and nothing is built
+  # unless it passed.
+  tests:
+    name: Wait for Tests
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read # to read its result
+    steps:
+      - name: Tests passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          runs=(gh run list --workflow tests.yml --commit "$GITHUB_SHA" --event push --limit 1)
+          # The push to main starts that run as the tag starts this one, so
+          # it should be there within seconds.
+          deadline=$((SECONDS + 300))
+          while :; do
+            result=$("${runs[@]}" --json status,conclusion \
+              --jq '.[] | if .status == "completed" then .conclusion else "running" end')
+            case "$result" in
+              "")
+                if [ "$SECONDS" -gt "$deadline" ]; then
+                  echo "::error::Tests never ran on $GITHUB_SHA. A release tags a commit pushed to main, which runs them."
+                  exit 1
+                fi ;;
+              running) ;;
+              *) break ;;
+            esac
+            sleep 20
+          done
+          url=$("${runs[@]}" --json url --jq '.[].url')
+          if [ "$result" != success ]; then
+            echo "::error::Tests finished with \"$result\" on the tagged commit, so nothing was built: $url"
+            exit 1
+          fi
+          echo "Tests passed: $url"
+
+  # One archive per platform: the binary, LICENSE and README.md. Nothing is
+  # published until every one has built and run.
+  build:
+    name: Build (${{ matrix.target }})
+    needs: tests
+    strategy:
+      # Every platform builds even when one fails, so one run shows them all.
+      # Nothing is published unless every one succeeds.
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          # Built on Apple silicon too, and run there through Rosetta.
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          # Static binaries, so they run on any distribution. Built in cross's
+          # containers.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      TARGET: ${{ matrix.target }}
+      CARGO_BUILD: ${{ matrix.cross && 'cross' || 'cargo' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        shell: bash
+        run: |
+          rustup toolchain install --no-self-update
+          rustup target add "$TARGET"
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: cross@0.2.5
+      - name: Build
+        shell: bash
+        run: '"$CARGO_BUILD" build --release --locked --package steamcards --target "$TARGET"'
+      - name: Check it runs, and reports the tag's version
+        shell: bash
+        run: |
+          expected="steamcards ${GITHUB_REF_NAME#v}"
+          binary="target/$TARGET/release/steamcards"
+          case "$TARGET" in
+            x86_64-apple-darwin)
+              sudo softwareupdate --install-rosetta --agree-to-license > /dev/null
+              actual=$(arch -x86_64 "$binary" --version) ;;
+            aarch64-unknown-linux-musl)
+              # A static arm64 binary, run through QEMU's user-mode emulation.
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq qemu-user-static > /dev/null
+              actual=$(qemu-aarch64-static "$binary" --version) ;;
+            *)
+              actual=$("$binary" --version) ;;
+          esac
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::The $TARGET build says \"$actual\", not \"$expected\"."
+            exit 1
+          fi
+          echo "$TARGET: $actual"
+      - name: Package
+        shell: bash
+        run: |
+          name="steamcards-$TARGET"
+          mkdir -p dist "$name"
+          cp "target/$TARGET/release/steamcards" LICENSE README.md "$name/"
+          tar -czf "dist/$name.tar.gz" -C "$name" steamcards LICENSE README.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: steamcards-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to create the release
+      id-token: write # to sign the attestations
+      attestations: write # to store them
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: sha256sum steamcards-* > SHA256SUMS
+      # A signed statement of which workflow built each archive, from which
+      # commit, that `gh attestation verify` checks. GitHub offers it to public
+      # repositories only (and Enterprise), so a private one goes without.
+      - name: Attest where the archives were built
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/steamcards-*
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - name: Write the release notes
+        env:
+          PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          flags=()
+          if [ "$PRIVATE" != true ]; then flags+=(--attested); fi
+          cargo xtask release-notes "$GITHUB_REF_NAME" "${flags[@]}" > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A pre-release is marked as one, so "latest" (what the install
+          # scripts and the releases page offer) stays on the last release.
+          pre=false
+          case "$GITHUB_REF_NAME" in *-*) pre=true ;; esac
+          # GitHub writes the rest of the notes: the pull requests merged
+          # since the last release, below how to install it.
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "steamcards $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
+            --prerelease="$pre" dist/steamcards-* dist/SHA256SUMS
+
+  # The release as users get it: the install one-liners, each checked for the
+  # right version, and after each, the uninstall one-liner, checked to leave
+  # nothing behind. Downloads need a public repository, so a private one skips
+  # this. Homebrew's formula is checked by homebrew.yml, once it's on main.
+  verify:
+    name: Install and uninstall it (${{ matrix.os }})
+    needs: publish
+    if: ${{ !github.event.repository.private }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: The install script
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          # A pre-release is installed only when asked for by name.
+          case "$version" in *-*) export STEAMCARDS_VERSION="$version" ;; esac
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install/install.sh" | sh
+          installed=$("$HOME/.local/bin/steamcards" --version)
+          if [ "$installed" != "steamcards $version" ]; then
+            echo "::error::The install script installed \"$installed\", not steamcards $version."
+            exit 1
+          fi
+      - name: The uninstall script
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install/uninstall.sh" | STEAMCARDS_DELETE_DATA=1 sh
+          if [ -e "$HOME/.local/bin/steamcards" ] || command -v steamcards; then
+            echo "::error::The uninstall script left steamcards installed."
+            exit 1
+          fi

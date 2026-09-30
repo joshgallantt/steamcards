@@ -1,0 +1,43 @@
+# Pull requests that keep the dependencies up to date, once a week, each
+# checked by CI like any other. A new release waits a week before it's
+# proposed: long enough for a broken or compromised one to be found and
+# pulled. Security updates don't wait.
+version: 2
+updates:
+  # The Rust crates. Only updates that Cargo.toml already allows, all in one
+  # pull request: the ones Cargo counts as compatible. Dependabot calls
+  # 0.29 → 0.30 a minor update, but Cargo counts it as breaking, and one of
+  # those would hold up the whole group. A breaking update is a pull request
+  # of its own, made by hand; `cargo update --verbose` lists what's behind.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: lockfile-only
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  # The actions the workflows pin, by commit. Minor and patch updates come in
+  # one pull request; a major version gets its own.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  # The compiler in rust-toolchain.toml: a pull request for each new Rust,
+  # which fixes whatever its new lints find. The week's wait also lets its
+  # first point release come out.
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

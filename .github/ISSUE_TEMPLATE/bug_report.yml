@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in steamcards doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please keep sign-in tokens, account names, Steam IDs and anything else private out of the report, and read a debug log before you attach it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what steamcards did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `steamcards --version` prints, or the commit you built.
+      placeholder: steamcards 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Install script
+        - Homebrew
+        - From source (cargo install)
+        - Downloaded from the releases page
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux (Arch-based)
+        - Linux (other)
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      placeholder: Ghostty, iTerm2, Terminal, Konsole, ...
+  - type: textarea
+    id: log
+    attributes:
+      label: Debug log
+      description: Run steamcards with `STEAMCARDS_DEBUG=1` and paste the relevant part of `debug.log`. Remove anything private first.
+      render: text

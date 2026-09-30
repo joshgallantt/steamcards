@@ -1,0 +1,37 @@
+# Installs steamcards with Homebrew, the way the README says, whenever the
+# formula changes on main (as `cargo xtask release` changes it for each
+# release), and checks the installed steamcards reports the formula's
+# version. Homebrew downloads without signing in, so a private repository
+# skips this.
+name: Homebrew
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Formula/**
+      - .github/workflows/homebrew.yml
+  workflow_dispatch:
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: Install with Homebrew
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install from the formula on main
+        run: |
+          brew tap "$GITHUB_REPOSITORY_OWNER/steamcards" "https://github.com/$GITHUB_REPOSITORY"
+          brew install "$GITHUB_REPOSITORY_OWNER/steamcards/steamcards"
+      # The formula's own test: `steamcards --version` matches its version.
+      - name: Check it runs
+        run: brew test steamcards

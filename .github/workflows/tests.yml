@@ -1,0 +1,311 @@
+# Everything a change has to pass before it's merged, on every pull request
+# and every push to main, with a job for each check:
+#
+# - lint, docs and dependencies (`cargo xtask lint`, `docs` and `deps`),
+#   once, on Linux: none of them answers differently on another system;
+# - the oldest Rust steamcards supports, and the workflows themselves;
+# - the tests (`cargo xtask test`), on every system steamcards runs on;
+# - when they change, the install scripts: linted, and tested on the systems
+#   they're for (macOS and Linux).
+#
+# The last job, "Tests passed", passes once every other job has passed or
+# was skipped as not needed. It's the one check the rules for main require,
+# and a release waits for this workflow to pass on the commit it tags.
+#
+# The Rust checks are the `cargo xtask` commands you run locally, with the
+# same compiler (rust-toolchain.toml) and the same versions of the tools
+# (`cargo xtask tools`). Every action is pinned to a commit rather than a
+# tag, which its owner could move; Dependabot keeps the pins up to date.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    # A change to the Homebrew formula alone is checked by homebrew.yml.
+    paths-ignore:
+      - Formula/**
+  workflow_dispatch:
+
+# Every job reads the code, and nothing writes to the repository.
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run. Each commit pushed
+# to main has a group of its own, so none is cancelled: a release waits
+# for the run on the commit it tags.
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Formatting, spelling and clippy: `cargo xtask lint`.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The compiler and components in rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The versions `cargo xtask setup` installs: `TOOLS` in xtask.
+      - name: List the tools
+        id: tools
+        run: |
+          tools=$(cargo xtask tools lint)
+          echo "list=$tools" >> "$GITHUB_OUTPUT"
+      - name: Install the tools
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: ${{ steps.tools.outputs.list }}
+      - run: cargo xtask lint
+
+  # The docs, with warnings as errors, and the README's screenshots, which
+  # have to match what the UI draws: `cargo xtask docs`.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo xtask docs
+
+  # Unused dependencies, and the dependencies' advisories, licences and
+  # sources: `cargo xtask deps`.
+  dependencies:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - name: List the tools
+        id: tools
+        run: |
+          tools=$(cargo xtask tools deps)
+          echo "list=$tools" >> "$GITHUB_OUTPUT"
+      - name: Install the tools
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: ${{ steps.tools.outputs.list }}
+      - run: cargo xtask deps
+
+  # The oldest Rust steamcards supports: the rust-version in Cargo.toml,
+  # rather than the compiler in rust-toolchain.toml.
+  msrv:
+    name: Minimum Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the rust-version in Cargo.toml
+        run: |
+          version=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)
+          rustup toolchain install "$version" --profile minimal --no-self-update
+          # For the steps after this one, it wins over rust-toolchain.toml.
+          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo check --workspace --all-targets --locked
+
+  # The workflows themselves. actionlint finds mistakes, and runs ShellCheck
+  # on every `run:`. zizmor finds security problems: template injection,
+  # excess permissions, persisted credentials, unpinned actions.
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
+      - name: Install zizmor
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        with:
+          tool: zizmor@1.30.1
+      - name: zizmor
+        run: zizmor --format=github .
+        env:
+          # For the audits that ask GitHub, such as whether a pinned commit
+          # really belongs to its action, and whether that version has a
+          # known vulnerability.
+          GH_TOKEN: ${{ github.token }}
+
+  # The tests, on each system steamcards runs on: `cargo xtask test`.
+  test:
+    name: Test (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo xtask test
+
+  # And on Arch Linux, which CONTRIBUTING.md's build guide covers.
+  arch:
+    name: Test (Arch Linux)
+    runs-on: ubuntu-latest
+    # Arch is a rolling release, and `pacman -Syu` brings the image up to
+    # date before anything else runs. A pinned digest would only go stale.
+    container: archlinux:latest # zizmor: ignore[unpinned-images]
+    timeout-minutes: 30
+    steps:
+      # The image starts bare. Git has to be there before checkout, or
+      # checkout downloads the code without it.
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed base-devel git rustup
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - run: cargo xtask test
+
+  # Whether the install scripts changed. Their tests run on Macs, the costly
+  # machines, so they run only when the scripts (or this workflow) change. GitHub can skip a whole workflow by the files a change
+  # touches, but not a single job, so this job works it out.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # to compare a push with the commit before it
+      pull-requests: read # to list a pull request's files
+    outputs:
+      install: ${{ steps.files.outputs.install }}
+    steps:
+      - name: The install scripts, or this workflow
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$PR" ]; then
+            files=$(gh api --paginate "repos/$GH_REPO/pulls/$PR/files" --jq '.[].filename')
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            files=$(gh api "repos/$GH_REPO/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename')
+          else
+            # Run by hand: test everything.
+            files=install/
+          fi
+          install=false
+          if grep -qE '^(install/|\.github/workflows/tests\.yml$)' <<< "$files"; then
+            install=true
+          fi
+          echo "The install scripts need testing: $install"
+          echo "install=$install" >> "$GITHUB_OUTPUT"
+
+  # ShellCheck for the scripts and their tests.
+  install-lint:
+    name: Install scripts (ShellCheck)
+    needs: changes
+    if: needs.changes.outputs.install == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck
+        run: |
+          command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install --yes shellcheck; }
+          shellcheck --version
+          shellcheck install/install.sh install/uninstall.sh install/tests/run.sh
+
+  # install.sh and uninstall.sh, against a local stand-in for GitHub Releases
+  # and stand-ins for Homebrew and cargo, under every shell that's there: sh
+  # and dash on both, and BusyBox's sh (Alpine's) on Linux, where sh is dash.
+  install-sh:
+    name: Install scripts (sh, ${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.install == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install BusyBox
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes busybox
+      - name: Test install.sh and uninstall.sh
+        run: sh install/tests/run.sh
+
+  # The one check the rules for main require. It waits for every job above,
+  # then passes if each one passed, or, for the install scripts' jobs, was
+  # skipped as not needed. It runs even when the run is cancelled, so a
+  # cancelled run can't count as passing.
+  passed:
+    name: Tests passed
+    if: always()
+    needs:
+      - lint
+      - docs
+      - dependencies
+      - msrv
+      - workflows
+      - test
+      - arch
+      - changes
+      - install-lint
+      - install-sh
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed, or wasn't needed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          failed=$(jq -r '
+            to_entries[]
+            | select(.value.result != "success")
+            | select(.value.result != "skipped" or (.key | startswith("install-") | not))
+            | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "::error::Not every job passed:"
+            echo "$failed"
+            exit 1
+          fi
+          echo "Every job passed, or wasn't needed."
