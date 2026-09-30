@@ -1,6 +1,6 @@
 //! Where the account domain meets its data layer: one repository over the
 //! Steam session, handed to every use case. The composition root names the
-//! session.
+//! Steam client.
 
 use std::sync::Arc;
 
@@ -9,7 +9,7 @@ use account::{
     link_account, refresh_account, unlink_account,
 };
 use account_data::SteamAccountRepository;
-use steam_api::Session;
+use steam_api::SteamClient;
 
 pub struct AccountComponent {
     pub get: GetAccount,
@@ -19,8 +19,8 @@ pub struct AccountComponent {
 }
 
 impl AccountComponent {
-    pub fn new(session: Arc<Session>) -> Self {
-        Self::over(Arc::new(SteamAccountRepository::new(session)))
+    pub fn new(steam: Arc<SteamClient>) -> Self {
+        Self::over(Arc::new(SteamAccountRepository::new(steam)))
     }
 
     pub fn over(repo: Arc<dyn AccountRepository>) -> Self {

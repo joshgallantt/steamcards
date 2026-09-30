@@ -1,6 +1,6 @@
 //! Where the market domain meets its data layer: one repository over the
 //! Steam session, the config file and the price cache, handed to every use
-//! case, on the system's clock. The composition root names the session and
+//! case, on the system's clock. The composition root names the Steam client and
 //! the files.
 
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use price::{
     refresh_prices, set_basis, system_clock, want_prices, watch_prices,
 };
 use price_data::SteamPriceRepository;
-use steam_api::Session;
+use steam_api::SteamClient;
 
 pub struct PriceComponent {
     pub prices: GetPrices,
@@ -26,9 +26,9 @@ pub struct PriceComponent {
 }
 
 impl PriceComponent {
-    pub fn new(session: Arc<Session>, file: Arc<ConfigFile>, prices: Arc<PriceCache>) -> Self {
+    pub fn new(steam: Arc<SteamClient>, file: Arc<ConfigFile>, prices: Arc<PriceCache>) -> Self {
         Self::over(
-            Arc::new(SteamPriceRepository::new(session, file, prices)),
+            Arc::new(SteamPriceRepository::new(steam, file, prices)),
             system_clock(),
         )
     }

@@ -20,14 +20,14 @@ pub mod inventory;
 pub mod market;
 mod packet;
 mod proto;
-mod session;
+mod steam_client;
 pub mod token;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
 pub use eresult::EResult;
-pub use session::Session;
+pub use steam_client::SteamClient;
 
 /// What steamcards calls itself to Steam: the device the Steam app asks to
 /// approve, and the machine a session is on.

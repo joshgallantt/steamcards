@@ -201,19 +201,19 @@ that Steam's pause turns away isn't an error: it answers `Lookup::Paused`.
 ## Data layer
 
 **The sign-in is a data concern.** The domain never sees a token.
-`steam_api::Session` holds the saved sign-in, the "Steam rejected it" flag,
+`steam_api::SteamClient` holds the saved sign-in, the "Steam rejected it" flag,
 the signed-on CM connection and the token for steamcommunity.com. The
 composition root builds **one** and hands it to every data crate: when the
 farmer's sign-on is refused, the account screen shows the sign-in as expired
 straight away, and signing in again clears it.
 
-**So is the market's pace.** The same `Session` holds the one market queue
+**So is the market's pace.** The same `SteamClient` holds the one market queue
 every `/market/` request goes through, one at a time (research §1.3): signed
 in, 5 seconds apart and up to a second more; signed out, 12. A 429 pauses
 every market request for 10 minutes, then one goes to see, doubling the
 pause to an hour at most; `price-data` keeps the pause in the config file,
 so it outlasts a restart. A server error is asked once more, 30 seconds
-later; the site's quick retries never apply to the market. The `Session`
+later; the site's quick retries never apply to the market. The `SteamClient`
 also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 ---
@@ -222,7 +222,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages (foils' too), the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages (foils' too), the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only (`CredentialStore`, and the stored shape of preferences and of the market's settings and pause), and `PriceCache`, the market's prices in a file of their own beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
@@ -269,11 +269,11 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::Session`, `KeepAwake` | `Settings` |
+| `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::SteamClient`, `KeepAwake` | `Settings` |
 | `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
-`PriceComponent` takes the `Session`, the `ConfigFile` and a `PriceCache`
+`PriceComponent` takes the `SteamClient`, the `ConfigFile` and a `PriceCache`
 whose file sits beside the config (`prices.json`); `Settings` works out
 where.
 

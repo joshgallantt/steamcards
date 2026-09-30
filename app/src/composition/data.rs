@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use config_file::{ConfigFile, CredentialStore, PriceCache};
 use keep_awake::KeepAwake;
-use steam_api::Session;
+use steam_api::SteamClient;
 
 use crate::settings::Settings;
 
@@ -13,7 +13,7 @@ use crate::settings::Settings;
 pub(crate) struct DataAssembler {
     pub config: Arc<ConfigFile>,
     pub prices: Arc<PriceCache>,
-    pub steam: Arc<Session>,
+    pub steam: Arc<SteamClient>,
     pub awake: Arc<KeepAwake>,
 }
 
@@ -23,7 +23,7 @@ impl DataAssembler {
         let credentials: Arc<dyn CredentialStore> = config.clone();
         Ok(Self {
             prices: Arc::new(PriceCache::open(settings.prices_path.clone())),
-            steam: Arc::new(Session::new(credentials, &settings.debug_log)),
+            steam: Arc::new(SteamClient::new(credentials, &settings.debug_log)),
             awake: Arc::new(KeepAwake::system(&settings.debug_log)),
             config,
         })

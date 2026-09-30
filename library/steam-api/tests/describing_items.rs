@@ -9,7 +9,7 @@ use std::{
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     inventory::InventoryItem,
     test_support::{ACCOUNT, FakeSteam, HeldItem, InventoryAsk, STEAM_ID, token},
 };
@@ -20,7 +20,7 @@ const AGAIN: Duration = Duration::from_millis(20);
 
 /// A session signed in as the stand-in's account, with a sign-in good for
 /// months.
-fn signed_in(steam: &FakeSteam, name: &str) -> Session {
+fn signed_in(steam: &FakeSteam, name: &str) -> SteamClient {
     let dir = std::env::temp_dir().join(format!("steamcards-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -32,7 +32,8 @@ fn signed_in(steam: &FakeSteam, name: &str) -> Session {
             login_id: 7,
         })
         .unwrap();
-    Session::with_endpoints(store, &DebugLog::off(), steam.endpoints()).with_ask_again_after(AGAIN)
+    SteamClient::with_endpoints(store, &DebugLog::off(), steam.endpoints())
+        .with_ask_again_after(AGAIN)
 }
 
 fn asked_ids(steam: &FakeSteam) -> Vec<Vec<u64>> {

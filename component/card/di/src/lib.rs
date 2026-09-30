@@ -1,6 +1,6 @@
 //! Where the card domain meets its data layer: one repository over the
 //! Steam session, handed to every use case. The composition root names the
-//! session.
+//! Steam client.
 
 use std::sync::Arc;
 
@@ -9,7 +9,7 @@ use card::{
     look_at_foils,
 };
 use card_data::SteamCardRepository;
-use steam_api::Session;
+use steam_api::SteamClient;
 
 pub struct CardComponent {
     pub look_at: LookAtCards,
@@ -18,8 +18,8 @@ pub struct CardComponent {
 }
 
 impl CardComponent {
-    pub fn new(session: Arc<Session>) -> Self {
-        Self::over(Arc::new(SteamCardRepository::new(session)))
+    pub fn new(steam: Arc<SteamClient>) -> Self {
+        Self::over(Arc::new(SteamCardRepository::new(steam)))
     }
 
     pub fn over(repo: Arc<dyn CardRepository>) -> Self {

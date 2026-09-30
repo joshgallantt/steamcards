@@ -6,23 +6,23 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use game::{CardDrops, Game, GameRepository, SteamLibrary};
-use steam_api::{Session, badges::BadgeGame};
+use steam_api::{SteamClient, badges::BadgeGame};
 
 /// The account's badges, read signed in.
 pub struct SteamGameRepository {
-    session: Arc<Session>,
+    steam: Arc<SteamClient>,
 }
 
 impl SteamGameRepository {
-    pub fn new(session: Arc<Session>) -> Self {
-        Self { session }
+    pub fn new(steam: Arc<SteamClient>) -> Self {
+        Self { steam }
     }
 }
 
 #[async_trait]
 impl GameRepository for SteamGameRepository {
     async fn library(&self) -> anyhow::Result<SteamLibrary> {
-        let games = self.session.badges().await?;
+        let games = self.steam.badges().await?;
         Ok(SteamLibrary::new(games.into_iter().map(to_game).collect()))
     }
 }

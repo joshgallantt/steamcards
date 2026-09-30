@@ -19,7 +19,7 @@ use price::{
     PriceSettings, PricedCard, QuoteSource, SetPrices, Wallet,
 };
 use steam_api::{
-    Session,
+    SteamClient,
     market::{self as steam, Listed, Market, OrderBook},
 };
 
@@ -34,7 +34,7 @@ const WALLET_WAIT: Duration = Duration::from_millis(100);
 
 /// The market as the Steam session sees it, and what's kept of it.
 pub struct SteamPriceRepository {
-    session: Arc<Session>,
+    steam: Arc<SteamClient>,
     file: Arc<ConfigFile>,
     cache: Arc<PriceCache>,
     book: Mutex<Arc<PriceBook>>,
@@ -44,9 +44,9 @@ pub struct SteamPriceRepository {
 impl SteamPriceRepository {
     /// Takes up what was kept from before: the prices under a week old, and
     /// Steam's pause, if there was one.
-    pub fn new(session: Arc<Session>, file: Arc<ConfigFile>, cache: Arc<PriceCache>) -> Self {
+    pub fn new(steam: Arc<SteamClient>, file: Arc<ConfigFile>, cache: Arc<PriceCache>) -> Self {
         if let Some(pause) = file.market().pause {
-            session.resume_market_pause(to_steam_pause(pause));
+            steam.resume_market_pause(to_steam_pause(pause));
         }
         let now = Utc::now();
         let mut book = PriceBook::default();
@@ -56,7 +56,7 @@ impl SteamPriceRepository {
             }
         }
         Self {
-            session,
+            steam,
             file,
             cache,
             book: Mutex::new(Arc::new(book)),
@@ -67,12 +67,12 @@ impl SteamPriceRepository {
     /// Keeps Steam's pause in the config file when it has changed, so it
     /// outlasts a restart.
     fn keep_pause(&self) {
-        let pause = self.session.market_pause().map(to_stored_pause);
+        let pause = self.steam.market_pause().map(to_stored_pause);
         if self.file.market().pause == pause {
             return;
         }
         if let Err(e) = self.file.save_market_pause(pause) {
-            self.session
+            self.steam
                 .log()
                 .line(&format!("couldn't keep Steam's pause on the market: {e}"));
         }
@@ -86,7 +86,7 @@ impl SteamPriceRepository {
         if let Some(wallet) = self.wallet() {
             return Ok(wallet.currency);
         }
-        self.session.connection().await.map_err(|e| e.to_string())?;
+        self.steam.connection().await.map_err(|e| e.to_string())?;
         for _ in 0..WALLET_WAITS {
             if let Some(wallet) = self.wallet() {
                 return Ok(wallet.currency);
@@ -116,7 +116,7 @@ impl PriceRepository for SteamPriceRepository {
         let stored = book.sets.values().map(to_stored_set).collect();
         if let Err(e) = self.cache.save_sets(stored) {
             // Only a restart would miss them: they'd be looked up again.
-            self.session
+            self.steam
                 .log()
                 .line(&format!("couldn't keep prices on disk: {e}"));
         }
@@ -138,7 +138,7 @@ impl PriceRepository for SteamPriceRepository {
             Ok(currency) => currency,
             Err(why) => return Ok(Lookup::Unanswered(why)),
         };
-        let answer = self.session.market_search(app_id, foil).await;
+        let answer = self.steam.market_search(app_id, foil).await;
         self.keep_pause();
         let listed = match answer? {
             Market::Answer(listed) => listed,
@@ -156,7 +156,7 @@ impl PriceRepository for SteamPriceRepository {
     }
 
     async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
-        let answer = self.session.order_book(market_hash_name).await;
+        let answer = self.steam.order_book(market_hash_name).await;
         self.keep_pause();
         Ok(match answer? {
             Market::Answer(book) => Lookup::Found(to_offers(book, Utc::now())),
@@ -166,7 +166,7 @@ impl PriceRepository for SteamPriceRepository {
     }
 
     fn wallet(&self) -> Option<Wallet> {
-        let info = self.session.wallet()?;
+        let info = self.steam.wallet()?;
         // An account with no wallet is priced in dollars, as Valve's pages
         // ask the market when there's no wallet currency.
         let currency = u32::try_from(info.currency)

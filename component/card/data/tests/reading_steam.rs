@@ -8,7 +8,7 @@ use card_data::SteamCardRepository;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    Session,
+    SteamClient,
     test_support::{ACCOUNT, FakeSteam, HeldItem, STEAM_ID, token},
 };
 use wiremock::{
@@ -48,7 +48,7 @@ async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamCa
     .unwrap();
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
-    let session = Session::with_endpoints(file, &DebugLog::off(), endpoints);
+    let session = SteamClient::with_endpoints(file, &DebugLog::off(), endpoints);
     SteamCardRepository::new(Arc::new(session))
 }
 

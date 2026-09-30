@@ -7,7 +7,7 @@ use account_data::SteamAccountRepository;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     test_support::{ACCOUNT, FakeSteam, QrScript, STEAM_ID, token},
 };
 use tokio::sync::mpsc;
@@ -17,7 +17,7 @@ fn repository(steam: &FakeSteam, name: &str) -> (SteamAccountRepository, Arc<Con
         std::env::temp_dir().join(format!("steamcards-account-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
-    let session = Session::with_endpoints(file.clone(), &DebugLog::off(), steam.endpoints());
+    let session = SteamClient::with_endpoints(file.clone(), &DebugLog::off(), steam.endpoints());
     (SteamAccountRepository::new(Arc::new(session)), file)
 }
 

@@ -103,7 +103,7 @@ pub struct UnseenItem {
 
 impl UnseenItem {
     /// Whether it's one of the account's community items, which
-    /// [`Session::describe_items`](crate::Session::describe_items) can
+    /// [`SteamClient::describe_items`](crate::SteamClient::describe_items) can
     /// describe.
     pub fn is_community_item(&self) -> bool {
         (self.app_id, self.context_id) == (STEAM_APP, COMMUNITY_CONTEXT)

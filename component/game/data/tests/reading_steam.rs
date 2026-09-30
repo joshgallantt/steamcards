@@ -8,7 +8,7 @@ use debug_log::DebugLog;
 use game::{CardDrops, Game, GameRepository};
 use game_data::SteamGameRepository;
 use steam_api::{
-    Session,
+    SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
 use wiremock::{
@@ -48,7 +48,7 @@ async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamGa
     .unwrap();
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
-    let session = Session::with_endpoints(file, &DebugLog::off(), endpoints);
+    let session = SteamClient::with_endpoints(file, &DebugLog::off(), endpoints);
     SteamGameRepository::new(Arc::new(session))
 }
 

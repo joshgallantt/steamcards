@@ -15,7 +15,7 @@ use price::{
 };
 use price_data::SteamPriceRepository;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     market::MarketPace,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
@@ -55,21 +55,24 @@ impl Disk {
     }
 
     /// A repository over what's on disk, as steamcards starts it.
-    fn market(&self, steam: &FakeSteam, site: &MockServer) -> (SteamPriceRepository, Arc<Session>) {
+    fn market(
+        &self,
+        steam: &FakeSteam,
+        site: &MockServer,
+    ) -> (SteamPriceRepository, Arc<SteamClient>) {
         let file = Arc::new(ConfigFile::open(self.config.clone()).unwrap());
         let mut endpoints = steam.endpoints();
         endpoints.community = site.uri();
         let session = Arc::new(
-            Session::with_endpoints(file.clone(), &DebugLog::off(), endpoints).with_market_pace(
-                MarketPace {
+            SteamClient::with_endpoints(file.clone(), &DebugLog::off(), endpoints)
+                .with_market_pace(MarketPace {
                     signed_in: Duration::from_millis(1),
                     jitter: Duration::ZERO,
                     signed_out: Duration::from_millis(1),
                     first_pause: Duration::from_secs(20 * 60),
                     longest_pause: Duration::from_secs(60 * 60),
                     after_server_error: Duration::from_millis(10),
-                },
-            ),
+                }),
         );
         let cache = Arc::new(PriceCache::open(self.prices.clone()));
         (

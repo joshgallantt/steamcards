@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     cm::{Announcement, Blocked, Event},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
@@ -14,7 +14,7 @@ use tokio::sync::broadcast;
 
 /// A session signed in as the stand-in's account, with a sign-in good for
 /// months.
-fn signed_in(steam: &FakeSteam, name: &str) -> (Session, Arc<ConfigFile>) {
+fn signed_in(steam: &FakeSteam, name: &str) -> (SteamClient, Arc<ConfigFile>) {
     let dir = std::env::temp_dir().join(format!("steamcards-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -26,7 +26,7 @@ fn signed_in(steam: &FakeSteam, name: &str) -> (Session, Arc<ConfigFile>) {
             login_id: 7,
         })
         .unwrap();
-    let session = Session::with_endpoints(store.clone(), &DebugLog::off(), steam.endpoints());
+    let session = SteamClient::with_endpoints(store.clone(), &DebugLog::off(), steam.endpoints());
     (session, store)
 }
 

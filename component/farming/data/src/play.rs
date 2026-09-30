@@ -8,7 +8,7 @@ use chrono::DateTime;
 use farming::{NewItem, PlayRepository, Signal};
 use keep_awake::KeepAwake;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     cm::{Announcement, Connection, Event, UnseenItem},
 };
 use tokio::sync::broadcast;
@@ -19,7 +19,7 @@ use tokio::sync::broadcast;
 /// it's playing then. While anything is to be played, the computer is kept
 /// awake.
 pub struct SteamPlayRepository {
-    session: Arc<Session>,
+    steam: Arc<SteamClient>,
     awake: Arc<KeepAwake>,
     /// The connection being played on, and what it was last told: a
     /// connection that went is replaced, and the new one told afresh.
@@ -82,9 +82,9 @@ impl Heard {
 }
 
 impl SteamPlayRepository {
-    pub fn new(session: Arc<Session>, awake: Arc<KeepAwake>) -> Self {
+    pub fn new(steam: Arc<SteamClient>, awake: Arc<KeepAwake>) -> Self {
         Self {
-            session,
+            steam,
             awake,
             on: Mutex::default(),
             news: tokio::sync::Mutex::default(),
@@ -98,7 +98,7 @@ impl SteamPlayRepository {
     /// Steam has said whether another device is playing. It's told nothing
     /// before.
     async fn take_up(&self) -> anyhow::Result<(Arc<Connection>, Vec<u32>, bool)> {
-        let conn = self.session.connection().await?;
+        let conn = self.steam.connection().await?;
         let told = {
             let on = self.on.lock().unwrap();
             on.as_ref()
@@ -186,11 +186,11 @@ impl PlayRepository for SteamPlayRepository {
         }
         *self.news.lock().await = None;
         self.awake.let_sleep();
-        self.session.disconnect().await;
+        self.steam.disconnect().await;
     }
 
     fn blocked(&self) -> Option<Option<u32>> {
-        self.session
+        self.steam
             .current()?
             .blocked()
             .filter(|b| b.blocked)

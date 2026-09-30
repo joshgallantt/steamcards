@@ -14,7 +14,7 @@ use std::{
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     cm::WalletInfo,
     market::{Listed, Market, MarketPace, OrderBook},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
@@ -47,7 +47,7 @@ async fn past(pause: steam_api::market::MarketPause) {
 }
 
 /// A session signed in as the stand-in's account, with the site at `site`.
-fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> Session {
+fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamClient {
     let dir = std::env::temp_dir().join(format!("steamcards-market-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -61,7 +61,7 @@ fn signed_in(steam: &FakeSteam, site: &MockServer, name: &str) -> Session {
         .unwrap();
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
-    Session::with_endpoints(store, &DebugLog::off(), endpoints).with_market_pace(quick())
+    SteamClient::with_endpoints(store, &DebugLog::off(), endpoints).with_market_pace(quick())
 }
 
 /// A page of `search/render`: `total` cards in all, these on this page.
@@ -397,7 +397,7 @@ async fn a_server_error_is_asked_once_more_then_reported() {
 }
 
 /// Waits until the signed-on connection has heard of the wallet.
-async fn wallet_told(session: &Session) {
+async fn wallet_told(session: &SteamClient) {
     for _ in 0..100 {
         if session.current().and_then(|c| c.wallet()).is_some() {
             return;

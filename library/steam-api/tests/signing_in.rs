@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use config_file::ConfigFile;
 use debug_log::DebugLog;
 use steam_api::{
-    Session,
+    SteamClient,
     auth::{self, QrCode},
     cm::Connection,
     test_support::{ACCOUNT, FakeSteam, QrScript, STEAM_ID},
@@ -24,11 +24,11 @@ fn shown() -> (Arc<Mutex<Vec<QrCode>>>, impl FnMut(QrCode)) {
     (seen, move |qr| log.lock().unwrap().push(qr))
 }
 
-fn session(steam: &FakeSteam, name: &str) -> Session {
+fn session(steam: &FakeSteam, name: &str) -> SteamClient {
     let dir = std::env::temp_dir().join(format!("steamcards-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
-    Session::with_endpoints(store, &DebugLog::off(), steam.endpoints())
+    SteamClient::with_endpoints(store, &DebugLog::off(), steam.endpoints())
 }
 
 #[tokio::test]

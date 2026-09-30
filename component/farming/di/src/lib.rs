@@ -12,7 +12,7 @@ use farming_data::SteamPlayRepository;
 use game::ReadLibrary;
 use keep_awake::KeepAwake;
 use preferences::GetPreferences;
-use steam_api::Session;
+use steam_api::SteamClient;
 
 pub struct FarmingComponent {
     pub farm: FarmCards,
@@ -21,7 +21,7 @@ pub struct FarmingComponent {
 
 impl FarmingComponent {
     pub fn new(
-        session: Arc<Session>,
+        steam: Arc<SteamClient>,
         awake: Arc<KeepAwake>,
         read_library: ReadLibrary,
         look_at_cards: LookAtCards,
@@ -30,7 +30,7 @@ impl FarmingComponent {
         get_preferences: GetPreferences,
     ) -> Self {
         Self::over(
-            Arc::new(SteamPlayRepository::new(session, awake)),
+            Arc::new(SteamPlayRepository::new(steam, awake)),
             read_library,
             look_at_cards,
             look_at_foils,

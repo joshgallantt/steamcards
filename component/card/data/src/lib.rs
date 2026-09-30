@@ -10,26 +10,26 @@ use async_trait::async_trait;
 use card::{Card, CardAsset, CardRepository, CardSet, GameCards};
 use game::{CardDrops, Game};
 use steam_api::{
-    Session,
+    SteamClient,
     badges::{BadgeGame, SetCard},
     inventory::InventoryItem,
 };
 
 /// The account's card pages, read signed in, and the items it holds.
 pub struct SteamCardRepository {
-    session: Arc<Session>,
+    steam: Arc<SteamClient>,
 }
 
 impl SteamCardRepository {
-    pub fn new(session: Arc<Session>) -> Self {
-        Self { session }
+    pub fn new(steam: Arc<SteamClient>) -> Self {
+        Self { steam }
     }
 }
 
 #[async_trait]
 impl CardRepository for SteamCardRepository {
     async fn game_cards(&self, app_id: u32) -> anyhow::Result<GameCards> {
-        self.session
+        self.steam
             .game_cards(app_id)
             .await?
             .map(to_game_cards)
@@ -37,12 +37,12 @@ impl CardRepository for SteamCardRepository {
     }
 
     async fn foils(&self, app_id: u32) -> anyhow::Result<CardSet> {
-        let foils = self.session.foil_cards(app_id).await?;
+        let foils = self.steam.foil_cards(app_id).await?;
         Ok(CardSet::new(foils.into_iter().map(to_card).collect()))
     }
 
     async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
-        let items = self.session.describe_items(asset_ids).await?;
+        let items = self.steam.describe_items(asset_ids).await?;
         Ok(items.into_iter().filter_map(to_card_asset).collect())
     }
 }

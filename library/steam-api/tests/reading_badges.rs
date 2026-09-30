@@ -6,7 +6,7 @@ use std::sync::Arc;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    Session,
+    SteamClient,
     badges::{BadgeGame, read_badge_page, read_foil_cards_page, read_game_cards_page},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
@@ -142,7 +142,7 @@ fn a_games_foils_are_on_a_page_of_their_own() {
 
 /// A session signed in as the stand-in's account, reading pages from
 /// `site`.
-async fn session(steam: &FakeSteam, site: &MockServer, name: &str) -> Session {
+async fn session(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamClient {
     let dir = std::env::temp_dir().join(format!("steamcards-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -156,7 +156,7 @@ async fn session(steam: &FakeSteam, site: &MockServer, name: &str) -> Session {
         .unwrap();
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
-    Session::with_endpoints(store, &DebugLog::off(), endpoints)
+    SteamClient::with_endpoints(store, &DebugLog::off(), endpoints)
 }
 
 async fn serve(site: &MockServer, at: &str, page: String, query: Option<(&str, &str)>) {

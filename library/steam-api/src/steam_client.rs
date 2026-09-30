@@ -47,7 +47,7 @@ const SERVERS_TRIED: usize = 3;
 /// again.
 const ASK_AGAIN_AFTER: Duration = Duration::from_secs(2);
 
-pub struct Session {
+pub struct SteamClient {
     store: Arc<dyn CredentialStore>,
     rejected: AtomicBool,
     endpoints: Endpoints,
@@ -71,7 +71,7 @@ pub struct Session {
     answer_within: Duration,
 }
 
-impl Session {
+impl SteamClient {
     pub fn new(store: Arc<dyn CredentialStore>, log: &DebugLog) -> Self {
         Self::with_endpoints(store, log, Endpoints::default())
     }

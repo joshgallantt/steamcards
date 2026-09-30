@@ -10,12 +10,12 @@ use farming::{NewItem, PlayRepository, Signal};
 use farming_data::SteamPlayRepository;
 use keep_awake::KeepAwake;
 use steam_api::{
-    EResult, Session,
+    EResult, SteamClient,
     cm::UnseenItem,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token, unseen_card},
 };
 
-fn session(steam: &FakeSteam, name: &str) -> Arc<Session> {
+fn session(steam: &FakeSteam, name: &str) -> Arc<SteamClient> {
     let dir =
         std::env::temp_dir().join(format!("steamcards-farming-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -27,7 +27,7 @@ fn session(steam: &FakeSteam, name: &str) -> Arc<Session> {
         login_id: 7,
     })
     .unwrap();
-    Arc::new(Session::with_endpoints(
+    Arc::new(SteamClient::with_endpoints(
         file,
         &DebugLog::off(),
         steam.endpoints(),
@@ -52,7 +52,7 @@ async fn signal(repo: &SteamPlayRepository) -> Signal {
 }
 
 /// Plays `app_id`, and waits for Steam to say what was new already.
-async fn plays(repo: &SteamPlayRepository, session: &Session, app_id: u32) {
+async fn plays(repo: &SteamPlayRepository, session: &SteamClient, app_id: u32) {
     repo.play(&[app_id], false).await.unwrap();
     eventually(|| {
         session
