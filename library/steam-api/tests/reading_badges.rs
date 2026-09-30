@@ -36,7 +36,7 @@ fn a_page_lists_each_games_cards_and_hours() {
     let ids: Vec<u32> = page.games.iter().map(|g| g.app_id).collect();
     assert_eq!(
         ids,
-        [620, 440, 220, 413150],
+        [620, 440, 220, 1086940, 413150],
         "the service badge isn't a game"
     );
 
@@ -52,6 +52,18 @@ fn a_page_lists_each_games_cards_and_hours() {
     let unplayed = game(&page.games, 413150);
     assert_eq!((unplayed.hours, unplayed.cards_left), (0.0, 4));
     assert_eq!(unplayed.badge_level, 0, "no badge crafted yet");
+}
+
+#[test]
+fn a_game_never_played_has_received_nothing() {
+    let page = read_badge_page(&page("badges-1.html"));
+    let never = game(&page.games, 1086940);
+    assert_eq!(never.name, "Baldur's Gate 3");
+    assert_eq!(
+        (never.hours, never.cards_left, never.cards_received),
+        (0.0, 6, 0),
+        "its details say only what's to come"
+    );
 }
 
 #[test]
@@ -184,7 +196,7 @@ async fn every_page_is_read_and_unsure_games_checked() {
     let games = session.badges().await.unwrap();
 
     let ids: Vec<u32> = games.iter().map(|g| g.app_id).collect();
-    assert_eq!(ids, [620, 440, 220, 413150, 730, 1145360]);
+    assert_eq!(ids, [620, 440, 220, 1086940, 413150, 730, 1145360]);
     let cs = game(&games, 730);
     assert_eq!(cs.cards_left, 2, "its own page knew better");
     assert!(!cs.unsure);

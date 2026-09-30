@@ -140,8 +140,14 @@ fn read_row(row: ElementRef<'_>) -> Option<BadgeGame> {
     let cards_left = first(stats, "span[class='progress_info_bold']")
         .and_then(|p| digits(&text(p)))
         .unwrap_or(0);
-    let cards_received = first(stats, "div[class='card_drop_info_header']")
-        .and_then(|h| digits(&text(h)))
+    // "Card drops received: 2". A game that's never been played can have no
+    // such line, only what's still to come: nothing has dropped, and the
+    // first number in its details is what's left, not what's received.
+    let cards_received = stats
+        .select(&sel("div[class='card_drop_info_header']"))
+        .map(text)
+        .find(|t| t.to_ascii_lowercase().contains("received"))
+        .and_then(|t| digits(&t))
         .unwrap_or(0);
     let unsure = cards_left == 0 && cards_received == 0 && UNTRUSTED.contains(&app_id);
     Some(BadgeGame {

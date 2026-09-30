@@ -98,8 +98,14 @@ async fn the_badges_are_the_library() {
             cards: Vec::new(),
         })
     );
-    assert_eq!(library.with_drops_left().count(), 4);
-    assert_eq!(library.drops_left(), 3 + 4 + 2 + 1);
+    assert_eq!(library.with_drops_left().count(), 5);
+    assert_eq!(library.drops_left(), 3 + 6 + 4 + 2 + 1);
+    let never_played = library.game(1086940).unwrap();
+    assert_eq!(
+        (never_played.drops.received, never_played.drops.total()),
+        (0, 6),
+        "nothing has dropped from a game never played"
+    );
 }
 
 #[tokio::test]

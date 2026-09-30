@@ -44,10 +44,11 @@ done, and move it into a numbered section if it grows.
 - [ ] Look at farming faster (2026-09-29, "at some point"). The redesign's
       time-to-finish estimate learns from real drops, so it will show
       whether a change helps.
-- [ ] Some games read 0.0h on the badge page but have drops received
-      (one had 6 of 12). Check what their badge rows say. If Steam
-      leaves their hours out, farming builds 3 hours for games that may not
-      need it.
+- [x] Some games read 0.0h on the badge page but had drops received
+      (one had 6 of 12). The hours were right: those games had never been
+      played. The drops were wrong: a game never played has no "received"
+      line in its card drop details, and the parser read the first number
+      there, which is what's left. Fixed (2026-09-30): it reads 0 of 6.
 - [~] Redesign the UI for card farming, not streamdrops' layout: overall
       progress, progress per game, the cards that dropped this session,
       what each card is worth, the session's value, and the time and value
