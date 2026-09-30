@@ -426,11 +426,28 @@ async fn previews() {
         playing: Vec::new(),
         mode: None,
         blocked_by: Some(730),
+        next_look: None,
         note: "playing on another device — farming waits until it stops".into(),
         ..farming_portal()
     });
     let text = show("playing elsewhere 120×30", render(&mut blocked, 120, 30));
     assert!(text.contains("waiting · Counter-Strike 2 is being played on another device"));
+
+    // It stopped: a minute's grace.
+    let mut grace = farming_app();
+    grace.status = Some(FarmingStatus {
+        status: Status::Blocked,
+        playing: Vec::new(),
+        mode: None,
+        next_look: Some(now() + chrono::Duration::seconds(60)),
+        note: "carrying on in a minute…".into(),
+        ..farming_portal()
+    });
+    let text = show(
+        "playing elsewhere stopped 120×30",
+        render(&mut grace, 120, 30),
+    );
+    assert!(text.contains("waiting · farming again in 1m"));
 
     // Nothing left.
     let mut idle = farming_app();
@@ -643,9 +660,19 @@ async fn nothing_is_cut_off_at_any_size() {
         playing: Vec::new(),
         mode: None,
         blocked_by: Some(730),
+        next_look: None,
         ..farming_portal()
     });
     states.push(("waiting", blocked));
+    let mut grace = farming_app();
+    grace.status = Some(FarmingStatus {
+        status: Status::Blocked,
+        playing: Vec::new(),
+        mode: None,
+        next_look: Some(now() + chrono::Duration::minutes(5)),
+        ..farming_portal()
+    });
+    states.push(("waiting to carry on", grace));
     let mut idle = farming_app();
     idle.status = Some(FarmingStatus {
         status: Status::Idle,

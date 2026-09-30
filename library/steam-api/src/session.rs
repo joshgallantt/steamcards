@@ -67,7 +67,7 @@ pub struct Session {
     wallet: Mutex<Option<WalletInfo>>,
     /// How long before asking Steam about items again.
     ask_again_after: Duration,
-    /// How long Steam's answer to what's new at sign-on may take.
+    /// How long Steam's answers at sign-on may take.
     answer_within: Duration,
 }
 
@@ -117,9 +117,9 @@ impl Session {
         self
     }
 
-    /// The same, counting Steam's answer to what's new at sign-on only
-    /// within `within` of asking, in place of 10 seconds: for tests that
-    /// can't wait.
+    /// The same, waiting for Steam's answers at sign-on (whether another
+    /// device is playing, and what's new) only `within`, in place of 10
+    /// seconds: for tests that can't wait.
     pub fn with_sign_on_answer_within(mut self, within: Duration) -> Self {
         self.answer_within = within;
         self

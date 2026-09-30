@@ -254,6 +254,78 @@ async fn another_session_taking_over_is_its_own_signal() {
 }
 
 #[tokio::test]
+async fn nothing_is_played_while_another_device_plays() {
+    let steam = FakeSteam::start().await;
+    steam.busy_elsewhere(730);
+    let repo = SteamPlayRepository::new(session(&steam, "busy"), Arc::new(KeepAwake::off()));
+
+    repo.play(&[620], false).await.unwrap();
+    assert_eq!(
+        repo.blocked(),
+        Some(Some(730)),
+        "Steam said so as it signed on"
+    );
+
+    steam.block(false, 0);
+    assert_eq!(signal(&repo).await, Signal::Unblocked);
+    repo.play(&[620], false).await.unwrap();
+
+    eventually(|| !steam.games_played().is_empty()).await;
+    assert_eq!(
+        steam.games_played(),
+        [vec![620]],
+        "told once it stopped, and not before: Steam would have signed it off"
+    );
+    assert_eq!(steam.logons().len(), 1);
+}
+
+#[tokio::test]
+async fn games_are_told_again_after_another_device_played() {
+    let steam = FakeSteam::start().await;
+    let session = session(&steam, "told-again");
+    let repo = SteamPlayRepository::new(session.clone(), Arc::new(KeepAwake::off()));
+    plays(&repo, &session, 620).await;
+    steam.block(true, 730);
+    assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
+    steam.block(false, 0);
+    assert_eq!(signal(&repo).await, Signal::Unblocked);
+
+    repo.play(&[620], false).await.unwrap();
+
+    eventually(|| steam.games_played().len() == 2).await;
+    assert_eq!(steam.games_played(), [vec![620], vec![620]]);
+}
+
+#[tokio::test]
+async fn another_device_taking_over_is_its_own_signal() {
+    let steam = FakeSteam::start().await;
+    let repo = SteamPlayRepository::new(session(&steam, "taken-over"), Arc::new(KeepAwake::off()));
+    repo.play(&[620], false).await.unwrap();
+    eventually(|| steam.games_played().len() == 1).await;
+
+    steam.take_over(730);
+
+    assert_eq!(signal(&repo).await, Signal::TakenOver);
+    assert_eq!(repo.blocked(), None, "signed off, nothing is said");
+}
+
+#[tokio::test]
+async fn listening_signs_on_to_hear_another_device_without_playing() {
+    let steam = FakeSteam::start().await;
+    steam.busy_elsewhere(730);
+    let repo = SteamPlayRepository::new(session(&steam, "listen"), Arc::new(KeepAwake::off()));
+
+    repo.listen().await.unwrap();
+    repo.listen().await.unwrap();
+    assert_eq!(repo.blocked(), Some(Some(730)));
+    steam.block(false, 0);
+
+    assert_eq!(signal(&repo).await, Signal::Unblocked);
+    assert_eq!(steam.logons().len(), 1, "signed on once");
+    assert!(steam.games_played().is_empty());
+}
+
+#[tokio::test]
 async fn after_a_drop_the_new_connection_is_told_everything() {
     let steam = FakeSteam::start().await;
     let repo = SteamPlayRepository::new(session(&steam, "again"), Arc::new(KeepAwake::off()));

@@ -20,8 +20,9 @@ use crate::{
     ranking::{Plan, can_drop, farm_order, hours_to_go, plan, why_nothing},
     reporter::Reporter,
     rules::{
-        AFTER_BLOCK, AFTER_NEW_ITEMS, GIVE_UP_AFTER, GIVE_UP_TIMES, HOURS_BEFORE_DROPS, IDLE_LOOK,
-        LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ, TICK,
+        AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES,
+        HOURS_BEFORE_DROPS, IDLE_LOOK, LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ,
+        TICK,
     },
     session::{Found, Kept, SessionKeeper},
 };
@@ -87,13 +88,23 @@ struct Farmer {
 enum Outcome {
     /// Done, or something changed: read the library and plan again.
     Again,
-    /// Another device started playing.
-    Blocked,
+    /// Another device plays: wait until it's done.
+    Elsewhere(Elsewhere),
     /// The connection went.
     Lost(String),
     /// Another session took this one's place.
     Replaced,
     Stopped,
+}
+
+/// Why farming waits for another device.
+#[derive(Clone, Copy)]
+enum Elsewhere {
+    /// Steam says it's playing: this game, when Steam says.
+    Playing(Option<u32>),
+    /// It took over playing, and Steam signed this session off. Its game
+    /// may not have started yet.
+    TookOver,
 }
 
 /// How waiting out another device ended.
@@ -158,13 +169,6 @@ impl Farmer {
             if token.is_cancelled() {
                 return;
             }
-            if let Some(by) = self.play.blocked() {
-                match self.wait_out(by, run, r, token).await {
-                    Waited::Resume => {}
-                    Waited::Replaced => return replaced(r),
-                    Waited::Stopped => return,
-                }
-            }
             r.stage(Status::Checking, "reading your badges…");
             let read = tokio::select! {
                 _ = token.cancelled() => return,
@@ -211,16 +215,16 @@ impl Farmer {
                 Plan::Nothing => self.rest(run, r, token).await,
             };
             match outcome {
-                Outcome::Again | Outcome::Blocked => {}
+                Outcome::Again => {}
+                Outcome::Elsewhere(why) => match self.wait_out(why, run, r, token).await {
+                    Waited::Resume => {}
+                    Waited::Replaced => return replaced(r),
+                    Waited::Stopped => return,
+                },
                 Outcome::Stopped => return,
                 Outcome::Replaced => return replaced(r),
                 Outcome::Lost(why) => {
-                    r.event(
-                        EventKind::Warning,
-                        format!("{why} — trying again in a minute"),
-                    );
-                    r.stage_until(Status::Error, &why, when(Instant::now() + RETRY_CONNECT));
-                    if !pause(RETRY_CONNECT, token).await {
+                    if !lost(&why, r, token).await {
                         return;
                     }
                 }
@@ -241,8 +245,8 @@ impl Farmer {
         if let Err(e) = self.play.play(&[app_id], prefs.appear_online).await {
             return Outcome::Lost(e.to_string());
         }
-        if self.play.blocked().is_some() {
-            return Outcome::Blocked;
+        if let Some(by) = self.play.blocked() {
+            return Outcome::Elsewhere(Elsewhere::Playing(by));
         }
         let Some(game) = run.kept().library.game(app_id).cloned() else {
             return Outcome::Again;
@@ -290,7 +294,8 @@ impl Farmer {
             match woke {
                 None => return Outcome::Stopped,
                 Some(Woke::Signal(signal)) => match signal {
-                    Signal::Blocked(_) => return Outcome::Blocked,
+                    Signal::Blocked(by) => return Outcome::Elsewhere(Elsewhere::Playing(by)),
+                    Signal::TakenOver => return Outcome::Elsewhere(Elsewhere::TookOver),
                     Signal::Replaced => return Outcome::Replaced,
                     Signal::Lost(why) => return Outcome::Lost(why),
                     Signal::Unblocked => continue,
@@ -400,8 +405,8 @@ impl Farmer {
         if let Err(e) = self.play.play(&app_ids, prefs.appear_online).await {
             return Outcome::Lost(e.to_string());
         }
-        if self.play.blocked().is_some() {
-            return Outcome::Blocked;
+        if let Some(by) = self.play.blocked() {
+            return Outcome::Elsewhere(Elsewhere::Playing(by));
         }
         let stretch = run.kept().start(&app_ids, Mode::Hours, Utc::now());
         let outcome = self.build(&app_ids, prefs, run, r, token).await;
@@ -441,7 +446,8 @@ impl Farmer {
             match woke {
                 None => return Outcome::Stopped,
                 Some(Woke::Signal(signal)) => match signal {
-                    Signal::Blocked(_) => return Outcome::Blocked,
+                    Signal::Blocked(by) => return Outcome::Elsewhere(Elsewhere::Playing(by)),
+                    Signal::TakenOver => return Outcome::Elsewhere(Elsewhere::TookOver),
                     Signal::Replaced => return Outcome::Replaced,
                     Signal::Lost(why) => return Outcome::Lost(why),
                     Signal::Unblocked => continue,
@@ -524,67 +530,111 @@ impl Farmer {
         }
     }
 
-    /// Waits while another device plays, then a minute more before playing
-    /// again, so as not to take over from it. Items Steam announces
-    /// meanwhile are kept: a card the other device's game drops is this
-    /// session's too.
+    /// Waits while another device plays, then a while more before playing
+    /// again, so as not to get in its way: a minute after it stops or, when
+    /// it took over and Steam doesn't say it's playing yet, a few minutes for
+    /// its game to start. Signed on all the while, playing nothing, so Steam
+    /// can say when it stops. Items Steam announces meanwhile are kept: a
+    /// card the other device's game drops is this session's too.
     async fn wait_out(
         &self,
-        mut by: Option<u32>,
+        why: Elsewhere,
         run: &Run,
         r: &Reporter,
         token: &CancellationToken,
     ) -> Waited {
-        loop {
-            let prefs = (self.prefs)();
-            let status = {
-                let kept = run.kept();
-                FarmingStatus {
-                    status: Status::Blocked,
-                    library: kept.library.clone(),
-                    order: farm_order(&kept.library, &prefs, &kept.set_aside),
-                    blocked_by: by,
-                    session: kept.session.clone(),
-                    set_aside: kept.set_aside.clone(),
-                    note: "playing on another device — farming waits until it stops".into(),
-                    ..Default::default()
+        r.info(waiting_for(why, &run.kept()));
+        let mut grace = match why {
+            Elsewhere::Playing(_) => AFTER_BLOCK,
+            Elsewhere::TookOver => AFTER_TAKEN_OVER,
+        };
+        'listening: loop {
+            if let Err(e) = self.play.listen().await {
+                if !lost(&e.to_string(), r, token).await {
+                    return Waited::Stopped;
                 }
-            };
-            r.status(status);
+                continue;
+            }
+            if let Some(by) = self.play.blocked() {
+                self.waiting(by, None, run, r);
+                loop {
+                    let signal = tokio::select! {
+                        _ = token.cancelled() => return Waited::Stopped,
+                        signal = self.play.next_signal() => signal,
+                    };
+                    let why = match signal {
+                        Signal::Unblocked => break,
+                        Signal::Blocked(by) => {
+                            self.waiting(by, None, run, r);
+                            continue;
+                        }
+                        Signal::NewItems(items) => {
+                            run.kept().keep_announced(items);
+                            continue;
+                        }
+                        Signal::Replaced => return Waited::Replaced,
+                        Signal::Lost(why) => why,
+                        Signal::TakenOver => "Steam signed this session off".to_owned(),
+                    };
+                    // Signing on again says whether it still plays.
+                    if !lost(&why, r, token).await {
+                        return Waited::Stopped;
+                    }
+                    continue 'listening;
+                }
+                grace = AFTER_BLOCK;
+                r.info(format!(
+                    "Playing elsewhere stopped: farming carries on in {}.",
+                    minutes(grace)
+                ));
+            }
+            // A while more, in case it plays again.
+            let until = Instant::now() + grace;
+            self.waiting(None, Some(until), run, r);
             loop {
                 let signal = tokio::select! {
                     _ = token.cancelled() => return Waited::Stopped,
+                    _ = tokio::time::sleep_until(until) => return Waited::Resume,
                     signal = self.play.next_signal() => signal,
                 };
                 match signal {
-                    Signal::Unblocked | Signal::Lost(_) => break,
-                    Signal::Replaced => return Waited::Replaced,
-                    Signal::Blocked(app) => {
-                        by = app;
-                        break;
-                    }
+                    Signal::Blocked(_) => continue 'listening,
                     Signal::NewItems(items) => run.kept().keep_announced(items),
+                    Signal::Replaced => return Waited::Replaced,
+                    // Nothing to do until the while is up: playing then signs
+                    // on again if need be, and plays nothing while another
+                    // device does.
+                    Signal::Unblocked | Signal::Lost(_) | Signal::TakenOver => {}
                 }
             }
-            if self.play.blocked().is_some() {
-                continue;
-            }
-            r.info("Playing elsewhere stopped: farming carries on in a minute.".into());
-            r.stage(Status::Blocked, "carrying on in a minute…");
-            tokio::select! {
-                _ = token.cancelled() => return Waited::Stopped,
-                _ = tokio::time::sleep(AFTER_BLOCK) => return Waited::Resume,
-                signal = self.play.next_signal() => match signal {
-                    Signal::Replaced => return Waited::Replaced,
-                    Signal::Blocked(app) => by = app,
-                    Signal::NewItems(items) => {
-                        run.kept().keep_announced(items);
-                        return Waited::Resume;
-                    }
-                    Signal::Unblocked | Signal::Lost(_) => return Waited::Resume,
-                },
-            }
         }
+    }
+
+    /// Tells the screens farming waits for another device: while it plays
+    /// `by` (when Steam says what), or once it's done, until `until`.
+    fn waiting(&self, by: Option<u32>, until: Option<Instant>, run: &Run, r: &Reporter) {
+        let prefs = (self.prefs)();
+        let status = {
+            let kept = run.kept();
+            FarmingStatus {
+                status: Status::Blocked,
+                library: kept.library.clone(),
+                order: farm_order(&kept.library, &prefs, &kept.set_aside),
+                blocked_by: by,
+                next_look: until.map(when),
+                session: kept.session.clone(),
+                set_aside: kept.set_aside.clone(),
+                note: match until {
+                    Some(until) => format!(
+                        "carrying on in {}…",
+                        minutes(until.saturating_duration_since(Instant::now()))
+                    ),
+                    None => "playing on another device — farming waits until it stops".into(),
+                },
+                ..Default::default()
+            }
+        };
+        r.status(status);
     }
 
     /// Tells of the drops a look or read just found, at once, each still
@@ -797,6 +847,33 @@ impl Farmer {
     }
 }
 
+/// Says the connection to Steam went, and why, and waits a minute before
+/// trying again; false when stopped meanwhile.
+async fn lost(why: &str, r: &Reporter, token: &CancellationToken) -> bool {
+    r.event(
+        EventKind::Warning,
+        format!("{why} — trying again in a minute"),
+    );
+    r.stage_until(Status::Error, why, when(Instant::now() + RETRY_CONNECT));
+    pause(RETRY_CONNECT, token).await
+}
+
+/// What to say as farming starts waiting for another device.
+fn waiting_for(why: Elsewhere, kept: &Kept) -> String {
+    match why {
+        Elsewhere::TookOver => {
+            "Another device took over playing: farming waits until it stops.".into()
+        }
+        Elsewhere::Playing(by) => match by.and_then(|id| kept.library.game(id)) {
+            Some(game) => format!(
+                "{} is being played on another device: farming waits until it stops.",
+                game.name
+            ),
+            None => "Another device is playing: farming waits until it stops.".into(),
+        },
+    }
+}
+
 fn replaced(r: &Reporter) {
     r.event(
         EventKind::Error,
@@ -837,6 +914,14 @@ fn until_ready(library: &SteamLibrary, app_ids: &[u32]) -> Duration {
 fn when(at: Instant) -> chrono::DateTime<Utc> {
     let left = at.saturating_duration_since(Instant::now());
     Utc::now() + chrono::Duration::from_std(left).unwrap_or_default()
+}
+
+/// "a minute", "5 minutes": how long, to the minute.
+fn minutes(d: Duration) -> String {
+    match d.as_secs().div_ceil(60) {
+        0 | 1 => "a minute".into(),
+        n => format!("{n} minutes"),
+    }
 }
 
 /// "1 card", "3 cards".

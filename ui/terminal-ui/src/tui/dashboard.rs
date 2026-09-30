@@ -370,6 +370,10 @@ fn state_lines(cx: &Ctx<'_>, room: usize) -> Vec<Vec<Span<'static>>> {
         )]],
         Status::Blocked => {
             let head = say(theme::PAUSED, theme::fg(BUSY), "waiting");
+            // It's done: farming carries on in a while.
+            if s.next_look.is_some() {
+                return with(vec![head], next("farming again"));
+            }
             let what = s.blocked_by.and_then(|id| s.library.game(id)).map_or_else(
                 || "your Steam account is in use on another device".to_owned(),
                 |g| format!("{} is being played on another device", g.name),

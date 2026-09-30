@@ -56,7 +56,7 @@ data.
 
 | Part | Shows |
 | --- | --- |
-| Header | What's happening: farming a game and when its cards are next checked, building hours, waiting while another device plays, paused, reading the badges, nothing to farm, an error and when it's tried again, or the sign-in. Then the account and whether it appears offline. |
+| Header | What's happening: farming a game and when its cards are next checked, building hours, waiting while another device plays and when farming carries on after it, paused, reading the badges, nothing to farm, an error and when it's tried again, or the sign-in. Then the account and whether it appears offline. |
 | This session | The cards that dropped this session, each copy counted, and what they're worth. |
 | To go | The card drops still to come in the games that will be farmed, how many games, and about how long: learnt from this session's drops, assuming half an hour a drop until two have dropped. |
 | All games | Every game with cards: the drops received of all there are, as a gauge. When done: what this session's cards and those still to come will be worth. |

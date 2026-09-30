@@ -7,14 +7,21 @@ use crate::Signal;
 #[async_trait]
 pub trait PlayRepository: Send + Sync {
     /// Plays exactly these games, signing on first if need be, and shows to
-    /// friends as online or not. Errs with a reason fit to show the user.
+    /// friends as online or not. While another device plays, it plays
+    /// nothing: Steam would sign this session off. Errs with a reason fit to
+    /// show the user.
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()>;
+
+    /// Signs on if need be, playing nothing, so Steam can say when another
+    /// device stops playing. Errs with a reason fit to show the user.
+    async fn listen(&self) -> anyhow::Result<()>;
 
     /// Stops playing, and signs off.
     async fn stop(&self);
 
     /// Whether another device's game blocks playing right now, as Steam last
-    /// said, and what it's playing when Steam says.
+    /// said, and what it's playing when Steam says. Signed off, nothing is
+    /// said.
     fn blocked(&self) -> Option<Option<u32>>;
 
     /// Waits for Steam to say something the farmer acts on.

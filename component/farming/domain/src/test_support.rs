@@ -43,7 +43,11 @@ struct State {
     playing: Vec<u32>,
     /// Up to when what's playing has been counted.
     counted_to: Instant,
+    /// What another device is playing, if anything, when Steam says.
     blocked: Option<Option<u32>>,
+    signed_on: bool,
+    /// How often a session signed on.
+    sign_ons: usize,
     plays: Vec<(Vec<u32>, bool)>,
     stops: usize,
     reads: usize,
@@ -62,7 +66,9 @@ struct State {
 /// Steam, as far as farming sees it, in memory: a library whose badges answer
 /// as its games have been played, on tokio's clock, so a test can run hours
 /// of farming on paused time. Each card that drops is an item of its own,
-/// which Steam announces when told to, and describes when asked.
+/// which Steam announces when told to, and describes when asked. Whether
+/// another device is playing is said only to a session signed on, and while
+/// it plays, nothing is played here.
 pub struct InMemorySteam {
     state: Mutex<State>,
     signals_tx: mpsc::UnboundedSender<Signal>,
@@ -88,6 +94,8 @@ impl InMemorySteam {
                 playing: Vec::new(),
                 counted_to: Instant::now(),
                 blocked: None,
+                signed_on: false,
+                sign_ons: 0,
                 plays: Vec::new(),
                 stops: 0,
                 reads: 0,
@@ -202,15 +210,27 @@ impl InMemorySteam {
     /// Another device starts playing `app_id` on the account.
     pub fn block(&self, app_id: Option<u32>) {
         self.settle();
-        self.state.lock().unwrap().blocked = Some(app_id);
-        let _ = self.signals_tx.send(Signal::Blocked(app_id));
+        let mut s = self.state.lock().unwrap();
+        s.blocked = Some(app_id);
+        if s.signed_on {
+            let _ = self.signals_tx.send(Signal::Blocked(app_id));
+        }
     }
 
     /// It stops.
     pub fn unblock(&self) {
         self.settle();
-        self.state.lock().unwrap().blocked = None;
-        let _ = self.signals_tx.send(Signal::Unblocked);
+        let mut s = self.state.lock().unwrap();
+        s.blocked = None;
+        if s.signed_on {
+            let _ = self.signals_tx.send(Signal::Unblocked);
+        }
+    }
+
+    /// Another device takes over playing, and Steam signs this session off
+    /// to let it. Its game starts when the test says, with `block`.
+    pub fn take_over(&self) {
+        self.sign_off(Signal::TakenOver);
     }
 
     /// Steam says new items arrived, giving only a count.
@@ -255,12 +275,26 @@ impl InMemorySteam {
 
     /// Another session signs on in this one's place.
     pub fn replace(&self) {
-        let _ = self.signals_tx.send(Signal::Replaced);
+        self.sign_off(Signal::Replaced);
     }
 
     /// The connection to Steam goes.
     pub fn lose(&self, why: &str) {
-        let _ = self.signals_tx.send(Signal::Lost(why.into()));
+        self.sign_off(Signal::Lost(why.into()));
+    }
+
+    /// How often a session signed on.
+    pub fn sign_ons(&self) -> usize {
+        self.state.lock().unwrap().sign_ons
+    }
+
+    /// The session is signed off, and told so: nothing it played counts.
+    fn sign_off(&self, why: Signal) {
+        self.settle();
+        let mut s = self.state.lock().unwrap();
+        s.signed_on = false;
+        s.playing.clear();
+        let _ = self.signals_tx.send(why);
     }
 
     /// The badges can't be read, as if steamcommunity.com were down, or can
@@ -458,13 +492,31 @@ impl LibraryRepository for InMemorySteam {
     }
 }
 
+/// Signs the session on, if it isn't.
+fn sign_on(s: &mut State) {
+    if !s.signed_on {
+        s.signed_on = true;
+        s.sign_ons += 1;
+    }
+}
+
 #[async_trait]
 impl PlayRepository for InMemorySteam {
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
         self.settle();
         let mut s = self.state.lock().unwrap();
+        sign_on(&mut s);
+        if s.blocked.is_some() {
+            s.playing.clear();
+            return Ok(());
+        }
         s.playing = app_ids.to_vec();
         s.plays.push((app_ids.to_vec(), online));
+        Ok(())
+    }
+
+    async fn listen(&self) -> anyhow::Result<()> {
+        sign_on(&mut self.state.lock().unwrap());
         Ok(())
     }
 
@@ -472,11 +524,13 @@ impl PlayRepository for InMemorySteam {
         self.settle();
         let mut s = self.state.lock().unwrap();
         s.playing.clear();
+        s.signed_on = false;
         s.stops += 1;
     }
 
     fn blocked(&self) -> Option<Option<u32>> {
-        self.state.lock().unwrap().blocked
+        let s = self.state.lock().unwrap();
+        s.blocked.filter(|_| s.signed_on)
     }
 
     async fn next_signal(&self) -> Signal {

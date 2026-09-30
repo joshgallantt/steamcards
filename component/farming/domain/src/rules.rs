@@ -38,6 +38,12 @@ pub(crate) const GIVE_UP_TIMES: u8 = 2;
 /// Game Idler's 60 seconds.
 pub(crate) const AFTER_BLOCK: Duration = Duration::from_secs(60);
 
+/// After another device takes over playing, how long to wait for Steam to
+/// say it's playing before playing again: its game can take minutes to start
+/// (an update, or shaders to prepare), and playing meanwhile would have its
+/// Steam client ask to take over again.
+pub(crate) const AFTER_TAKEN_OVER: Duration = Duration::from_secs(5 * 60);
+
 /// With nothing to farm, how often to look at the library again: ASF's
 /// `IdleFarmingPeriod`.
 pub(crate) const IDLE_LOOK: Duration = Duration::from_secs(8 * 60 * 60);

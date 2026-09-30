@@ -86,6 +86,17 @@ impl Player {
             .unwrap_or_else(|_| panic!("no {status:?} status within two days"))
     }
 
+    /// Reads until the status says farming waits for another device playing
+    /// `app_id`, and returns it.
+    async fn sees_waiting_for(&mut self, app_id: u32) -> FarmingStatus {
+        loop {
+            let waiting = self.sees(Status::Blocked).await;
+            if waiting.blocked_by == Some(app_id) {
+                return waiting;
+            }
+        }
+    }
+
     /// Lets the farmer run for `d` of tokio's time.
     async fn waits(&self, d: Duration) {
         tokio::time::sleep(d).await;
@@ -261,6 +272,133 @@ async fn playing_elsewhere_pauses_farming_until_a_minute_after_it_stops() {
     player.reads(EventKind::Playing).await;
     assert!(unblocked.elapsed() >= MINUTE, "a minute's grace first");
     assert_eq!(player.steam.played(), [vec![620], vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn another_device_taking_over_is_waited_out_signed_on_without_playing() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+
+    // A game started on another device, whose Steam client closed
+    // steamcards' game to let it play.
+    player.steam.take_over();
+    player.steam.block(Some(730));
+    assert_eq!(
+        player.reads(EventKind::Info).await,
+        "Another device took over playing: farming waits until it stops."
+    );
+    player.sees_waiting_for(730).await;
+
+    player.waits(2 * HOUR).await;
+    assert_eq!(
+        player.steam.played().len(),
+        1,
+        "nothing played meanwhile: Steam would sign steamcards off"
+    );
+    assert_eq!(
+        player.steam.sign_ons(),
+        2,
+        "signed on again once, to hear when it stops"
+    );
+    assert_eq!(player.steam.reads(), 1, "nor were the badges read again");
+
+    player.steam.unblock();
+    let unblocked = Instant::now();
+    assert_eq!(
+        player.reads(EventKind::Info).await,
+        "Playing elsewhere stopped: farming carries on in a minute."
+    );
+    player.reads(EventKind::Playing).await;
+    assert!(unblocked.elapsed() >= MINUTE, "a minute's grace first");
+    assert_eq!(player.steam.played(), [vec![620], vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_takeover_the_other_devices_game_is_given_minutes_to_start() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+
+    player.steam.take_over();
+    let waiting = player.sees(Status::Blocked).await;
+    assert_eq!(waiting.blocked_by, None, "nothing plays there yet");
+    let wait = waiting.next_look.map(|at| at - chrono::Utc::now());
+    assert!(
+        wait.is_some_and(
+            |w| w > chrono::TimeDelta::minutes(4) && w <= chrono::TimeDelta::minutes(5)
+        ),
+        "it says when farming carries on: {wait:?}"
+    );
+
+    // Its game takes three minutes to start.
+    player.waits(3 * MINUTE).await;
+    player.steam.block(Some(730));
+    player.sees_waiting_for(730).await;
+    player.waits(HOUR).await;
+    assert_eq!(player.steam.played().len(), 1, "nothing played meanwhile");
+
+    player.steam.unblock();
+    player.reads(EventKind::Playing).await;
+    assert_eq!(player.steam.played(), [vec![620], vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_takeover_with_no_game_started_farming_carries_on_in_five_minutes() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+
+    player.steam.take_over();
+    let taken = Instant::now();
+
+    player.reads(EventKind::Playing).await;
+    assert!(taken.elapsed() >= 5 * MINUTE);
+    assert_eq!(player.steam.played(), [vec![620], vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn farming_that_starts_while_another_device_plays_plays_nothing_until_it_stops() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.steam.block(Some(730));
+    player.starts_farming();
+
+    assert_eq!(
+        player.reads(EventKind::Info).await,
+        "Another device is playing: farming waits until it stops."
+    );
+    player.sees_waiting_for(730).await;
+    player.waits(HOUR).await;
+    assert!(
+        player.steam.played().is_empty(),
+        "nothing played: Steam would sign steamcards off"
+    );
+    assert_eq!(player.steam.sign_ons(), 1);
+
+    player.steam.unblock();
+    player.reads(EventKind::Playing).await;
+    assert_eq!(player.steam.played(), [vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_game_played_on_another_device_is_named_when_its_in_the_library() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.steam.add_game(440, 1.0, 2, Some(HOUR));
+    player.steam.name(440, "Team Fortress 2");
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+
+    player.steam.block(Some(440));
+
+    assert_eq!(
+        player.reads(EventKind::Info).await,
+        "Team Fortress 2 is being played on another device: farming waits until it stops."
+    );
 }
 
 #[tokio::test(start_paused = true)]

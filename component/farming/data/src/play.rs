@@ -15,7 +15,9 @@ use tokio::sync::broadcast;
 
 /// Playing games on the Steam session's CM connection, as the Steam client
 /// does: nothing is launched, Steam is told what's being played. While
-/// anything is, the computer is kept awake.
+/// another device plays, nothing is: Steam signs off a session that says
+/// it's playing then. While anything is to be played, the computer is kept
+/// awake.
 pub struct SteamPlayRepository {
     session: Arc<Session>,
     awake: Arc<KeepAwake>,
@@ -90,6 +92,41 @@ impl SteamPlayRepository {
         }
     }
 
+    /// The signed-on connection, signing on first if need be, and what it
+    /// was last told: the games, and whether it shows online. A new one is
+    /// heard from here on, what was new when it signed on included, once
+    /// Steam has said whether another device is playing. It's told nothing
+    /// before.
+    async fn take_up(&self) -> anyhow::Result<(Arc<Connection>, Vec<u32>, bool)> {
+        let conn = self.session.connection().await?;
+        let told = {
+            let on = self.on.lock().unwrap();
+            on.as_ref()
+                .filter(|p| Arc::ptr_eq(&p.conn, &conn))
+                .map(|p| (p.games.clone(), p.online))
+        };
+        if let Some((games, online)) = told {
+            return Ok((conn, games, online));
+        }
+        let news = conn.events();
+        conn.playing_state().await;
+        *self.news.lock().await = Some(news);
+        if let Some(already) = conn.new_at_sign_on() {
+            let mut heard = self.heard.lock().unwrap();
+            if let Some(items) = heard.hear(&already, conn.steam_id()) {
+                heard.keep(items);
+            }
+        }
+        // A session plays nothing, and is offline, until it says otherwise.
+        *self.on.lock().unwrap() = Some(Played {
+            account: conn.steam_id(),
+            conn: conn.clone(),
+            games: Vec::new(),
+            online: false,
+        });
+        Ok((conn, Vec::new(), false))
+    }
+
     /// Lets the connection played on go. If the account's first sign-on
     /// went unheard, what it said was new is heard first, as what was there
     /// already: signing on again then says what's new since.
@@ -110,36 +147,24 @@ impl SteamPlayRepository {
 #[async_trait]
 impl PlayRepository for SteamPlayRepository {
     async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
-        let conn = self.session.connection().await?;
-        let before = {
-            let on = self.on.lock().unwrap();
-            on.as_ref()
-                .filter(|p| Arc::ptr_eq(&p.conn, &conn))
-                .map(|p| (p.games.clone(), p.online))
-        };
-        if before.is_none() {
-            // A new connection: hear what it says from here on, what was
-            // new when it signed on included.
-            *self.news.lock().await = Some(conn.events());
-            if let Some(already) = conn.new_at_sign_on() {
-                let mut heard = self.heard.lock().unwrap();
-                if let Some(items) = heard.hear(&already, conn.steam_id()) {
-                    heard.keep(items);
-                }
-            }
-        }
-        // A session is offline until it says otherwise.
-        let was_online = before.as_ref().is_some_and(|(_, o)| *o);
+        let (conn, told, was_online) = self.take_up().await?;
         if online != was_online {
             conn.set_online(online)?;
         }
-        if before.as_ref().is_none_or(|(games, _)| games != app_ids) {
-            conn.play(app_ids)?;
-        }
+        // While another device plays, Steam signs off a session that says
+        // it's playing, and counts nothing of this one's: nothing is said.
+        let games = if conn.blocked().is_some_and(|b| b.blocked) {
+            Vec::new()
+        } else {
+            if app_ids != told {
+                conn.play(app_ids)?;
+            }
+            app_ids.to_vec()
+        };
         *self.on.lock().unwrap() = Some(Played {
             account: conn.steam_id(),
             conn,
-            games: app_ids.to_vec(),
+            games,
             online,
         });
         if app_ids.is_empty() {
@@ -148,6 +173,10 @@ impl PlayRepository for SteamPlayRepository {
             self.awake.hold();
         }
         Ok(())
+    }
+
+    async fn listen(&self) -> anyhow::Result<()> {
+        self.take_up().await.map(|_| ())
     }
 
     async fn stop(&self) {
@@ -180,7 +209,14 @@ impl PlayRepository for SteamPlayRepository {
                 return std::future::pending().await;
             };
             match rx.recv().await {
-                Ok(Event::PlayingBlocked(b)) if b.blocked => return Signal::Blocked(b.app_id),
+                Ok(Event::PlayingBlocked(b)) if b.blocked => {
+                    // Nothing this session plays counts meanwhile: once it
+                    // stops, the games are told again.
+                    if let Some(p) = self.on.lock().unwrap().as_mut() {
+                        p.games.clear();
+                    }
+                    return Signal::Blocked(b.app_id);
+                }
                 Ok(Event::PlayingBlocked(_)) => return Signal::Unblocked,
                 Ok(Event::NewItems(announced)) => {
                     let account = self.on.lock().unwrap().as_ref().and_then(|p| p.account);
@@ -188,15 +224,14 @@ impl PlayRepository for SteamPlayRepository {
                         return Signal::NewItems(items);
                     }
                 }
-                Ok(Event::LoggedOff(EResult::LOGON_SESSION_REPLACED)) => {
-                    *news = None;
-                    self.let_go();
-                    return Signal::Replaced;
-                }
                 Ok(Event::LoggedOff(why)) => {
                     *news = None;
                     self.let_go();
-                    return Signal::Lost(signed_off(why));
+                    return match why {
+                        EResult::LOGON_SESSION_REPLACED => Signal::Replaced,
+                        EResult::LOGGED_IN_ELSEWHERE => Signal::TakenOver,
+                        why => Signal::Lost(format!("Steam signed this session off ({why})")),
+                    };
                 }
                 Ok(Event::Closed) | Err(broadcast::error::RecvError::Closed) => {
                     *news = None;
@@ -218,15 +253,5 @@ fn new_item(item: &UnseenItem) -> NewItem {
         gained_at: item
             .gained_at
             .and_then(|at| DateTime::from_timestamp(i64::from(at), 0)),
-    }
-}
-
-/// Why Steam signed the session off, in the user's terms.
-fn signed_off(why: EResult) -> String {
-    match why {
-        EResult::LOGGED_IN_ELSEWHERE => {
-            "Steam signed this session off: the account signed in elsewhere".into()
-        }
-        why => format!("Steam signed this session off ({why})"),
     }
 }

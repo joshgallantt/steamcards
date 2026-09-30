@@ -66,7 +66,9 @@ pub enum Event {
     PlayingBlocked(Blocked),
     /// Steam announced the account's new items. A card may have dropped.
     NewItems(Announcement),
-    /// Steam signed this session off.
+    /// Steam signed this session off. `LoggedInElsewhere` when another
+    /// device took over playing, or when this one said it was playing while
+    /// another device was.
     LoggedOff(EResult),
     /// The connection closed.
     Closed,
@@ -172,11 +174,12 @@ struct SignedOn {
     session_id: i32,
 }
 
-/// What the tasks share.
-/// How long Steam's answer to what's new at sign-on may take to count as the
-/// answer. It comes within a round trip when it comes at all.
+/// How long Steam's answers as a session signs on may take: whether another
+/// device is playing, and what's new. They come within a round trip when
+/// they come at all.
 pub(crate) const SIGN_ON_ANSWER_WITHIN: Duration = Duration::from_secs(10);
 
+/// What the tasks share.
 struct State {
     /// Jobs waiting for their answer.
     pending: Mutex<HashMap<u64, oneshot::Sender<Packet>>>,
@@ -186,7 +189,7 @@ struct State {
     blocked: Mutex<Option<Blocked>>,
     /// When it asked at sign-on what's new, while not answered yet.
     asked_new_items: Mutex<Option<Instant>>,
-    /// How long an answer to that may take to count as one.
+    /// How long Steam's answers at sign-on may take.
     answer_within: Mutex<Duration>,
     /// The answer, once it came.
     new_at_sign_on: Mutex<Option<Announcement>>,
@@ -204,8 +207,8 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Counts Steam's answer to what's new at sign-on only if it comes within
-    /// `within` of asking: for tests that can't wait.
+    /// Waits for Steam's answers at sign-on only `within`: for tests that
+    /// can't wait.
     pub fn sign_on_answer_within(&self, within: Duration) {
         *self.state.answer_within.lock().unwrap() = within;
     }
@@ -361,7 +364,9 @@ impl Connection {
     }
 
     /// Tells Steam to count these games as played, and only these: none stops
-    /// playing. Steam counts at most [`MAX_GAMES_PLAYED`].
+    /// playing. Steam counts at most [`MAX_GAMES_PLAYED`]. While another
+    /// device plays, Steam signs off a session that says it's playing: see
+    /// [`playing_state`](Self::playing_state).
     pub fn play(&self, app_ids: &[u32]) -> anyhow::Result<()> {
         if !self.is_signed_on() {
             bail!("not signed on to Steam");
@@ -427,6 +432,34 @@ impl Connection {
     /// Steam last said; `None` until it says.
     pub fn blocked(&self) -> Option<Blocked> {
         *self.state.blocked.lock().unwrap()
+    }
+
+    /// The same, waiting for Steam to say if it hasn't yet: it says within
+    /// moments of a session signing on. `None` if it doesn't say in the time
+    /// a sign-on answer may take, or the connection closes first.
+    pub async fn playing_state(&self) -> Option<Blocked> {
+        // Listening first, so what's said meanwhile isn't missed.
+        let mut events = self.events();
+        if let Some(said) = self.blocked() {
+            return Some(said);
+        }
+        let within = *self.state.answer_within.lock().unwrap();
+        let said = async {
+            loop {
+                match events.recv().await {
+                    Ok(Event::PlayingBlocked(said)) => return Some(said),
+                    Ok(Event::LoggedOff(_) | Event::Closed)
+                    | Err(broadcast::error::RecvError::Closed) => return None,
+                    Ok(Event::NewItems(_)) => {}
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        if let Some(said) = self.blocked() {
+                            return Some(said);
+                        }
+                    }
+                }
+            }
+        };
+        tokio::time::timeout(within, said).await.ok().flatten()
     }
 
     /// The new items Steam listed when asked at sign-on: those already there

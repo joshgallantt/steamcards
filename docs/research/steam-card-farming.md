@@ -167,6 +167,29 @@ experiment.
 All of these are named, with their sources, in
 `component/farming/domain/src/rules.rs`.
 
+**Playing on another device.** Only one of an account's sessions plays at a
+time. What Steam does, as SteamKit and ASF say, and as a live run in
+September 2026 showed:
+
+- As a session signs on, Steam says whether another device is playing, and
+  what (`ClientPlayingSessionState`). It did at each of 43 sign-ons, within
+  a tenth of a second. It says so again whenever another session starts or
+  stops playing.
+- While another device plays, a session that says it's playing is signed
+  off at once. SteamKit: "While blocked, sending ClientGamesPlayed message
+  will log you off with LoggedInElsewhere result."
+- Starting a game on one device while a session elsewhere plays, the Steam
+  client offers to close the other game. That signs the playing session off
+  with `LoggedInElsewhere` too. ASF: "This result directly indicates that
+  playing was blocked when we got (forcefully) disconnected."
+
+So steamcards waits for Steam's word at sign-on before it plays, and plays
+nothing while another device does. Signed off by `LoggedInElsewhere`, it
+signs on again and stays signed on, playing nothing, until Steam says the
+other device stopped, then carries on a minute later. If Steam doesn't say
+the other device is playing, its game gets 5 minutes to start (an update,
+or shaders, can hold it up) before steamcards plays again.
+
 **Later, maybe:** the threshold as a setting (0 for accounts that aren't held
 back); telling such an account apart on its own (a card that drops before 3
 hours); a refund guard (skip games bought in the last 14 days with under 2

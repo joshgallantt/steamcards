@@ -1,7 +1,7 @@
 //! A stand-in for Steam, for tests here and in the data crates: a CM server
-//! on this computer that signs in, signs on, plays, tells of its wallet,
-//! announces new items and describes the items it holds as a test tells it
-//! to, and remembers what it was sent. It speaks Steam's own messages over a
+//! on this computer that signs in, signs on, plays, tells of its wallet and
+//! of another device playing, announces new items and describes the items it
+//! holds as a test tells it to, and remembers what it was sent. It speaks Steam's own messages over a
 //! real WebSocket, so the code under test is the code that runs.
 
 use std::{
@@ -161,7 +161,13 @@ struct State {
     polls: usize,
     signing_in: Option<QrScript>,
     logon: EResult,
-    blocked_at_logon: Option<u32>,
+    /// What another device is playing on the account, if anything: Steam
+    /// says so to a session signing on, and signs off one that says it's
+    /// playing meanwhile.
+    elsewhere: Option<u32>,
+    /// Says nothing at sign-on of whether another device is playing. Steam
+    /// always has, so far.
+    playing_state_unsaid: bool,
     /// The wallet told at sign-on: whether there is one, and its currency.
     wallet: Option<(bool, i32)>,
     renews: bool,
@@ -213,7 +219,8 @@ impl FakeSteam {
             polls: 0,
             signing_in: None,
             logon: EResult::OK,
-            blocked_at_logon: None,
+            elsewhere: None,
+            playing_state_unsaid: false,
             wallet: None,
             renews: false,
             issued: 0,
@@ -280,9 +287,16 @@ impl FakeSteam {
         self.state().logon = e;
     }
 
-    /// Another device is playing `app_id` when a session signs on.
+    /// Another device is playing `app_id`: Steam says so to a session
+    /// signing on, and signs off one that says it's playing.
     pub fn busy_elsewhere(&self, app_id: u32) {
-        self.state().blocked_at_logon = Some(app_id);
+        self.state().elsewhere = Some(app_id);
+    }
+
+    /// From now on says nothing at sign-on of whether another device is
+    /// playing. Steam always has, so far.
+    pub fn never_says_the_playing_state(&self) {
+        self.state().playing_state_unsaid = true;
     }
 
     /// The account's wallet is in `currency` (an `ECurrency` id), as Steam
@@ -341,16 +355,19 @@ impl FakeSteam {
         self.state().inventory_asks.clone()
     }
 
-    /// Another device starts (or stops) playing.
+    /// Another device starts (or stops) playing, and Steam says so.
     pub fn block(&self, blocked: bool, app_id: u32) {
-        self.push(&Packet::encode(
-            emsg::CLIENT_PLAYING_SESSION_STATE,
-            &Header::default(),
-            &ClientPlayingSessionState {
-                playing_blocked: Some(blocked),
-                playing_app: Some(app_id),
-            },
-        ));
+        self.state().elsewhere = blocked.then_some(app_id);
+        self.push(&playing_state(blocked.then_some(app_id)));
+    }
+
+    /// Another device takes over playing `app_id`, as the Steam client does
+    /// when told to close a game running elsewhere: Steam signs the playing
+    /// session off, saying `LoggedInElsewhere`, and closes its connection.
+    pub fn take_over(&self, app_id: u32) {
+        self.state().elsewhere = Some(app_id);
+        self.push(&signed_off(EResult::LOGGED_IN_ELSEWHERE));
+        self.hang_up();
     }
 
     /// Steam says how many new items there are, and not which.
@@ -504,15 +521,8 @@ impl State {
                         },
                     ));
                 }
-                if let Some(app) = self.blocked_at_logon.filter(|_| self.logon.is_ok()) {
-                    frames.push(Packet::encode(
-                        emsg::CLIENT_PLAYING_SESSION_STATE,
-                        &Header::default(),
-                        &ClientPlayingSessionState {
-                            playing_blocked: Some(true),
-                            playing_app: Some(app),
-                        },
-                    ));
+                if self.logon.is_ok() && !self.playing_state_unsaid {
+                    frames.push(playing_state(self.elsewhere));
                 }
                 // Steam packs what it sends at sign-on into one Multi.
                 vec![Packet::encode(
@@ -523,14 +533,20 @@ impl State {
             }
             emsg::CLIENT_GAMES_PLAYED_WITH_DATA_BLOB => {
                 let played = ClientGamesPlayed::decode(&packet.body[..]).unwrap_or_default();
-                self.games.push(
-                    played
-                        .games_played
-                        .iter()
-                        .filter_map(|g| g.game_id.map(|id| id as u32))
-                        .collect(),
-                );
-                Vec::new()
+                let games: Vec<u32> = played
+                    .games_played
+                    .iter()
+                    .filter_map(|g| g.game_id.map(|id| id as u32))
+                    .collect();
+                let blocked = self.elsewhere.is_some() && !games.is_empty();
+                self.games.push(games);
+                // While another device plays, a session that says it's
+                // playing is signed off.
+                if blocked {
+                    vec![signed_off(EResult::LOGGED_IN_ELSEWHERE), Vec::new()]
+                } else {
+                    Vec::new()
+                }
             }
             emsg::CLIENT_CHANGE_STATUS => {
                 let status = ClientChangeStatus::decode(&packet.body[..]).unwrap_or_default();
@@ -736,6 +752,19 @@ fn announcement(unseen: &[UnseenItem]) -> Vec<u8> {
                     source_appid: item.source_app_id,
                 })
                 .collect(),
+        },
+    )
+}
+
+/// `ClientPlayingSessionState`: whether another device is playing, and
+/// what.
+fn playing_state(elsewhere: Option<u32>) -> Vec<u8> {
+    Packet::encode(
+        emsg::CLIENT_PLAYING_SESSION_STATE,
+        &Header::default(),
+        &ClientPlayingSessionState {
+            playing_blocked: Some(elsewhere.is_some()),
+            playing_app: Some(elsewhere.unwrap_or_default()),
         },
     )
 }

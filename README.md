@@ -69,6 +69,8 @@ Press `?` at any time to see what the keys do, and `enter` on a game to see its 
 
 Steam won't drop cards for some games whatever plays them: family-shared games, free-to-play games you haven't spent on, games marked private, and games on limited accounts. steamcards moves on from a game that drops nothing for 10 hours.
 
+Start a game on another computer while steamcards farms, and Steam says you're already playing elsewhere, and offers to close that game: let it. steamcards waits until you stop playing, and carries on a minute after.
+
 ## Your data, and uninstalling
 
 Your sign-in and choices stay on your computer, in one file only you can read, and steamcards talks to nobody but Steam. The market's prices of your cards are kept beside it, so a restart doesn't look every game up again. Signing out (press `a`) forgets the sign-in and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.

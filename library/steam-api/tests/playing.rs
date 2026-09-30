@@ -124,6 +124,89 @@ async fn another_device_playing_is_heard_at_sign_on_and_after() {
 }
 
 #[tokio::test]
+async fn whether_another_device_is_playing_is_waited_for_at_sign_on() {
+    let steam = FakeSteam::start().await;
+    let (session, _) = signed_in(&steam, "state-free");
+    let conn = session.connection().await.unwrap();
+    assert_eq!(
+        conn.playing_state().await,
+        Some(Blocked {
+            blocked: false,
+            app_id: None,
+        })
+    );
+
+    let steam = FakeSteam::start().await;
+    steam.busy_elsewhere(730);
+    let (session, _) = signed_in(&steam, "state-busy");
+    let conn = session.connection().await.unwrap();
+    assert_eq!(
+        conn.playing_state().await,
+        Some(Blocked {
+            blocked: true,
+            app_id: Some(730),
+        })
+    );
+}
+
+#[tokio::test]
+async fn a_playing_state_steam_never_says_is_waited_for_only_so_long() {
+    let steam = FakeSteam::start().await;
+    steam.never_says_the_playing_state();
+    let (session, _) = signed_in(&steam, "state-unsaid");
+    let session = session.with_sign_on_answer_within(Duration::from_millis(200));
+    let conn = session.connection().await.unwrap();
+
+    let asked = std::time::Instant::now();
+    assert_eq!(conn.playing_state().await, None);
+    assert!(asked.elapsed() < Duration::from_secs(1));
+}
+
+#[tokio::test]
+async fn playing_while_another_device_plays_gets_a_session_signed_off() {
+    let steam = FakeSteam::start().await;
+    steam.busy_elsewhere(730);
+    let (session, _) = signed_in(&steam, "played-blocked");
+    let conn = session.connection().await.unwrap();
+    let mut events = conn.events();
+
+    conn.play(&[620]).unwrap();
+
+    assert_eq!(
+        next(&mut events).await,
+        Event::LoggedOff(EResult::LOGGED_IN_ELSEWHERE),
+        "as Steam does"
+    );
+}
+
+#[tokio::test]
+async fn another_device_taking_over_signs_the_session_off() {
+    let steam = FakeSteam::start().await;
+    let (session, _) = signed_in(&steam, "taken-over");
+    let conn = session.connection().await.unwrap();
+    let mut events = conn.events();
+    conn.play(&[620]).unwrap();
+    eventually(|| steam.games_played().len() == 1).await;
+
+    steam.take_over(730);
+
+    assert_eq!(
+        next(&mut events).await,
+        Event::LoggedOff(EResult::LOGGED_IN_ELSEWHERE)
+    );
+    assert_eq!(next(&mut events).await, Event::Closed);
+    let again = session.connection().await.unwrap();
+    assert_eq!(
+        again.playing_state().await,
+        Some(Blocked {
+            blocked: true,
+            app_id: Some(730),
+        }),
+        "signing on again, it hears the other device is playing"
+    );
+}
+
+#[tokio::test]
 async fn new_items_and_sign_offs_are_heard() {
     let steam = FakeSteam::start().await;
     let (session, _) = signed_in(&steam, "events");

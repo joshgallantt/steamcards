@@ -232,6 +232,9 @@ pub enum Signal {
     Blocked(Option<u32>),
     /// It stopped.
     Unblocked,
+    /// Another device took over playing, and Steam signed this session off
+    /// to let it: nothing played here counts until it stops.
+    TakenOver,
     /// New items arrived: a card may have dropped. The items Steam listed,
     /// each once; none when it gave only a count.
     NewItems(Vec<NewItem>),
