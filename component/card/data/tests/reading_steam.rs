@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use card::{AssetId, Card, CardAsset, CardRepository};
-use card_data::SteamCardRepository;
+use card_data::{DefaultCardRepository, SteamCardClient};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use game::AppId;
@@ -36,7 +36,7 @@ async fn serving(site: &MockServer, at: String, page: String, query: Option<(&st
         .await;
 }
 
-async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamCardRepository {
+async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> DefaultCardRepository {
     let dir = std::env::temp_dir().join(format!("steamcards-card-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
@@ -50,7 +50,7 @@ async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> SteamCa
     let mut endpoints = steam.endpoints();
     endpoints.community = site.uri();
     let session = SteamClient::with_endpoints(file, &DebugLog::off(), endpoints);
-    SteamCardRepository::new(Arc::new(session))
+    DefaultCardRepository::new(Arc::new(SteamCardClient::new(Arc::new(session))))
 }
 
 #[tokio::test]

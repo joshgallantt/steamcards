@@ -1,6 +1,6 @@
 [package]
 name = "card-data"
-description = "The user's cards as the card pages and the inventory show them, written to fit the card domain's CardRepository."
+description = "The user's cards as the card pages and the inventory show them, through a client of its own, written to fit the card domain's CardRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

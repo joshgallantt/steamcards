@@ -1,6 +1,6 @@
 [package]
 name = "account-data"
-description = "The Steam sign-in, written to fit the account domain's AccountRepository."
+description = "The Steam sign-in, through a client of its own, written to fit the account domain's AccountRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

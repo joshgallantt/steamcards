@@ -1,6 +1,6 @@
-//! Where the account domain meets its data layer: one repository over the
-//! Steam session, handed to every use case. The composition root names the
-//! Steam client.
+//! Where the account domain meets its data layer: the sign-in the Steam
+//! client holds, through one repository handed to every use case. The
+//! composition root names the Steam client.
 
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use account::{
     AccountRepository, CheckSignInUseCase, DefaultCheckSignInUseCase, DefaultGetAccountUseCase,
     DefaultSignInUseCase, DefaultSignOutUseCase, GetAccountUseCase, SignInUseCase, SignOutUseCase,
 };
-use account_data::SteamAccountRepository;
+use account_data::{AccountClient, DefaultAccountRepository, SteamAccountClient};
 use steam_api::SteamClient;
 
 pub struct AccountComponent {
@@ -20,10 +20,13 @@ pub struct AccountComponent {
 
 impl AccountComponent {
     pub fn new(steam: Arc<SteamClient>) -> Self {
-        Self::over(Arc::new(SteamAccountRepository::new(steam)))
+        Self::over(Arc::new(SteamAccountClient::new(steam)))
     }
 
-    pub fn over(repo: Arc<dyn AccountRepository>) -> Self {
+    /// Over a client of its own: the repository is built here, and never let
+    /// out.
+    pub fn over(client: Arc<dyn AccountClient>) -> Self {
+        let repo: Arc<dyn AccountRepository> = Arc::new(DefaultAccountRepository::new(client));
         Self {
             get_account: Arc::new(DefaultGetAccountUseCase::new(repo.clone())),
             check_sign_in: Arc::new(DefaultCheckSignInUseCase::new(repo.clone())),

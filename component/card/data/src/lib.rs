@@ -1,89 +1,11 @@
-//! The card domain's contract, satisfied by Steam: card pages (foils' too)
-//! from steamcommunity.com, and the inventory's items over the CM
-//! connection, in; the card domain's entities out. Imports `card` because
-//! the contract is declared there; `card` imports nothing back.
+//! The card domain's contract, satisfied by Steam: the repository reads the
+//! cards through a client, and the client is Steam's, reading card pages
+//! (foils' too) from steamcommunity.com and the inventory's items over the
+//! CM connection. Imports `card` because the contract is declared there;
+//! `card` imports nothing back.
 
-use std::sync::Arc;
+mod card_client;
+mod default_card_repository;
 
-use anyhow::anyhow;
-use async_trait::async_trait;
-use card::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
-use game::{AppId, CardDrops, Game};
-use steam_api::{
-    SteamClient,
-    badges::{BadgeGame, SetCard},
-    inventory::InventoryItem,
-};
-
-/// The account's card pages, read signed in, and the items it holds.
-pub struct SteamCardRepository {
-    steam: Arc<SteamClient>,
-}
-
-impl SteamCardRepository {
-    pub fn new(steam: Arc<SteamClient>) -> Self {
-        Self { steam }
-    }
-}
-
-#[async_trait]
-impl CardRepository for SteamCardRepository {
-    async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards> {
-        self.steam
-            .game_cards(app_id.0)
-            .await?
-            .map(to_game_cards)
-            .ok_or_else(|| anyhow!("its card page has no card drops to read"))
-    }
-
-    async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
-        let foils = self.steam.foil_cards(app_id.0).await?;
-        Ok(CardSet::new(foils.into_iter().map(to_card).collect()))
-    }
-
-    async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
-        let ids: Vec<u64> = asset_ids.iter().map(|id| id.0).collect();
-        let items = self.steam.describe_items(&ids).await?;
-        Ok(items.into_iter().filter_map(to_card_asset).collect())
-    }
-}
-
-fn to_game_cards(b: BadgeGame) -> GameCards {
-    GameCards {
-        game: Game {
-            app_id: AppId(b.app_id),
-            name: b.name,
-            hours: b.hours,
-            drops: CardDrops {
-                received: b.cards_received,
-                remaining: b.cards_left,
-            },
-            badge_level: b.badge_level,
-        },
-        set: CardSet::new(b.cards.into_iter().map(to_card).collect()),
-    }
-}
-
-fn to_card(c: SetCard) -> Card {
-    Card {
-        name: c.name,
-        owned: c.owned,
-    }
-}
-
-/// The copy of a card an item is; `None` when it isn't a trading card, or
-/// Steam doesn't say which game's it is.
-fn to_card_asset(item: InventoryItem) -> Option<CardAsset> {
-    if !item.trading_card {
-        return None;
-    }
-    Some(CardAsset {
-        asset_id: AssetId(item.asset_id),
-        app_id: AppId(item.app_id?),
-        name: item.name,
-        market_hash_name: item.market_hash_name,
-        foil: item.foil,
-        marketable: item.marketable,
-        tradable: item.tradable,
-    })
-}
+pub use card_client::{CardClient, SteamCardClient};
+pub use default_card_repository::DefaultCardRepository;

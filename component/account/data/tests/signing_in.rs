@@ -3,7 +3,7 @@
 use std::{sync::Arc, time::Duration};
 
 use account::{AccountRepository, LoginChallenge};
-use account_data::SteamAccountRepository;
+use account_data::{DefaultAccountRepository, SteamAccountClient};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
@@ -12,13 +12,14 @@ use steam_api::{
 };
 use tokio::sync::mpsc;
 
-fn repository(steam: &FakeSteam, name: &str) -> (SteamAccountRepository, Arc<ConfigFile>) {
+fn repository(steam: &FakeSteam, name: &str) -> (DefaultAccountRepository, Arc<ConfigFile>) {
     let dir =
         std::env::temp_dir().join(format!("steamcards-account-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = Arc::new(ConfigFile::open(dir.join("config.json")).unwrap());
     let session = SteamClient::with_endpoints(file.clone(), &DebugLog::off(), steam.endpoints());
-    (SteamAccountRepository::new(Arc::new(session)), file)
+    let client = SteamAccountClient::new(Arc::new(session));
+    (DefaultAccountRepository::new(Arc::new(client)), file)
 }
 
 fn saved(file: &ConfigFile, expires_at: i64) {

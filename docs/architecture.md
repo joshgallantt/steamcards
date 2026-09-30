@@ -229,10 +229,10 @@ cards joins the two.
 
 | Contract | Declared in | Implemented by |
 | --- | --- | --- |
-| `AccountRepository` | `account` | `SteamAccountRepository` in `account-data` |
+| `AccountRepository` | `account` | `DefaultAccountRepository` in `account-data`, through a `SteamAccountClient` |
 | `GameRepository` | `game` | `SteamGameRepository` in `game-data` |
-| `CardRepository` | `card` | `SteamCardRepository` in `card-data` |
-| `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, over a `FilePreferencesStore` |
+| `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
+| `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
 | `FarmingRepository` | `farming` | `SteamFarmingRepository` in `farming-data` |
 | `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
 
