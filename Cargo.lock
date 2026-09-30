@@ -1580,6 +1580,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "market"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "library",
+ "market",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "market-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "config-file",
+ "debug-log",
+ "market",
+ "serde_json",
+ "steam-api",
+ "tokio",
+ "tokio-util",
+ "wiremock",
+]
+
+[[package]]
+name = "market-di"
+version = "0.1.0"
+dependencies = [
+ "config-file",
+ "market",
+ "market-data",
+ "steam-api",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

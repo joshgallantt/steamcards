@@ -20,6 +20,9 @@ members = [
     "component/farming/domain",
     "component/farming/data",
     "component/farming/di",
+    "component/market/domain",
+    "component/market/data",
+    "component/market/di",
     "library/config-file",
     "library/debug-log",
     "library/keep-awake",
@@ -88,18 +91,21 @@ account = { path = "component/account/domain" }
 library = { path = "component/library/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
+market = { path = "component/market/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
 library-data = { path = "component/library/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
+market-data = { path = "component/market/data" }
 
 # DI
 account-di = { path = "component/account/di" }
 library-di = { path = "component/library/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
+market-di = { path = "component/market/di" }
 
 # Library
 config-file = { path = "library/config-file" }

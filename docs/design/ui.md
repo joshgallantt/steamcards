@@ -79,9 +79,9 @@ The dashboard, top to bottom. At the large size the Now panel, the chosen game a
 | assuming 30 min a drop | `Forecast.assumed` (before the second drop) | new: farming session |
 | This session 16 of 252 drops · 5 of 62 games | `FarmingSession.drops.len()`, `drops_left_at_start`, `finished.len()`, `games_at_start` | new: farming session |
 | Your library 183 of 421 drops · 5 of 63 games | `SteamLibrary::drops_received()`, `drops_total()`, `games_done()`, `games().len()` | new methods on an existing entity |
-| ≥ £1.45 this session · 3 unpriced | `market::held_value(&assets, &PriceBook, basis, &Wallet) -> Held` | new: market |
+| ≥ £1.45 this session · 3 unpriced | `market::held_value(&[HeldCard], unidentified, &PriceBook, basis, &Wallet, now) -> Held`, each `HeldCard` from a drop's `CardAsset` | new: market |
 | ≈ £15.34 still to drop | `market::value_left(&SteamLibrary, &PriceBook, basis, &Wallet) -> Estimate` | new: market |
-| ≈ £16.79 on completion, excl. foils | `market::on_completion(&Held, &Estimate) -> Estimate { value, excl_foils, unpriced_games }` | new: market |
+| ≈ £16.79 on completion, excl. foils | `market::on_completion(&Held, &Estimate) -> Estimate { value, excl_foils, unpriced_games, basis }` | new: market |
 | 2 spares this session: £0.13 | the session's drops whose `copy` is 2 or more, priced | new: farming session + market |
 | ▶ Heavy Rain, ▷ building hours, ‖ waiting | `FarmingStatus { status, playing, mode, blocked_by }` | exists |
 | next look in 4m | `FarmingStatus.next_look` | exists |
@@ -1703,26 +1703,30 @@ The domain grows from its entities, in the user's words: the **library** and its
 
 | Entity, field or function | What it is | Used for | Status |
 | --- | --- | --- | --- |
-| `Money { minor: i64, currency: Currency }` | an amount, in hundredths, with its currency; formatted as Valve does | every figure | new |
-| `Currency` | an ECurrency id and its format (research §1.2) | formatting, never converting | new |
-| `Wallet { currency, market_minimum, increment, steam_fee, publisher_fee, trade_max }` | the account's wallet (the research's `WalletInfo`), from CM message 5528, else a signed-in inventory page | fees, the currency | new |
-| `PriceQuote { ask, bid: Option<Money>, ask_depth, bid_depth, source, fetched_at }` | what the market said, when | the three bases, staleness | new |
+| `Money { minor: i64, currency: Currency }` | an amount, in hundredths, with its currency; written as Valve's `v_currencyformat` writes it, or `grouped()` with thousands separators ("£1,234.50") | every figure | new |
+| `Currency` | an ECurrency id and its format, Valve's `g_rgCurrencyData` as a `match` (research §1.2) | formatting, never converting | new |
+| `Wallet { currency, market_minimum, increment, steam_fee, publisher_fee, trade_max }`, fees in basis points | the account's wallet (the research's `WalletInfo`): its currency from CM message 5528; Valve's default fees until a signed-in inventory page is read | fees, the currency | new |
+| `Wallet::seller_gets(buyer_pays)`, `Wallet::buyer_pays(seller_gets)` | Valve's fee functions, in whole numbers (research §1.4) | net, instant, quick-sell | new |
+| `PriceQuote { ask: Option<Money>, bid: Option<Money>, ask_depth, bid_depth, source, fetched_at }` | what the market said, when | the three bases, staleness | new |
 | `Price::{Pending, Known(PriceQuote), NoMarket, NotMarketable, Failed { retry_at }}` | a card's price state (research §1.5) | "…", "no market", "—", "?" | new |
-| `SetPrices { app_id, normal, foil, fetched_at }`, each a list of `(market_hash_name, Price)` | a game's set, priced, per border | the set's columns, ranges, expected value | new |
-| `PriceBook { sets, offers }` | everything priced so far: sets by game, best offers by hash | every price on screen | new |
-| `Basis::{List, Net, Instant}` | the value basis | b | new |
-| `MarketSettings { basis }` | the market's settings, with their own store; later `sell_policy` | b, games & settings | new |
+| `PricedCard { name, market_hash_name, price }` | a card of a set as the market lists it, named as the set names it | matching prices to the set by name | new |
+| `SetPrices { app_id, normal, foil, fetched_at, retry_at }`; `card(name, foil)`, `by_hash(hash)`, `price(name, foil)` | a game's set, priced, both borders from one lookup; `retry_at` after a failed one, which keeps the prices from before | the set's columns, ranges, expected value | new |
+| `PriceBook { sets, offers }`; `price(&HeldCard, basis)` | everything priced so far: sets by game, order books by hash | every price on screen | new |
+| `Basis::{List, Net, Instant}`; `still_to_drop()` | the value basis; instant is net for cards still to drop | b | new |
+| `MarketSettings { basis }` | the market's settings, kept in the config file's `market` section; later `sell_policy` | b, games & settings | new |
 | `MarketPause { until, step }` | Steam's pause on lookups; kept across restarts | the banner | new |
-| `Held { total: Money, unpriced: u32, not_marketable: u32, oldest: Option<Duration> }` | the value of cards held | "≥ £1.45 · 3 unpriced · oldest 8h" | new |
-| `Estimate { value: Money, excl_foils: bool, unpriced_games: u32 }` | a value that's an estimate | "≈ £16.79 on completion, excl. foils" | new |
-| `seller(buyer_pays)`, `buyer(seller_gets)` | Valve's fee functions (research §1.4) | net, instant, quick-sell | new |
-| `held_value(&[CardAsset], &PriceBook, Basis, &Wallet) -> Held` | pure | the session's value, the haul | new |
+| `HeldCard { app_id, name, foil, market_hash_name: Option<String>, marketable }` | a card held: from a `CardAsset`, or just a name and a border | what the valuations take, so market needs no farming type | new |
+| `Held { total: Money, priced: u32, unpriced: u32, not_marketable: u32, oldest: Option<Duration> }` | the value of cards held; `oldest` only once a price counted is over 6 hours old | "≥ £1.45 · 3 unpriced · oldest 8h" | new |
+| `Estimate { value: Money, excl_foils: bool, unpriced_games: u32, basis: Basis }` | a value that's an estimate, and the basis its cards to drop are on | "≈ £16.79 on completion, excl. foils", "after fees" | new |
+| `value_of(&Price, Basis, &Wallet) -> Option<Money>` | pure: a card's worth on a basis; another currency is `None` | every price shown | new |
+| `held_value(&[HeldCard], unidentified, &PriceBook, Basis, &Wallet, now) -> Held` | pure | the session's value, the haul | new |
 | `expected_per_drop(&SetPrices, Basis, &Wallet) -> Option<Money>` | pure; per card first, then the mean (research §3.3) | ≈ A DROP | new |
 | `value_left(&SteamLibrary, &PriceBook, Basis, &Wallet) -> Estimate` | pure | ≈ LEFT, still to drop, section rules | new |
 | `on_completion(&Held, &Estimate) -> Estimate` | pure: this session's value plus what's still to drop (research §3.3) | ≈ on completion | new |
-| `WatchPrices` | the background pricing, through the one market queue: order, pacing, pause (research §1.3) | every price | new |
-| `GetPrices`, `RefreshPrices(app_id)` | the price book now; look at one game again (queued) | the market view's r | new |
-| `PriceOffers(&[hash])` | order books for held cards and the chosen game's cards | the instant basis | new |
+| `WantPrices(Vec<u32>)` | the games to price, most urgent first: the farming game, games with cards this session, then the farm order | the order prices arrive in | new |
+| `WatchPrices(token, events)` | the background pricing through the one market queue: each wanted set, then again at 6 hours; waits out the pause; `MarketEvent`s for the log | every price | new |
+| `GetPrices`, `RefreshPrices(app_id)` | the price book now; look at one game again (queued) if it's over an hour old | a card dropped; the market view's r | new |
+| `PriceOffers(Vec<hash>)` | order books for held cards and the chosen game's cards, each again after 30 minutes | the instant basis | new |
 | `GetWallet`, `GetMarketSettings`, `SetBasis` | the wallet; the basis | the account; b | new |
 
 The requests themselves live in `library/steam-api`, behind the one market queue: `search/render` and `orderbook` now; `sellitem`, `mylistings` and `removelisting` later (research §1.1, §4.1).
@@ -1750,7 +1754,7 @@ graph TD
     TUI[terminal-ui] --> ACC[account] & LIB[library] & PREF[preferences] & FARM[farming] & MKT[market]
     FARM --> LIB & PREF
     MKT --> LIB
-    MD[market-data] --> MKT & SA[steam-api]
+    MD[market-data] --> MKT & SA[steam-api] & CF[config-file]
     MDI[market-di] --> MD
 ```
 

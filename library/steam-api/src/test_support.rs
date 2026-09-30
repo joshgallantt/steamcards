@@ -1,6 +1,7 @@
 //! A stand-in for Steam, for tests here and in the data crates: a CM server
-//! on this computer that signs in, signs on, plays and describes the items
-//! it holds as a test tells it to, and remembers what it was sent. It speaks
+//! on this computer that signs in, signs on, plays, tells of its wallet and
+//! describes the items it holds as a test tells it to, and remembers what it
+//! was sent. It speaks
 //! Steam's own messages over a real WebSocket, so the code under test is the
 //! code that runs.
 
@@ -23,9 +24,9 @@ use crate::{
     proto::{
         Asset, BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
         ClientItemAnnouncements, ClientLoggedOff, ClientLogon, ClientLogonResponse,
-        ClientPlayingSessionState, GenerateAccessTokenResponse, GetInventoryItemsRequest,
-        GetInventoryItemsResponse, Header, ItemDescription, ItemTag, PollAuthSessionStatusResponse,
-        RevokeTokenRequest, RevokeTokenResponse, emsg, method,
+        ClientPlayingSessionState, ClientWalletInfoUpdate, GenerateAccessTokenResponse,
+        GetInventoryItemsRequest, GetInventoryItemsResponse, Header, ItemDescription, ItemTag,
+        PollAuthSessionStatusResponse, RevokeTokenRequest, RevokeTokenResponse, emsg, method,
     },
     token,
 };
@@ -149,6 +150,8 @@ struct State {
     signing_in: Option<QrScript>,
     logon: EResult,
     blocked_at_logon: Option<u32>,
+    /// The wallet told at sign-on: whether there is one, and its currency.
+    wallet: Option<(bool, i32)>,
     renews: bool,
     issued: i64,
     logons: Vec<String>,
@@ -190,6 +193,7 @@ impl FakeSteam {
             signing_in: None,
             logon: EResult::OK,
             blocked_at_logon: None,
+            wallet: None,
             renews: false,
             issued: 0,
             logons: Vec::new(),
@@ -254,6 +258,12 @@ impl FakeSteam {
     /// Another device is playing `app_id` when a session signs on.
     pub fn busy_elsewhere(&self, app_id: u32) {
         self.state().blocked_at_logon = Some(app_id);
+    }
+
+    /// The account's wallet is in `currency` (an `ECurrency` id), as Steam
+    /// tells a session signing on; 0 for an account with no wallet.
+    pub fn wallet_in(&self, currency: i32) {
+        self.state().wallet = Some((currency != 0, currency));
     }
 
     /// Steam renews the refresh token whenever it makes a site token.
@@ -413,6 +423,16 @@ impl State {
                         heartbeat_seconds: Some(9),
                     },
                 )];
+                if let Some((has_wallet, currency)) = self.wallet.filter(|_| self.logon.is_ok()) {
+                    frames.push(Packet::encode(
+                        emsg::CLIENT_WALLET_INFO_UPDATE,
+                        &Header::default(),
+                        &ClientWalletInfoUpdate {
+                            has_wallet: Some(has_wallet),
+                            currency: Some(currency),
+                        },
+                    ));
+                }
                 if let Some(app) = self.blocked_at_logon.filter(|_| self.logon.is_ok()) {
                     frames.push(Packet::encode(
                         emsg::CLIENT_PLAYING_SESSION_STATE,

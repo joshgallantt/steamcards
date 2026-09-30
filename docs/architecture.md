@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `account`, `library`, `preferences`, `farming` | Domain |
-| Data | `account-data`, `library-data`, `preferences-data`, `farming-data` | Domain, Library |
-| DI | `account-di`, `library-di`, `preferences-di`, `farming-di` | Domain, Data, Library |
+| Domain | `account`, `library`, `preferences`, `farming`, `market` | Domain |
+| Data | `account-data`, `library-data`, `preferences-data`, `farming-data`, `market-data` | Domain, Library |
+| DI | `account-di`, `library-di`, `preferences-di`, `farming-di`, `market-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `terminal-ui`, `headless` | Domain |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -27,7 +27,9 @@ Two things enforce this table:
 2. **[`app/tests/dependency_rule.rs`](../app/tests/dependency_rule.rs).** This
    reads every manifest through `cargo metadata` and fails on any arrow the
    table doesn't allow. It also fails if a production dependency enables
-   `test-support`.
+   `test-support`, and if a domain crate uses a component its own table
+   doesn't name: `farming` may use `library` and `preferences`, `market`
+   only `library`, so farming and the market never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -55,6 +57,22 @@ The domain starts from its entities:
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
   priority", and whether to appear online while farming.
+- **`Money`**, in `market`: an amount in hundredths of a `Currency`, Steam's
+  `ECurrency` with Valve's own format for it. Amounts in different
+  currencies are never added or converted.
+- **`Wallet`**: the account's currency, and the fees Steam takes from a sale,
+  with Valve's fee rules (`buyer_pays`, `seller_gets`) in whole numbers.
+- **`Price`** and **`PriceQuote`**: what's known of a card's price (pending,
+  known, no market, not marketable, failed), and what the market said, when.
+  A game's **`SetPrices`** hold its normal cards and foils as the market
+  lists them; the **`PriceBook`** holds every set, and each card's best
+  offers looked up.
+- **`Basis`** (list, net or instant) in **`MarketSettings`**, the market's own
+  settings; **`MarketPause`**, Steam's pause on price lookups, which outlasts
+  a restart.
+- **`HeldCard`**: a card held, as far as its value goes: from a `CardAsset`,
+  or just a name and a border. **`Held`** is what cards held are worth, at
+  least; **`Estimate`**, what cards still to drop are likely worth.
 
 Each domain crate has the same shape:
 
@@ -68,11 +86,22 @@ component/<name>/domain/src/
 ```
 
 `farming` adds `ranking.rs` (what to play, and how: pure), `rules.rs` (every
-number it runs on, with where it comes from) and `reporter.rs`.
+number it runs on, with where it comes from) and `reporter.rs`. `market` adds
+`money.rs` (`Currency`, with Valve's table of currencies as a `match`, and
+`Money`), `valuation.rs` (what cards are worth: pure, so every figure can be
+checked by hand) and `rules.rs`.
 
 Entities are plain data with the rules that belong to the data itself
-(`SteamLibrary::drops_left`, `Game::has_full_set`, `Preferences::wants`). They
-carry no serde derives: how a thing is stored is the data layer's concern.
+(`SteamLibrary::drops_left`, `Game::has_full_set`, `Preferences::wants`,
+`Wallet::seller_gets`). They carry no serde derives: how a thing is stored is
+the data layer's concern.
+
+The market's valuations are functions of what's known: `value_of(price,
+basis, wallet)`, `held_value(cards, unidentified, book, basis, wallet, now)`,
+`expected_per_drop(set, basis, wallet)`, `value_left(library, book, basis,
+wallet)` and `on_completion(held, left)`. A card that isn't priced never
+counts as nothing, fees come off card by card, and on the instant basis,
+cards still to drop are valued after fees and say so.
 
 ### Use cases
 
@@ -94,6 +123,16 @@ constructor builds the real one over the repositories. Call sites read
 | | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
 | | `SetAppearOnline` (`set_appear_online`) | Show as online while farming, or appear offline. |
 | farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. |
+| market | `GetPrices` (`get_prices`) | The price book now. |
+| | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
+| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause; reports `MarketEvent`s. |
+| | `RefreshPrices` (`refresh_prices`) | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
+| | `PriceOffers` (`price_offers`) | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
+| | `GetWallet` (`get_wallet`) | The wallet, once Steam has said. |
+| | `GetMarketSettings` (`get_market_settings`), `SetBasis` (`set_basis`) | The value basis, and choosing it. |
+
+The market's use cases that keep time take a `Clock`: the system's, or in a
+test, one that moves with tokio's paused time.
 
 ### Use cases that call other use cases
 
@@ -103,6 +142,11 @@ constructor builds the real one over the repositories. Call sites read
 never learns where either comes from. When a tier changes, the farmer sees it
 within moments, through the same use case the screens call.
 
+`market` depends on `library` for its entities alone: it values `CardAsset`s,
+a game's set and the drops still to come, handed to it. It never depends on
+`farming`, nor `farming` on it; whatever shows a session's cards joins the
+two.
+
 ### Repository contracts
 
 | Contract | Declared in | Implemented by |
@@ -111,13 +155,15 @@ within moments, through the same use case the screens call.
 | `LibraryRepository` | `library` | `SteamLibraryRepository` in `library-data` |
 | `PreferencesRepository` | `preferences` | `FilePreferencesRepository` in `preferences-data` |
 | `PlayRepository` | `farming` | `SteamPlayRepository` in `farming-data` |
+| `MarketRepository` | `market` | `SteamMarketRepository` in `market-data` |
 
 Use cases return errors in the user's vocabulary (`LinkError::Refused`,
 `UnlinkError::Unavailable`, `PreferencesError::Unavailable`,
-`LibraryError::Unavailable`). Repository contracts return `anyhow::Result`
-with a reason written for the user; the use case decides what it means.
-Farming's failures are the log lines the user reads, so it passes them on as
-text.
+`LibraryError::Unavailable`, `MarketError::Paused`). Repository contracts
+return `anyhow::Result` with a reason written for the user; the use case
+decides what it means. Farming's failures are the log lines the user reads,
+so it passes them on as text, and so does the price watcher. A market lookup
+that Steam's pause turns away isn't an error: it answers `Lookup::Paused`.
 
 ---
 
@@ -130,14 +176,23 @@ composition root builds **one** and hands it to every data crate: when the
 farmer's sign-on is refused, the account screen shows the sign-in as expired
 straight away, and signing in again clears it.
 
+**So is the market's pace.** The same `Session` holds the one market queue
+every `/market/` request goes through, one at a time (research §1.3): signed
+in, 5 seconds apart and up to a second more; signed out, 12. A 429 pauses
+every market request for 10 minutes, then one goes to see, doubling the
+pause to an hour at most; `market-data` keeps the pause in the config file,
+so it outlasts a restart. A server error is asked once more, 30 seconds
+later; the site's quick retries never apply to the market. The `Session`
+also keeps the wallet Steam tells of as it signs on (CM message 5528).
+
 ---
 
 ## Library layer
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, what Steam says back), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
-| `config-file` | The JSON file, readable by its owner only: `CredentialStore`, and the stored shape of preferences. It writes first and keeps second, so a failed write changes nothing in memory. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `config-file` | The JSON files: the config file, readable by its owner only (`CredentialStore`, and the stored shape of preferences and of the market's settings and pause), and `PriceCache`, the market's prices in a file of their own beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
 
@@ -175,6 +230,10 @@ types are named, in three phases, each handed only the one before it:
 | `DomainAssembler` | `AccountComponent`, `LibraryComponent`, `PreferencesComponent`, `FarmingComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
+`MarketComponent` isn't assembled yet: the new screens will be the first to
+use it. It takes the `Session`, the `ConfigFile` and a `PriceCache` whose
+file sits beside the config (`prices.json`).
+
 ---
 
 ## Test strategy
@@ -189,7 +248,12 @@ types are named, in three phases, each handed only the one before it:
 
 The farming acceptance tests run the real `farm_cards` on paused tokio time
 over an in-memory Steam whose cards drop as its games are played: ten hours
-without a drop costs milliseconds.
+without a drop costs milliseconds. The market's run the real watcher on
+paused time over an in-memory market that pauses as Steam's queue does, and
+value the design's own session by hand. The market queue's real pace, minutes
+and all, is tested on paused time in `steam-api`; over real requests to
+wiremock it runs at a quick pace, since paused time and real sockets don't
+mix.
 
 No test talks to Steam.
 
@@ -225,6 +289,7 @@ graph TD
         LDI[library-di]
         PDI[preferences-di]
         FDI[farming-di]
+        MDI[market-di]
     end
 
     subgraph DATA["component/*/data"]
@@ -232,6 +297,7 @@ graph TD
         LD[library-data]
         PD[preferences-data]
         FD[farming-data]
+        MD[market-data]
     end
 
     subgraph DOMAIN["component/*/domain"]
@@ -239,6 +305,7 @@ graph TD
         LIB[library]
         PREF[preferences]
         FARM[farming]
+        MKT[market]
     end
 
     subgraph LIBS["library/"]
@@ -255,13 +322,17 @@ graph TD
     LDI --> LD
     PDI --> PD
     FDI --> FD
+    MDI --> MD
     AD --> ACC & SA
     LD --> LIB & SA
     PD --> PREF & CF
     FD --> FARM & SA & KA
+    MD --> MKT & SA & CF
     FARM --> LIB & PREF
+    MKT --> LIB
     SA --> CF & DL
     KA --> DL
 ```
 
-Every arrow is a line in a `Cargo.toml`.
+Every arrow is a line in a `Cargo.toml`. `market-di` isn't assembled by the
+app yet, so nothing points to it.

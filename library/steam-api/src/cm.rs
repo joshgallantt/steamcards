@@ -31,8 +31,8 @@ use crate::{
     proto::{
         self, ClientChangeStatus, ClientGamesPlayed, ClientHeartBeat, ClientHello,
         ClientItemAnnouncements, ClientLogOff, ClientLoggedOff, ClientLogon, ClientLogonResponse,
-        ClientPlayingSessionState, GamePlayed, Header, IpAddress, PERSONA_OFFLINE, PERSONA_ONLINE,
-        PROTOCOL_VERSION, emsg,
+        ClientPlayingSessionState, ClientWalletInfoUpdate, GamePlayed, Header, IpAddress,
+        PERSONA_OFFLINE, PERSONA_ONLINE, PROTOCOL_VERSION, emsg,
     },
 };
 
@@ -79,6 +79,15 @@ pub struct Blocked {
     pub app_id: Option<u32>,
 }
 
+/// The account's Steam wallet, as Steam says when a session signs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WalletInfo {
+    pub has_wallet: bool,
+    /// Its currency, as an `ECurrency` id: 1 for dollars, 2 for pounds. 0
+    /// when the account has no wallet.
+    pub currency: i32,
+}
+
 /// Steam answered a request with anything but OK.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {
@@ -122,6 +131,7 @@ struct State {
     logon: Mutex<Option<oneshot::Sender<Packet>>>,
     signed_on: Mutex<Option<SignedOn>>,
     blocked: Mutex<Option<Blocked>>,
+    wallet: Mutex<Option<WalletInfo>>,
     events: broadcast::Sender<Event>,
     next_job: AtomicU64,
     log: DebugLog,
@@ -152,6 +162,7 @@ impl Connection {
             logon: Mutex::default(),
             signed_on: Mutex::default(),
             blocked: Mutex::default(),
+            wallet: Mutex::default(),
             events,
             next_job: AtomicU64::new(1),
             log: log.clone(),
@@ -342,6 +353,12 @@ impl Connection {
         *self.state.blocked.lock().unwrap()
     }
 
+    /// The account's wallet, as Steam said when this session signed on;
+    /// `None` until it has.
+    pub fn wallet(&self) -> Option<WalletInfo> {
+        *self.state.wallet.lock().unwrap()
+    }
+
     pub fn is_signed_on(&self) -> bool {
         !self.is_closed() && self.state.signed_on.lock().unwrap().is_some()
     }
@@ -504,6 +521,18 @@ impl State {
                     let _ = self
                         .events
                         .send(Event::NewItems(a.count_new_items.unwrap_or_default()));
+                }
+            }
+            // Kept, as the playing state is: it comes as the session signs
+            // on, before anyone could be listening for it.
+            emsg::CLIENT_WALLET_INFO_UPDATE => {
+                if let Ok(w) = proto::decode::<ClientWalletInfoUpdate>("wallet", &packet.body) {
+                    let wallet = WalletInfo {
+                        has_wallet: w.has_wallet.unwrap_or_default(),
+                        currency: w.currency.unwrap_or_default(),
+                    };
+                    self.log.line(&format!("wallet: {wallet:?}"));
+                    *self.wallet.lock().unwrap() = Some(wallet);
                 }
             }
             emsg::CLIENT_LOGGED_OFF => {
