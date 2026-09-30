@@ -7,7 +7,7 @@ use std::{fs, path::PathBuf, sync::Mutex};
 
 use serde::{Deserialize, Serialize};
 
-use crate::write_whole;
+use crate::private_file::write_whole;
 
 /// A game's set of cards, priced, as stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

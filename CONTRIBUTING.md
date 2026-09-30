@@ -216,7 +216,10 @@ On the dashboard, you select a game and press `1`. You want its cards first. Her
  ③  PreferencesRepository               component/preferences/domain  domain  ── the contract
         ┆  ...is implemented by
         ▼
- ④  FilePreferencesRepository           component/preferences/data    data    ── the detail
+ ④  DefaultPreferencesRepository        component/preferences/data    data    ── the detail
+        │  keeps them through a store
+        ▼
+     FilePreferencesStore
         │
         ▼
  ⑤  ConfigFile                          library/config-file           disk
@@ -300,15 +303,18 @@ pub trait PreferencesRepository: Send + Sync {
 
 #### ④ The detail satisfies the contract
 
-**[`component/preferences/data/src/lib.rs`](component/preferences/data/src/lib.rs)** maps `Preferences` onto the file's shape, and **[`library/config-file/src/lib.rs`](library/config-file/src/lib.rs)** writes it:
+**[`DefaultPreferencesRepository`](component/preferences/data/src/default_preferences_repository.rs)** keeps the preferences through a `PreferencesStore`. The store beside that trait, **[`FilePreferencesStore`](component/preferences/data/src/preferences_store.rs)**, maps `Preferences` onto the file's shape, a `PreferencesDto`, and **[`library/config-file/src/config_file.rs`](library/config-file/src/config_file.rs)** writes it among the file's other fields:
 
 ```rust
-fn update(&self, change: impl FnOnce(&mut FileDto)) -> anyhow::Result<()> {
-    let mut model = self.model.lock().unwrap();
-    let mut next = model.clone();
-    change(&mut next);
-    self.persist(&next)?;
-    *model = next;
+pub fn write<T: Serialize>(&self, part: &T) -> anyhow::Result<()> {
+    let Value::Object(part) = serde_json::to_value(part)? else {
+        anyhow::bail!("only named fields can be written to the config file");
+    };
+    let mut fields = self.fields.lock().unwrap();
+    let mut next = fields.clone();
+    next.extend(part);
+    write_whole(&self.path, &serde_json::to_vec_pretty(&next)?)?;
+    *fields = next;
     Ok(())
 }
 ```

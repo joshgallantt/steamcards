@@ -1,5 +1,6 @@
-//! Where the preferences domain meets its data layer: one repository over the
-//! config file, handed to every use case. The composition root names the file.
+//! Where the preferences domain meets its data layer: the preferences kept in
+//! the config file, through one repository handed to every use case. The
+//! composition root names the file.
 
 use std::sync::Arc;
 
@@ -9,7 +10,7 @@ use preferences::{
     DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, PreferencesRepository,
     SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase,
 };
-use preferences_data::FilePreferencesRepository;
+use preferences_data::{DefaultPreferencesRepository, FilePreferencesStore, PreferencesStore};
 
 pub struct PreferencesComponent {
     pub get_preferences: Arc<dyn GetPreferencesUseCase>,
@@ -20,10 +21,14 @@ pub struct PreferencesComponent {
 
 impl PreferencesComponent {
     pub fn new(file: Arc<ConfigFile>) -> Self {
-        Self::over(Arc::new(FilePreferencesRepository::new(file)))
+        Self::over(Arc::new(FilePreferencesStore::new(file)))
     }
 
-    pub fn over(repo: Arc<dyn PreferencesRepository>) -> Self {
+    /// Over a store of its own: the repository is built here, and never let
+    /// out.
+    pub fn over(store: Arc<dyn PreferencesStore>) -> Self {
+        let repo: Arc<dyn PreferencesRepository> =
+            Arc::new(DefaultPreferencesRepository::new(store));
         Self {
             get_preferences: Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
             set_game_tier: Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),

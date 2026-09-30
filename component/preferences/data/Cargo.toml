@@ -1,6 +1,6 @@
 [package]
 name = "preferences-data"
-description = "Preferences kept in the config file, written to fit the preferences domain's PreferencesRepository."
+description = "Preferences kept in the config file, in a shape of their own, written to fit the preferences domain's PreferencesRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,7 @@ game.workspace = true
 preferences.workspace = true
 config-file.workspace = true
 anyhow.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
