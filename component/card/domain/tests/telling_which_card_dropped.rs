@@ -5,14 +5,14 @@
 
 use std::sync::{Arc, atomic::Ordering};
 
-use card::{CardError, describe_cards, test_support::InMemoryCardRepository};
+use card::{AssetId, CardError, describe_cards, test_support::InMemoryCardRepository};
 
 #[tokio::test]
 async fn cards_that_cant_be_described_say_why() {
     let repo = Arc::new(InMemoryCardRepository::default());
     repo.down.store(true, Ordering::Relaxed);
 
-    let described = describe_cards(repo)(vec![31_001]).await.unwrap();
+    let described = describe_cards(repo)(vec![AssetId(31_001)]).await.unwrap();
 
     assert_eq!(
         described,

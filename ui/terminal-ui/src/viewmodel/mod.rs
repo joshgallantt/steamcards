@@ -11,6 +11,8 @@ mod onboarding;
 mod queue;
 mod summary;
 
+use game::AppId;
+
 pub use account::Account;
 pub use farming::Farming;
 pub use games::{GameRow, Games};
@@ -33,6 +35,6 @@ pub fn open_in_browser(url: &str) -> std::io::Result<()> {
 }
 
 /// A game's card page on steamcommunity.com, for the signed-in account.
-pub fn card_page(app_id: u32) -> String {
+pub fn card_page(app_id: AppId) -> String {
     format!("https://steamcommunity.com/my/gamecards/{app_id}/")
 }

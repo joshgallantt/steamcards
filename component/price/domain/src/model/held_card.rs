@@ -1,11 +1,12 @@
 use card::CardAsset;
+use game::AppId;
 
 /// A card the account holds, as far as its value goes: a copy that dropped,
 /// or one known only by its name and border.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldCard {
     /// The game whose set it's from.
-    pub app_id: u32,
+    pub app_id: AppId,
     /// Its name as the game's set lists it.
     pub name: String,
     pub foil: bool,
@@ -18,7 +19,7 @@ impl HeldCard {
     /// A card known only by its name and whether it's a foil: from its
     /// game's card page, when its copy couldn't be described. Its price is
     /// its set's, by name.
-    pub fn named(app_id: u32, name: &str, foil: bool) -> Self {
+    pub fn named(app_id: AppId, name: &str, foil: bool) -> Self {
         Self {
             app_id,
             name: name.to_owned(),
@@ -43,13 +44,16 @@ impl From<&CardAsset> for HeldCard {
 
 #[cfg(test)]
 mod tests {
+    use card::AssetId;
+    use game::AppId;
+
     use super::*;
 
     #[test]
     fn a_dropped_copy_is_held_as_the_card_it_is() {
         let asset = CardAsset {
-            asset_id: 31_002,
-            app_id: 960_910,
+            asset_id: AssetId(31_002),
+            app_id: AppId(960_910),
             name: "Madison".into(),
             market_hash_name: "960910-Madison".into(),
             foil: false,
@@ -59,7 +63,7 @@ mod tests {
         assert_eq!(
             HeldCard::from(&asset),
             HeldCard {
-                app_id: 960_910,
+                app_id: AppId(960_910),
                 name: "Madison".into(),
                 foil: false,
                 market_hash_name: Some("960910-Madison".into()),

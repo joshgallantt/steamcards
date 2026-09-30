@@ -1,11 +1,12 @@
 use card::CardSet;
+use game::AppId;
 
 use crate::Looked;
 
 /// Drops that one look at a game, or one read of the library, found.
 #[derive(Debug)]
 pub struct Found {
-    pub app_id: u32,
+    pub app_id: AppId,
     /// Where they are in the session's drops.
     pub(crate) drops: Vec<usize>,
     /// The set as the farmer knew it before them, every earlier drop counted

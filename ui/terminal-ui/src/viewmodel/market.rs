@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use game::AppId;
 use price::{
     GetPrices, GetWallet, PriceBook, PriceEvent, RefreshPrices, Wallet, WantPrices, WatchPrices,
 };
@@ -19,7 +20,7 @@ pub struct Market {
     events: mpsc::Receiver<PriceEvent>,
     watching: Option<CancellationToken>,
     /// The games last asked for, so the watcher hears only of a change.
-    wanted: Vec<u32>,
+    wanted: Vec<AppId>,
 }
 
 impl Market {
@@ -62,7 +63,7 @@ impl Market {
 
     /// The games to price, most urgent first; the watcher hears only of a
     /// change.
-    pub fn want(&mut self, games: Vec<u32>) {
+    pub fn want(&mut self, games: Vec<AppId>) {
         if games != self.wanted {
             (self.want)(games.clone());
             self.wanted = games;
@@ -71,7 +72,7 @@ impl Market {
 
     /// One of the game's cards just dropped: its prices are looked at again,
     /// if they're over an hour old.
-    pub fn dropped(&self, app_id: u32) {
+    pub fn dropped(&self, app_id: AppId) {
         drop((self.refresh)(app_id));
     }
 

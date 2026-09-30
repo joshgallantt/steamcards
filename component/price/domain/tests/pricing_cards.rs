@@ -6,6 +6,7 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, TimeDelta, Utc};
+use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, Clock, GetPrices, HeldCard, MarketPause, Price, PriceError, PriceEvent, PriceEventKind,
@@ -74,7 +75,7 @@ impl Player {
 
     /// The games shown, most urgent first.
     fn is_shown(&self, games: &[u32]) {
-        (self.want)(games.to_vec());
+        (self.want)(games.iter().copied().map(AppId).collect());
     }
 
     /// Reads the log until a line of the kind wanted shows up.
@@ -114,7 +115,7 @@ impl Player {
     fn sees(&self, app_id: u32, name: &str, foil: bool) -> Price {
         (self.prices)()
             .sets
-            .get(&app_id)
+            .get(&AppId(app_id))
             .map_or(Price::Pending, |set| set.price(name, foil))
     }
 
@@ -238,7 +239,7 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
         .await;
 
     player.waits(30 * MINUTE).await;
-    (player.refresh)(HEAVY_RAIN).await.unwrap().unwrap();
+    (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap().unwrap();
     assert_eq!(
         player.market.looked_up().len(),
         2,
@@ -246,12 +247,12 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
     );
 
     player.waits(31 * MINUTE).await;
-    (player.refresh)(HEAVY_RAIN).await.unwrap().unwrap();
+    (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap().unwrap();
     assert_eq!(
         player.market.looked_up()[2..],
         [(HEAVY_RAIN, false), (HEAVY_RAIN, true)]
     );
-    let set = &(player.prices)().sets[&HEAVY_RAIN];
+    let set = &(player.prices)().sets[&AppId(HEAVY_RAIN)];
     assert_eq!(set.fetched_at, player.now(), "the new prices are shown");
 }
 
@@ -380,7 +381,7 @@ async fn a_lookup_whose_answer_cant_be_used_is_tried_again_a_day_later() {
     let failed = player
         .reads(|k| matches!(k, PriceEventKind::Failed(_)))
         .await;
-    assert_eq!(failed.kind, PriceEventKind::Failed(HADES));
+    assert_eq!(failed.kind, PriceEventKind::Failed(AppId(HADES)));
     assert_eq!(
         failed.message,
         "Couldn't look up the prices of app 1145360's cards: steamcommunity.com's market said \
@@ -472,7 +473,7 @@ async fn prices_from_before_stay_while_the_market_cant_be_asked() {
     )]);
     player.market.cant_be_asked(2, "no network");
 
-    let refreshed = (player.refresh)(CELESTE).await.unwrap();
+    let refreshed = (player.refresh)(AppId(CELESTE)).await.unwrap();
     let offers = (player.offers)(vec!["504230-Badeline".into()])
         .await
         .unwrap();
@@ -545,7 +546,7 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
     assert_eq!(book.offers["1145360-Zagreus"].price, Price::NoMarket);
     let madison = HeldCard {
         market_hash_name: Some("960910-Madison".into()),
-        ..HeldCard::named(HEAVY_RAIN, "Madison", false)
+        ..HeldCard::named(AppId(HEAVY_RAIN), "Madison", false)
     };
     let sold_now = held_value(
         &[madison],
@@ -618,7 +619,7 @@ async fn offers_wait_while_steam_has_paused_lookups() {
     assert_eq!(asked, Err(PriceError::Paused(pause)));
     assert!(player.market.offer_lookups().is_empty());
     assert_eq!(
-        (player.refresh)(HEAVY_RAIN).await.unwrap(),
+        (player.refresh)(AppId(HEAVY_RAIN)).await.unwrap(),
         Err(PriceError::Paused(pause))
     );
 }

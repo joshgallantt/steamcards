@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use game::AppId;
 
 use crate::{Lookup, Offers, Price, PriceBook, PriceSettings, PricedCard, SetPrices, Wallet};
 
@@ -29,8 +30,11 @@ pub trait PriceRepository: Send + Sync {
     /// listings: its normal cards, or its foils. The market's search doesn't
     /// say which currency it answers in, so its prices are read as the
     /// wallet's: until Steam has said what that is, the market isn't asked.
-    async fn look_up_set(&self, app_id: u32, foil: bool)
-    -> anyhow::Result<Lookup<Vec<PricedCard>>>;
+    async fn look_up_set(
+        &self,
+        app_id: AppId,
+        foil: bool,
+    ) -> anyhow::Result<Lookup<Vec<PricedCard>>>;
 
     /// A card's order book now, by its market hash name: its lowest listing
     /// and its best offer.
@@ -47,7 +51,7 @@ pub trait PriceRepository: Send + Sync {
     fn save_settings(&self, settings: PriceSettings) -> anyhow::Result<()>;
 
     /// The games wanted priced, most urgent first, as last said.
-    fn wanted(&self) -> Vec<u32>;
+    fn wanted(&self) -> Vec<AppId>;
 
-    fn want(&self, app_ids: Vec<u32>);
+    fn want(&self, app_ids: Vec<AppId>);
 }

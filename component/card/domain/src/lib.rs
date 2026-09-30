@@ -15,7 +15,7 @@ mod use_cases;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use model::{Card, CardAsset, CardError, CardSet, CardSets, GameCards};
+pub use model::{AssetId, Card, CardAsset, CardError, CardSet, CardSets, GameCards};
 pub use repository::CardRepository;
 pub use use_cases::{
     DescribeCards, LookAtCards, LookAtFoils, describe_cards, look_at_cards, look_at_foils,

@@ -1,7 +1,7 @@
 //! What to play, and how. Pure: the library, the preferences and what's been
 //! set aside go in; an order and a plan come out.
 
-use game::{Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
+use game::{AppId, Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
 use preferences::Preferences;
 use session::SetAside;
 
@@ -11,9 +11,9 @@ use crate::rules::{GIVE_UP_TIMES, SALE_EVENTS};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Plan {
     /// This game on its own, until its cards have dropped.
-    Cards(u32),
+    Cards(AppId),
     /// These together, until the first of them has the hours its cards need.
-    Hours(Vec<u32>),
+    Hours(Vec<AppId>),
     /// Nothing is worth playing.
     Nothing,
 }
@@ -32,7 +32,11 @@ pub(crate) enum Plan {
 ///
 /// Public so a screen can size up the job before farming starts, in the
 /// order the farmer will take it.
-pub fn farm_order(library: &SteamLibrary, prefs: &Preferences, set_aside: &[SetAside]) -> Vec<u32> {
+pub fn farm_order(
+    library: &SteamLibrary,
+    prefs: &Preferences,
+    set_aside: &[SetAside],
+) -> Vec<AppId> {
     let aside = |g: &Game| {
         set_aside
             .iter()
@@ -111,7 +115,7 @@ mod tests {
 
     fn game(app_id: u32, hours: f64, remaining: u32) -> Game {
         Game {
-            app_id,
+            app_id: AppId(app_id),
             name: format!("Game {app_id}"),
             hours,
             drops: CardDrops {
@@ -126,16 +130,20 @@ mod tests {
         SteamLibrary::new(games)
     }
 
-    fn priorities(ids: &[u32]) -> Preferences {
+    fn ids(app_ids: &[u32]) -> Vec<AppId> {
+        app_ids.iter().copied().map(AppId).collect()
+    }
+
+    fn priorities(app_ids: &[u32]) -> Preferences {
         Preferences {
-            priority_games: ids.to_vec(),
+            priority_games: ids(app_ids),
             ..Default::default()
         }
     }
 
     fn aside(app_id: u32, times: u8) -> SetAside {
         SetAside {
-            app_id,
+            app_id: AppId(app_id),
             times,
             since: DateTime::default(),
         }
@@ -150,14 +158,14 @@ mod tests {
             game(4, 2.9, 2),
         ]);
         let order = farm_order(&lib, &Preferences::default(), &[]);
-        assert_eq!(order, [3, 1, 4, 2], "then the most hours first");
+        assert_eq!(order, ids(&[3, 1, 4, 2]), "then the most hours first");
     }
 
     #[test]
     fn the_users_priorities_come_before_everything() {
         let lib = library(vec![game(1, 5.0, 4), game(2, 0.5, 3), game(3, 8.0, 1)]);
         let order = farm_order(&lib, &priorities(&[2, 1]), &[]);
-        assert_eq!(order, [2, 1, 3]);
+        assert_eq!(order, ids(&[2, 1, 3]));
     }
 
     #[test]
@@ -170,32 +178,38 @@ mod tests {
             game(5, 5.0, 1),
         ]);
         let prefs = Preferences {
-            skipped_games: vec![3],
+            skipped_games: ids(&[3]),
             ..Default::default()
         };
-        assert_eq!(farm_order(&lib, &prefs, &[]), [5, 1]);
+        assert_eq!(farm_order(&lib, &prefs, &[]), ids(&[5, 1]));
 
         let only = Preferences {
-            priority_games: vec![1],
+            priority_games: ids(&[1]),
             only_priority: true,
             ..Default::default()
         };
-        assert_eq!(farm_order(&lib, &only, &[]), [1]);
+        assert_eq!(farm_order(&lib, &only, &[]), ids(&[1]));
     }
 
     #[test]
     fn a_game_set_aside_waits_behind_the_rest_then_is_left_alone() {
         let lib = library(vec![game(1, 5.0, 1), game(2, 5.0, 2)]);
         let once = [aside(1, 1)];
-        assert_eq!(farm_order(&lib, &Preferences::default(), &once), [2, 1]);
+        assert_eq!(
+            farm_order(&lib, &Preferences::default(), &once),
+            ids(&[2, 1])
+        );
         let twice = [aside(1, 2)];
-        assert_eq!(farm_order(&lib, &Preferences::default(), &twice), [2]);
+        assert_eq!(farm_order(&lib, &Preferences::default(), &twice), ids(&[2]));
     }
 
     #[test]
     fn a_game_that_can_drop_is_played_alone() {
         let lib = library(vec![game(1, 5.0, 2), game(2, 1.0, 3)]);
-        assert_eq!(plan(&lib, &Preferences::default(), &[]), Plan::Cards(1));
+        assert_eq!(
+            plan(&lib, &Preferences::default(), &[]),
+            Plan::Cards(AppId(1))
+        );
     }
 
     #[test]
@@ -207,7 +221,7 @@ mod tests {
             panic!("not playing them together");
         };
         assert_eq!(together.len(), 32);
-        assert_eq!(together[0], 40, "the most hours first");
+        assert_eq!(together[0], AppId(40), "the most hours first");
     }
 
     #[test]
@@ -215,7 +229,7 @@ mod tests {
         let lib = library(vec![game(1, 5.0, 2), game(2, 1.0, 3), game(3, 2.0, 1)]);
         assert_eq!(
             plan(&lib, &priorities(&[2]), &[]),
-            Plan::Hours(vec![2, 3]),
+            Plan::Hours(ids(&[2, 3])),
             "the priority first, then the others building hours"
         );
     }
@@ -231,7 +245,7 @@ mod tests {
         let done = library(vec![game(1, 5.0, 0)]);
         assert_eq!(why_nothing(&done, &prefs), "every card has dropped");
         let skipped = Preferences {
-            skipped_games: vec![1],
+            skipped_games: ids(&[1]),
             ..Default::default()
         };
         let left = library(vec![game(1, 5.0, 2)]);

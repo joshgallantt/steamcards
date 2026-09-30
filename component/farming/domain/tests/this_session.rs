@@ -6,12 +6,13 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::AssetId;
 use card::{describe_cards, look_at_cards, look_at_foils};
 use farming::{
     EventKind, FarmCards, FarmingEvent, FarmingStatus, Status, farm_cards,
     test_support::InMemorySteam,
 };
-use game::read_library;
+use game::{AppId, read_library};
 use preferences::{Preferences, test_support::ChangingPreferences};
 use session::{DropCard, EndSession, Finished, Mode, NewItem, SessionKeeper, end_session};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
@@ -81,7 +82,7 @@ impl Player {
     /// Skips a game: it's never farmed.
     fn skips(&self, app_id: u32) {
         self.prefs.set(Preferences {
-            skipped_games: vec![app_id],
+            skipped_games: vec![AppId(app_id)],
             ..Default::default()
         });
     }
@@ -179,7 +180,7 @@ async fn a_card_that_drops_is_told_at_once_and_named_a_moment_later() {
     assert_eq!(dropped.len(), 1);
     assert_eq!(
         (dropped[0].app_id, &dropped[0].card, dropped[0].copy),
-        (HEAVY_RAIN, &DropCard::Identifying, None),
+        (AppId(HEAVY_RAIN), &DropCard::Identifying, None),
         "being found out"
     );
 
@@ -194,7 +195,7 @@ async fn a_card_that_drops_is_told_at_once_and_named_a_moment_later() {
     assert!(named[0].is_spare());
     assert_eq!(
         player.steam.describes(),
-        [vec![madison.asset_id]],
+        [vec![madison.asset_id.0]],
         "Steam was asked about the item it announced"
     );
 }
@@ -362,12 +363,12 @@ async fn items_steam_says_came_from_another_game_are_kept_for_it() {
     player.waits(10 * MINUTE).await;
     player.steam.announce_items(vec![
         NewItem {
-            asset_id: 99_001,
-            app_id: Some(HADES),
+            asset_id: AssetId(99_001),
+            app_id: Some(AppId(HADES)),
             gained_at: None,
         },
         NewItem {
-            asset_id: 99_002,
+            asset_id: AssetId(99_002),
             app_id: None,
             gained_at: None,
         },
@@ -415,7 +416,7 @@ async fn a_card_that_drops_while_building_hours_is_recorded() {
     let session = player.status().await.session;
     assert_eq!(session.drops[0].copy, Some(2));
     assert_eq!(session.stretches[0].mode, Mode::Hours);
-    assert_eq!(session.stretches[0].app_ids, [HADES]);
+    assert_eq!(session.stretches[0].app_ids, [AppId(HADES)]);
     assert!(
         session.stretches[0].to.is_some(),
         "it stopped to read again"
@@ -502,8 +503,8 @@ async fn an_item_steam_announces_late_names_its_own_card_and_no_later_one() {
     player.starts_farming();
     player.reads(EventKind::Progress).await;
     let item = |asset_id| NewItem {
-        asset_id,
-        app_id: Some(HEAVY_RAIN),
+        asset_id: AssetId(asset_id),
+        app_id: Some(AppId(HEAVY_RAIN)),
         gained_at: None,
     };
 
@@ -570,7 +571,7 @@ async fn the_session_counts_from_its_first_read_and_marks_each_game_finished() {
     assert_eq!(
         session.finished,
         [Finished {
-            app_id: 620,
+            app_id: AppId(620),
             at: session.drops[1].at
         }],
         "finished when its last drop was seen"
@@ -681,10 +682,10 @@ async fn after_a_pause_the_first_word_is_the_session_going_on() {
         "the same session, its drops and all"
     );
     assert_eq!(
-        first.library.game(HEAVY_RAIN).map(|g| g.drops),
-        before.library.game(HEAVY_RAIN).map(|g| g.drops)
+        first.library.game(AppId(HEAVY_RAIN)).map(|g| g.drops),
+        before.library.game(AppId(HEAVY_RAIN)).map(|g| g.drops)
     );
-    assert_eq!(first.order, [HEAVY_RAIN]);
+    assert_eq!(first.order, [AppId(HEAVY_RAIN)]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -729,7 +730,7 @@ async fn a_game_set_aside_stays_behind_through_a_pause() {
     assert_eq!(
         aside
             .iter()
-            .map(|s| (s.app_id, s.times))
+            .map(|s| (s.app_id.0, s.times))
             .collect::<Vec<_>>(),
         [(1, 1)]
     );
@@ -744,7 +745,7 @@ async fn a_game_set_aside_stays_behind_through_a_pause() {
     );
     let status = player.sees(Status::Farming).await;
     assert_eq!(status.set_aside, aside);
-    assert_eq!(status.order, [2, 1]);
+    assert_eq!(status.order, [AppId(2), AppId(1)]);
 }
 
 #[tokio::test(start_paused = true)]

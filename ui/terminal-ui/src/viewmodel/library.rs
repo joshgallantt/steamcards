@@ -142,7 +142,7 @@ mod tests {
         l.refresh();
         assert_eq!(asked.load(Ordering::Relaxed), 1);
         settle(&mut l).await;
-        let left: Vec<u32> = l.with_drops_left().iter().map(|g| g.app_id).collect();
+        let left: Vec<u32> = l.with_drops_left().iter().map(|g| g.app_id.0).collect();
         assert_eq!(left, [620]);
     }
 

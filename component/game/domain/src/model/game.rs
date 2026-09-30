@@ -1,4 +1,4 @@
-use crate::{CardDrops, HOURS_BEFORE_DROPS};
+use crate::{AppId, CardDrops, HOURS_BEFORE_DROPS};
 
 /// A game on the account that has trading cards. Its identity is its Steam
 /// app ID.
@@ -8,7 +8,7 @@ use crate::{CardDrops, HOURS_BEFORE_DROPS};
 /// can be 2 of 5 cards and a spare.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game {
-    pub app_id: u32,
+    pub app_id: AppId,
     pub name: String,
     /// Hours on record, as Steam counts them.
     pub hours: f64,
@@ -41,7 +41,7 @@ mod tests {
 
     fn played(hours: f64) -> Game {
         Game {
-            app_id: 620,
+            app_id: AppId(620),
             name: "Portal 2".into(),
             hours,
             drops: CardDrops {

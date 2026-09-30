@@ -28,9 +28,17 @@ Two things enforce this table:
    reads every manifest through `cargo metadata` and fails on any arrow the
    table doesn't allow. It also fails if a production dependency enables
    `test-support`, and if a domain crate uses a component its own table
-   doesn't name: `card` may use `game`; `session` `game` and `card`;
-   `farming` `game`, `card`, `session` and `preferences`; `price` `game`, `card` and `money`. So farming and the
-   prices never meet.
+   doesn't name:
+
+   | Component | May use |
+   | --- | --- |
+   | `money`, `account`, `game` | nothing |
+   | `card`, `preferences` | `game` |
+   | `session` | `game`, `card` |
+   | `farming` | `game`, `card`, `session`, `preferences` |
+   | `price` | `game`, `card`, `money` |
+
+   So farming and the prices never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -43,7 +51,7 @@ The domain starts from its entities:
 - **`SteamLibrary`**, in `game`: the games on the account that have
   trading cards. It holds each game once, and knows the drops received and
   still to come, and how many games have had every drop.
-- **`Game`**: one of those games, by app ID: its hours, its `CardDrops`
+- **`Game`**: one of those games, by its **`AppId`**: its hours, its `CardDrops`
   (received and still to come) and its badge level. Its drops are what
   farming works through.
 - **`Card`**, in `card`: a card in a game's set, and how many the account
@@ -54,7 +62,7 @@ The domain starts from its entities:
   game's drops, and neither stands in for the other: 3 of 4 drops can be 2
   of 5 cards and a spare. **`CardSets`** holds the sets looked at, by game;
   **`GameCards`** is one look at a game's card page, the game and its set.
-- **`CardAsset`**: one copy of a card the account holds, by its asset ID:
+- **`CardAsset`**: one copy of a card the account holds, by its **`AssetId`**:
   the game whose set it's from, its name, its market hash name, and whether
   it's a foil, marketable and tradable. Each copy that drops is its own. It
   says which card dropped, and is what selling one takes.
@@ -89,6 +97,11 @@ The domain starts from its entities:
 - **`HeldCard`**: a card held, as far as its value goes: from a `CardAsset`,
   or just a name and a border. **`Held`** is what cards held are worth, at
   least; **`Estimate`**, what cards still to drop are likely worth.
+
+Steam's IDs are types of their own, `AppId` in `game` and `AssetId` in
+`card`, so a game's ID is never taken for an item's, or for a count. The
+data layer wraps Steam's numbers as they come in, and unwraps them as they
+go out.
 
 Each domain crate has the same shape, one type to a file, each file named
 for the type it holds:
@@ -396,10 +409,11 @@ graph TD
     AD --> ACC & SA
     GD --> GAME & SA
     CD --> CARD & GAME & SA
-    PD --> PREF & CF
-    FD --> FARM & SES & SA & KA
-    PRD --> PRICE & MON & SA & CF
+    PD --> PREF & GAME & CF
+    FD --> FARM & SES & GAME & CARD & SA & KA
+    PRD --> PRICE & GAME & MON & SA & CF
     CARD --> GAME
+    PREF --> GAME
     SES --> GAME & CARD
     FARM --> GAME & CARD & SES & PREF
     PRICE --> GAME & CARD & MON

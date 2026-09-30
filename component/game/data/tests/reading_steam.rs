@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use game::{CardDrops, Game, GameRepository};
+use game::{AppId, CardDrops, Game, GameRepository};
 use game_data::SteamGameRepository;
 use steam_api::{
     SteamClient,
@@ -84,9 +84,9 @@ async fn the_badges_are_the_library() {
     let library = repo.library().await.unwrap();
 
     assert_eq!(
-        library.game(620),
+        library.game(AppId(620)),
         Some(&Game {
-            app_id: 620,
+            app_id: AppId(620),
             name: "Portal 2".into(),
             hours: 5.2,
             drops: CardDrops {
@@ -98,7 +98,7 @@ async fn the_badges_are_the_library() {
     );
     assert_eq!(library.with_drops_left().count(), 5);
     assert_eq!(library.drops_left(), 3 + 6 + 4 + 2 + 1);
-    let never_played = library.game(1086940).unwrap();
+    let never_played = library.game(AppId(1_086_940)).unwrap();
     assert_eq!(
         (never_played.drops.received, never_played.drops.total()),
         (0, 6),

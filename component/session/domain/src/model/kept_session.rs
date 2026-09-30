@@ -20,7 +20,7 @@ use std::{
 
 use card::{CardAsset, CardSet, CardSets, GameCards};
 use chrono::{DateTime, Utc};
-use game::{Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 
 use crate::{
     Drop, DropCard, Finished, Forecast, Found, Looked, Mode, NewItem, Session, SetAside, Stretch,
@@ -42,7 +42,7 @@ pub struct KeptSession {
     /// Hours counted here while playing. The badge pages take a while to
     /// show them (about half an hour), so these are a floor under what the
     /// pages say.
-    counted: HashMap<u32, f64>,
+    counted: HashMap<AppId, f64>,
     /// Games put behind the others after a long while without a drop.
     pub set_aside: Vec<SetAside>,
     /// Items Steam announced that nothing has asked about yet. Each waits
@@ -51,7 +51,7 @@ pub struct KeptSession {
     /// Games whose set, as the farmer knows it, is missing a card that
     /// dropped: one a read found that nothing could tell. Until the game's
     /// card page is read again, its counts can't tell a drop, nor number it.
-    uncounted: HashSet<u32>,
+    uncounted: HashSet<AppId>,
 }
 
 impl KeptSession {
@@ -79,7 +79,7 @@ impl KeptSession {
     pub fn take(
         &mut self,
         fresh: SteamLibrary,
-        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<u32>,
+        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<AppId>,
         now: DateTime<Utc>,
     ) -> Vec<Found> {
         let mut games = Vec::with_capacity(fresh.games().len());
@@ -190,7 +190,7 @@ impl KeptSession {
     }
 
     /// Counts `played` towards each game's hours.
-    pub fn count(&mut self, app_ids: &[u32], played: Duration) {
+    pub fn count(&mut self, app_ids: &[AppId], played: Duration) {
         for &app_id in app_ids {
             let Some(mut game) = self.library.game(app_id).cloned() else {
                 continue;
@@ -201,7 +201,7 @@ impl KeptSession {
         }
     }
 
-    pub fn name(&self, app_id: u32) -> String {
+    pub fn name(&self, app_id: AppId) -> String {
         self.library
             .game(app_id)
             .map_or_else(|| format!("app {app_id}"), |g| g.name.clone())
@@ -209,7 +209,7 @@ impl KeptSession {
 
     /// Starts a stretch of playing these games, this way, from `now`: where
     /// it is, to stop it by.
-    pub fn start(&mut self, app_ids: &[u32], mode: Mode, now: DateTime<Utc>) -> usize {
+    pub fn start(&mut self, app_ids: &[AppId], mode: Mode, now: DateTime<Utc>) -> usize {
         self.session.stretches.push(Stretch {
             app_ids: app_ids.to_vec(),
             mode,
@@ -227,7 +227,7 @@ impl KeptSession {
     }
 
     /// Puts a game behind the others once more: how often it has been.
-    pub fn set_aside(&mut self, app_id: u32, now: DateTime<Utc>) -> u8 {
+    pub fn set_aside(&mut self, app_id: AppId, now: DateTime<Utc>) -> u8 {
         match self.set_aside.iter_mut().find(|s| s.app_id == app_id) {
             Some(s) => {
                 s.times = s.times.saturating_add(1);
@@ -265,7 +265,7 @@ impl KeptSession {
     /// The items to ask Steam about for drops of these games, taken from
     /// those waiting: the ones Steam said came from one of them, and the
     /// ones it didn't say.
-    pub fn take_announced(&mut self, app_ids: &[u32]) -> Vec<NewItem> {
+    pub fn take_announced(&mut self, app_ids: &[AppId]) -> Vec<NewItem> {
         let (ask, wait): (Vec<NewItem>, Vec<NewItem>) = self
             .announced
             .drain(..)
@@ -276,7 +276,7 @@ impl KeptSession {
 
     /// Whether items wait that may name a drop of this game that only its
     /// card page could: worth asking Steam about now, without a new drop.
-    pub fn has_items_for(&self, app_id: u32) -> bool {
+    pub fn has_items_for(&self, app_id: AppId) -> bool {
         let named_by_page = self
             .session
             .drops
@@ -382,7 +382,7 @@ impl KeptSession {
     /// Counts drops no look has seen into the game's set as the farmer knows
     /// it, so the next look tells its own drops by it. A drop whose card
     /// isn't known leaves the set missing a card until it's read again.
-    fn count_in(&mut self, app_id: u32, drops: &[usize]) {
+    fn count_in(&mut self, app_id: AppId, drops: &[usize]) {
         let Some(mut set) = self.sets.set(app_id).cloned() else {
             return;
         };
@@ -420,7 +420,7 @@ impl KeptSession {
 
     /// The games with foils among these drops: which copy each is, their
     /// foil badges say.
-    pub fn foil_games(&self, told: &[usize]) -> Vec<u32> {
+    pub fn foil_games(&self, told: &[usize]) -> Vec<AppId> {
         let mut games = Vec::new();
         for drop in told.iter().filter_map(|&i| self.session.drops.get(i)) {
             if drop.card.is_foil() && !games.contains(&drop.app_id) {
@@ -433,7 +433,7 @@ impl KeptSession {
     /// Numbers a game's foils among these drops by its foil badge's counts,
     /// after them: how many of that foil the account has, less the copies of
     /// it found after this one.
-    pub fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &CardSet) {
+    pub fn number_foils(&mut self, app_id: AppId, told: &[usize], foils: &CardSet) {
         let theirs: Vec<usize> = told
             .iter()
             .copied()
@@ -461,7 +461,7 @@ impl KeptSession {
     /// alone to learn from, over the games farmed in `order`.
     pub fn first_forecast(
         &mut self,
-        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<u32>,
+        order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<AppId>,
         now: DateTime<Utc>,
     ) {
         if self.session.first_forecast.is_some() {
@@ -540,12 +540,12 @@ fn take_one(up: &mut [(&str, u32)], name: &str) -> bool {
 mod tests {
     use std::slice;
 
-    use card::Card;
+    use card::{AssetId, Card};
     use game::CardDrops;
 
     use super::*;
 
-    const HEAVY_RAIN: u32 = 960_910;
+    const HEAVY_RAIN: AppId = AppId(960_910);
 
     fn at() -> DateTime<Utc> {
         DateTime::default()
@@ -558,9 +558,9 @@ mod tests {
         }
     }
 
-    fn asset(asset_id: u64, app_id: u32, name: &str, foil: bool) -> CardAsset {
+    fn asset(asset_id: u64, app_id: AppId, name: &str, foil: bool) -> CardAsset {
         CardAsset {
-            asset_id,
+            asset_id: AssetId(asset_id),
             app_id,
             name: name.into(),
             market_hash_name: format!("{app_id}-{name}"),
@@ -585,7 +585,7 @@ mod tests {
         heavy_rain_with(0, madison, 0, scott)
     }
 
-    fn game(app_id: u32, remaining: u32) -> Game {
+    fn game(app_id: AppId, remaining: u32) -> Game {
         Game {
             app_id,
             name: format!("Game {app_id}"),
@@ -599,7 +599,7 @@ mod tests {
     }
 
     /// A look at a game's card page: `remaining` to come, and its set.
-    fn page(app_id: u32, remaining: u32, set: CardSet) -> GameCards {
+    fn page(app_id: AppId, remaining: u32, set: CardSet) -> GameCards {
         GameCards {
             game: game(app_id, remaining),
             set,
@@ -608,7 +608,7 @@ mod tests {
 
     /// Every game with drops left, in the library's order: the farm order,
     /// as far as these tests go.
-    fn every(library: &SteamLibrary, _: &[SetAside]) -> Vec<u32> {
+    fn every(library: &SteamLibrary, _: &[SetAside]) -> Vec<AppId> {
         library.with_drops_left().map(|g| g.app_id).collect()
     }
 
@@ -857,7 +857,7 @@ mod tests {
         let mut kept = farming(3, heavy_rain(1, 0));
         let found = looks(&mut kept, 2, heavy_rain(1, 1)).expect("a drop");
 
-        let told = kept.identify(&[found], &[asset(9, 2, "Madison", false)]);
+        let told = kept.identify(&[found], &[asset(9, AppId(2), "Madison", false)]);
 
         assert_eq!(named(&kept, &told), [(some("Scott"), false, Some(1))]);
     }
@@ -941,22 +941,22 @@ mod tests {
     #[test]
     fn items_wait_for_a_drop_of_their_game() {
         let mut kept = KeptSession::new(at());
-        let item = |asset_id, app_id| NewItem {
-            asset_id,
-            app_id,
+        let item = |asset_id, app_id: Option<u32>| NewItem {
+            asset_id: AssetId(asset_id),
+            app_id: app_id.map(AppId),
             gained_at: None,
         };
         kept.keep_announced(vec![item(1, Some(10)), item(2, Some(20)), item(3, None)]);
         kept.keep_announced(vec![item(1, Some(10))]);
 
-        let ids = |items: Vec<NewItem>| items.iter().map(|i| i.asset_id).collect::<Vec<_>>();
+        let ids = |items: Vec<NewItem>| items.iter().map(|i| i.asset_id.0).collect::<Vec<_>>();
         assert_eq!(
-            ids(kept.take_announced(&[10])),
+            ids(kept.take_announced(&[AppId(10)])),
             [1, 3],
             "its own, and those Steam didn't say"
         );
-        assert_eq!(ids(kept.take_announced(&[20])), [2]);
-        assert!(kept.take_announced(&[10, 20]).is_empty());
+        assert_eq!(ids(kept.take_announced(&[AppId(20)])), [2]);
+        assert!(kept.take_announced(&[AppId(10), AppId(20)]).is_empty());
     }
 
     #[test]
@@ -964,17 +964,17 @@ mod tests {
         let started = DateTime::from_timestamp(1_790_700_000, 0).unwrap();
         let mut kept = KeptSession::new(started);
         let item = |asset_id, gained: i64| NewItem {
-            asset_id,
-            app_id: Some(10),
+            asset_id: AssetId(asset_id),
+            app_id: Some(AppId(10)),
             gained_at: DateTime::from_timestamp(gained, 0),
         };
 
         kept.keep_announced(vec![item(1, 1_790_600_000), item(2, 1_790_700_000)]);
 
         assert_eq!(
-            kept.take_announced(&[10])
+            kept.take_announced(&[AppId(10)])
                 .iter()
-                .map(|i| i.asset_id)
+                .map(|i| i.asset_id.0)
                 .collect::<Vec<_>>(),
             [2]
         );

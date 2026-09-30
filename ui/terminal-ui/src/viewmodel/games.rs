@@ -1,4 +1,4 @@
-use game::{CardDrops, Game};
+use game::{AppId, CardDrops, Game};
 use preferences::{
     GetPreferences, PreferencesError, SetAppearOnline, SetGameTier, SetOnlyPriority, Tier,
 };
@@ -6,7 +6,7 @@ use preferences::{
 /// One line in a list of games to pick from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameRow {
-    pub app_id: u32,
+    pub app_id: AppId,
     pub name: String,
     /// 1-based position among the priority games.
     pub rank: Option<usize>,
@@ -53,13 +53,13 @@ impl Games {
         (self.set_appear_online)(!self.appear_online())
     }
 
-    pub fn set_tier(&self, app_id: u32, tier: Tier) -> Result<(), PreferencesError> {
+    pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
         (self.set_tier)(app_id, tier)
     }
 
     /// Picks a game — it goes to the end of the priority list — or, if it's
     /// picked already, unpicks it. Returns its rank now.
-    pub fn toggle(&self, app_id: u32) -> Result<Option<usize>, PreferencesError> {
+    pub fn toggle(&self, app_id: AppId) -> Result<Option<usize>, PreferencesError> {
         let prefs = (self.get)();
         let tier = match prefs.rank(app_id) {
             Some(_) => Tier::Indifferent,
@@ -108,7 +108,7 @@ impl Games {
     }
 }
 
-fn row(app_id: u32, games: &[Game], rank: Option<usize>) -> GameRow {
+fn row(app_id: AppId, games: &[Game], rank: Option<usize>) -> GameRow {
     let game = games.iter().find(|g| g.app_id == app_id);
     GameRow {
         app_id,
@@ -123,7 +123,7 @@ fn row(app_id: u32, games: &[Game], rank: Option<usize>) -> GameRow {
 mod tests {
     use std::sync::Arc;
 
-    use game::test_support::game;
+    use game::{AppId, test_support::game};
     use preferences::{
         Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
         test_support::InMemoryPreferencesRepository,
@@ -133,7 +133,7 @@ mod tests {
 
     fn games(priority: &[u32]) -> Games {
         let repo = Arc::new(InMemoryPreferencesRepository::new(Preferences {
-            priority_games: priority.to_vec(),
+            priority_games: priority.iter().copied().map(AppId).collect(),
             ..Default::default()
         }));
         Games::new(
@@ -153,7 +153,7 @@ mod tests {
     }
 
     fn ids(rows: &[GameRow]) -> Vec<(u32, Option<usize>)> {
-        rows.iter().map(|r| (r.app_id, r.rank)).collect()
+        rows.iter().map(|r| (r.app_id.0, r.rank)).collect()
     }
 
     #[test]
@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn toggling_picks_a_game_last_then_unpicks_it() {
         let g = games(&[20]);
-        assert_eq!(g.toggle(10), Ok(Some(2)));
-        assert_eq!(g.toggle(20), Ok(None));
+        assert_eq!(g.toggle(AppId(10)), Ok(Some(2)));
+        assert_eq!(g.toggle(AppId(20)), Ok(None));
         assert_eq!(
             ids(&g.rows(&library())),
             [(10, Some(1)), (20, None)],

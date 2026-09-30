@@ -821,10 +821,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "card",
  "chrono",
  "config-file",
  "debug-log",
  "farming",
+ "game",
  "keep-awake",
  "session",
  "steam-api",
@@ -2130,6 +2132,7 @@ name = "preferences"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "game",
  "preferences",
 ]
 
@@ -2139,6 +2142,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config-file",
+ "game",
  "preferences",
 ]
 
@@ -2175,6 +2179,7 @@ dependencies = [
  "chrono",
  "config-file",
  "debug-log",
+ "game",
  "money",
  "price",
  "serde_json",

@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use game::AppId;
+
 /// How often a game being farmed has its cards looked at: ASF's
 /// `FarmingDelay` of 15 minutes, plus its 15 seconds for Steam's clock.
 pub(crate) const LOOK_EVERY: Duration = Duration::from_secs(15 * 60 + 15);
@@ -53,8 +55,30 @@ pub(crate) const TICK: Duration = Duration::from_secs(30);
 
 /// Sale-event badges: earned by taking part in a sale, not by playing, so
 /// playing never drops their cards. ASF's `SalesBlacklist`.
-pub(crate) const SALE_EVENTS: [u32; 25] = [
-    267_420, 303_700, 335_590, 368_020, 425_280, 480_730, 566_020, 639_900, 762_800, 876_740,
-    991_980, 1_195_670, 1_343_890, 1_465_680, 1_658_760, 1_797_760, 2_021_850, 2_243_720,
-    2_459_330, 2_640_280, 2_861_690, 2_861_720, 3_558_920, 3_558_940, 4_761_370,
+pub(crate) const SALE_EVENTS: [AppId; 25] = [
+    AppId(267_420),
+    AppId(303_700),
+    AppId(335_590),
+    AppId(368_020),
+    AppId(425_280),
+    AppId(480_730),
+    AppId(566_020),
+    AppId(639_900),
+    AppId(762_800),
+    AppId(876_740),
+    AppId(991_980),
+    AppId(1_195_670),
+    AppId(1_343_890),
+    AppId(1_465_680),
+    AppId(1_658_760),
+    AppId(1_797_760),
+    AppId(2_021_850),
+    AppId(2_243_720),
+    AppId(2_459_330),
+    AppId(2_640_280),
+    AppId(2_861_690),
+    AppId(2_861_720),
+    AppId(3_558_920),
+    AppId(3_558_940),
+    AppId(4_761_370),
 ];

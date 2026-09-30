@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use game::AppId;
 
 use crate::{
     Price, PricedCard,
@@ -9,7 +10,7 @@ use crate::{
 /// lookup at one time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SetPrices {
-    pub app_id: u32,
+    pub app_id: AppId,
     pub normal: Vec<PricedCard>,
     pub foil: Vec<PricedCard>,
     /// When its prices were looked up; for a set whose only lookup failed,
@@ -23,7 +24,7 @@ pub struct SetPrices {
 impl SetPrices {
     /// A set whose first lookup failed at `at`: nothing priced, and tried
     /// again a day later.
-    pub fn failed(app_id: u32, at: DateTime<Utc>) -> Self {
+    pub fn failed(app_id: AppId, at: DateTime<Utc>) -> Self {
         Self {
             app_id,
             normal: Vec::new(),
@@ -105,7 +106,7 @@ mod tests {
     #[test]
     fn a_sets_cards_are_found_by_name_and_by_hash_name() {
         let portal = SetPrices {
-            app_id: 620,
+            app_id: AppId(620),
             normal: vec![
                 listed("Intro", "620-Intro (Trading Card)", 8),
                 listed("Chell", "620-Chell", 6),
@@ -139,7 +140,7 @@ mod tests {
         );
         assert_eq!(failed.due_at(), noon() + TimeDelta::hours(30));
         assert_eq!(
-            SetPrices::failed(620, noon()).due_at(),
+            SetPrices::failed(AppId(620), noon()).due_at(),
             noon() + TimeDelta::hours(24)
         );
     }

@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use account::GetAccount;
 use farming::{FarmCards, FarmingEvent};
+use game::AppId;
 use preferences::{GetPreferences, Preferences, PreferencesError, SetGameTier, Tier};
 use session::EndSession;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -117,7 +118,7 @@ impl Farming {
 
     /// Takes effect within moments: the farmer looks at the preferences as
     /// it plays.
-    pub fn set_tier(&self, app_id: u32, tier: Tier) -> Result<(), PreferencesError> {
+    pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
         (self.set_tier)(app_id, tier)
     }
 }

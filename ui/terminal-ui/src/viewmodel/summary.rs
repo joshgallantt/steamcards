@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use game::{Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 use money::Money;
 use price::{
     Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
@@ -46,7 +46,7 @@ impl Summary {
     pub fn build(
         session: &Session,
         library: &SteamLibrary,
-        order: &[u32],
+        order: &[AppId],
         book: &PriceBook,
         wallet: Option<&Wallet>,
         now: DateTime<Utc>,
@@ -228,7 +228,12 @@ pub fn value_to_come(game: &Game, book: &PriceBook, wallet: Option<&Wallet>) -> 
 }
 
 /// A card of a game's set, by name: what it's worth.
-pub fn card_price(app_id: u32, name: &str, book: &PriceBook, wallet: Option<&Wallet>) -> CardPrice {
+pub fn card_price(
+    app_id: AppId,
+    name: &str,
+    book: &PriceBook,
+    wallet: Option<&Wallet>,
+) -> CardPrice {
     let (Some(set), Some(wallet)) = (book.sets.get(&app_id), wallet) else {
         return CardPrice::Waiting;
     };
@@ -238,8 +243,8 @@ pub fn card_price(app_id: u32, name: &str, book: &PriceBook, wallet: Option<&Wal
 /// The games to price, most urgent first: those playing now, then those
 /// whose cards dropped this session (newest first), then the rest in farm
 /// order.
-pub fn prices_wanted(playing: &[u32], session: &Session, order: &[u32]) -> Vec<u32> {
-    let mut wanted: Vec<u32> = Vec::new();
+pub fn prices_wanted(playing: &[AppId], session: &Session, order: &[AppId]) -> Vec<AppId> {
+    let mut wanted: Vec<AppId> = Vec::new();
     let dropped = session.drops.iter().rev().map(|d| d.app_id);
     for id in playing
         .iter()
@@ -256,7 +261,7 @@ pub fn prices_wanted(playing: &[u32], session: &Session, order: &[u32]) -> Vec<u
 
 #[cfg(test)]
 mod tests {
-    use card::CardAsset;
+    use card::{AssetId, CardAsset};
     use chrono::TimeZone;
     use game::CardDrops;
     use money::Currency;
@@ -274,7 +279,7 @@ mod tests {
 
     fn heavy_rain() -> Game {
         Game {
-            app_id: 960_910,
+            app_id: AppId(960_910),
             name: "Heavy Rain".into(),
             hours: 4.0,
             drops: CardDrops {
@@ -287,7 +292,7 @@ mod tests {
 
     fn limbo() -> Game {
         Game {
-            app_id: 48_000,
+            app_id: AppId(48_000),
             name: "LIMBO".into(),
             hours: 3.4,
             drops: CardDrops {
@@ -300,7 +305,7 @@ mod tests {
 
     fn priced(app_id: u32, cards: &[(&str, i64)]) -> SetPrices {
         SetPrices {
-            app_id,
+            app_id: AppId(app_id),
             normal: cards
                 .iter()
                 .map(|&(name, pence)| PricedCard {
@@ -337,8 +342,8 @@ mod tests {
 
     fn madison(asset_id: u64) -> CardAsset {
         CardAsset {
-            asset_id,
-            app_id: 960_910,
+            asset_id: AssetId(asset_id),
+            app_id: AppId(960_910),
             name: "Madison".into(),
             market_hash_name: "960910-Madison".into(),
             foil: false,
@@ -354,25 +359,25 @@ mod tests {
             drops: vec![
                 Drop {
                     at: at(17, 5),
-                    app_id: 960_910,
+                    app_id: AppId(960_910),
                     card: DropCard::Identified(madison(1)),
                     copy: Some(1),
                 },
                 Drop {
                     at: at(17, 10),
-                    app_id: 960_910,
+                    app_id: AppId(960_910),
                     card: DropCard::Identified(madison(2)),
                     copy: Some(2),
                 },
                 Drop {
                     at: at(17, 23),
-                    app_id: 960_910,
+                    app_id: AppId(960_910),
                     card: DropCard::Identifying,
                     copy: None,
                 },
             ],
             stretches: vec![Stretch {
-                app_ids: vec![960_910],
+                app_ids: vec![AppId(960_910)],
                 mode: Mode::Cards,
                 from: at(16, 50),
                 to: None,
@@ -391,7 +396,7 @@ mod tests {
         let s = Summary::build(
             &session(),
             &library,
-            &[960_910, 48_000],
+            &[AppId(960_910), AppId(48_000)],
             &book(),
             Some(&pounds()),
             at(17, 31),
@@ -420,7 +425,14 @@ mod tests {
     #[test]
     fn no_money_is_shown_before_the_wallet_is_known() {
         let library = SteamLibrary::new(vec![heavy_rain()]);
-        let s = Summary::build(&session(), &library, &[960_910], &book(), None, at(17, 31));
+        let s = Summary::build(
+            &session(),
+            &library,
+            &[AppId(960_910)],
+            &book(),
+            None,
+            at(17, 31),
+        );
         assert_eq!((s.session_value, s.when_done), (None, None));
     }
 
@@ -471,7 +483,7 @@ mod tests {
             Some(CardPrice::Worth(money(12)))
         );
         let mut unpriced = limbo();
-        unpriced.app_id = 1;
+        unpriced.app_id = AppId(1);
         assert_eq!(
             value_to_come(&unpriced, &book(), Some(&w)),
             Some(CardPrice::Waiting)
@@ -486,7 +498,7 @@ mod tests {
         let mut book = PriceBook::default();
         let mut set = priced(48_000, &[("Boy", 6)]);
         set.normal[0].price = Price::NoMarket;
-        book.sets.insert(48_000, set);
+        book.sets.insert(AppId(48_000), set);
         assert_eq!(
             value_to_come(&limbo(), &book, Some(&pounds())),
             Some(CardPrice::None)
@@ -497,15 +509,15 @@ mod tests {
     fn a_card_of_the_set_is_valued_by_its_name() {
         let w = pounds();
         assert_eq!(
-            card_price(960_910, "Norman", &book(), Some(&w)),
+            card_price(AppId(960_910), "Norman", &book(), Some(&w)),
             CardPrice::Worth(money(6))
         );
         assert_eq!(
-            card_price(1, "Norman", &book(), Some(&w)),
+            card_price(AppId(1), "Norman", &book(), Some(&w)),
             CardPrice::Waiting
         );
         let mut book = book();
-        book.sets.get_mut(&960_910).unwrap().normal[0].price = Price::Known(PriceQuote {
+        book.sets.get_mut(&AppId(960_910)).unwrap().normal[0].price = Price::Known(PriceQuote {
             ask: None,
             bid: None,
             ask_depth: None,
@@ -514,14 +526,14 @@ mod tests {
             fetched_at: at(17, 0),
         });
         assert_eq!(
-            card_price(960_910, "Ethan", &book, Some(&w)),
+            card_price(AppId(960_910), "Ethan", &book, Some(&w)),
             CardPrice::None
         );
     }
 
     #[test]
     fn prices_are_wanted_for_whats_playing_then_whats_dropped_then_the_rest() {
-        let wanted = prices_wanted(&[48_000], &session(), &[1, 48_000, 2]);
-        assert_eq!(wanted, vec![48_000, 960_910, 1, 2]);
+        let wanted = prices_wanted(&[AppId(48_000)], &session(), &[1, 48_000, 2].map(AppId));
+        assert_eq!(wanted, [48_000, 960_910, 1, 2].map(AppId));
     }
 }

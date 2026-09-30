@@ -26,7 +26,7 @@ use crossterm::{
 };
 use farming::{EventKind, FarmingEvent, FarmingStatus, farm_order};
 use futures::StreamExt;
-use game::SteamLibrary;
+use game::{AppId, SteamLibrary};
 use preferences::{Preferences, PreferencesError, Tier};
 use price::{PriceBook, PriceEvent, PriceEventKind, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
@@ -132,7 +132,7 @@ struct Ctx<'a> {
     /// The library as it's best known, and the games that will be farmed,
     /// in farm order.
     library: &'a SteamLibrary,
-    order: &'a [u32],
+    order: &'a [AppId],
     /// The card sets of the games looked at, with the copies that dropped
     /// counted in.
     sets: &'a CardSets,
@@ -181,7 +181,7 @@ pub struct App {
 
     /// Game under the cursor, by app ID, so it stays put when the queue
     /// re-sorts.
-    selected: Option<u32>,
+    selected: Option<AppId>,
     queue_offset: usize,
     show_done: bool,
     paused_by_user: bool,
@@ -337,7 +337,7 @@ impl App {
         if drops.len() < self.seen_drops {
             self.seen_drops = 0;
         }
-        let mut dropped: Vec<u32> = drops[self.seen_drops..].iter().map(|d| d.app_id).collect();
+        let mut dropped: Vec<AppId> = drops[self.seen_drops..].iter().map(|d| d.app_id).collect();
         dropped.dedup();
         self.seen_drops = drops.len();
         let wanted = prices_wanted(&s.playing, &s.session, &s.order);
@@ -428,7 +428,7 @@ impl App {
     }
 
     /// Games the cursor can land on, top to bottom.
-    fn visible_ids(&self, q: &Queue) -> Vec<u32> {
+    fn visible_ids(&self, q: &Queue) -> Vec<AppId> {
         q.entries()
             .filter(|e| self.show_done || e.section() != Section::Done)
             .map(|e| e.game.app_id)
@@ -520,7 +520,7 @@ impl App {
     }
 
     /// Picks a game as a priority game, or unpicks it.
-    fn toggle_game(&mut self, app_id: u32, name: &str) {
+    fn toggle_game(&mut self, app_id: AppId, name: &str) {
         match self.games.toggle(app_id) {
             Ok(Some(n)) => self.flash(format!("{name} is priority #{n}: farmed first.")),
             Ok(None) => self.flash(format!("{name} is no longer a priority game.")),
@@ -839,7 +839,7 @@ impl App {
     fn games_key(&mut self, mut v: GamesView, k: KeyEvent) -> Option<Overlay> {
         let rows = |app: &Self| app.games.rows(app.known_library().games());
         // Keeps the cursor on a game that moved, e.g. to its new rank.
-        let follow = |app: &Self, app_id: u32| rows(app).iter().position(|x| x.app_id == app_id);
+        let follow = |app: &Self, app_id: AppId| rows(app).iter().position(|x| x.app_id == app_id);
         let all = rows(self);
         let row = all.get(v.cursor.min(all.len().saturating_sub(1))).cloned();
         // Space picks; enter, as in every pop-up, closes.

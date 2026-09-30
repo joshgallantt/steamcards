@@ -1,3 +1,7 @@
+use game::AppId;
+
+use crate::AssetId;
+
 /// One copy of a trading card the account holds: an item in its Steam
 /// inventory. Its identity is its asset ID. Each copy that drops is its own
 /// asset, so a card that drops twice is two of these.
@@ -6,9 +10,9 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CardAsset {
     /// The item's ID in the account's inventory.
-    pub asset_id: u64,
+    pub asset_id: AssetId,
     /// The game whose set the card is from.
-    pub app_id: u32,
+    pub app_id: AppId,
     /// The card's name as the game's set lists it: "Anarchist", never
     /// "Anarchist (Trading Card)" as the market has it.
     pub name: String,

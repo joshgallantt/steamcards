@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use game::AppId;
+
 use crate::{Basis, HeldCard, Offers, Price, SetPrices};
 
 /// Everything priced so far: each game's set, and each card's best offers
@@ -7,7 +9,7 @@ use crate::{Basis, HeldCard, Offers, Price, SetPrices};
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PriceBook {
     /// Sets, by app ID.
-    pub sets: BTreeMap<u32, SetPrices>,
+    pub sets: BTreeMap<AppId, SetPrices>,
     /// Order books, by market hash name.
     pub offers: BTreeMap<String, Offers>,
 }
@@ -79,9 +81,9 @@ mod tests {
     fn a_held_cards_price_depends_on_the_basis() {
         let mut book = PriceBook::default();
         book.sets.insert(
-            960_910,
+            AppId(960_910),
             SetPrices {
-                app_id: 960_910,
+                app_id: AppId(960_910),
                 normal: vec![listed("Madison", "960910-Madison", 5)],
                 foil: Vec::new(),
                 fetched_at: noon(),
@@ -90,9 +92,9 @@ mod tests {
         );
         let madison = HeldCard {
             market_hash_name: Some("960910-Madison".into()),
-            ..HeldCard::named(960_910, "Madison", false)
+            ..HeldCard::named(AppId(960_910), "Madison", false)
         };
-        let by_name = HeldCard::named(960_910, "Madison", false);
+        let by_name = HeldCard::named(AppId(960_910), "Madison", false);
         assert!(matches!(book.price(&madison, Basis::List), Price::Known(_)));
         assert_eq!(
             book.price(&madison, Basis::Net),
@@ -116,9 +118,9 @@ mod tests {
             "its hash from its set"
         );
 
-        let scott = HeldCard::named(960_910, "Scott", false);
+        let scott = HeldCard::named(AppId(960_910), "Scott", false);
         assert_eq!(book.price(&scott, Basis::List), Price::NoMarket);
-        let hades = HeldCard::named(1_145_360, "Zagreus", false);
+        let hades = HeldCard::named(AppId(1_145_360), "Zagreus", false);
         assert_eq!(book.price(&hades, Basis::List), Price::Pending);
         let unsellable = HeldCard {
             marketable: false,

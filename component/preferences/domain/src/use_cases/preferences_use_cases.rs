@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use game::AppId;
+
 use crate::{Preferences, PreferencesError, PreferencesRepository, Tier};
 
 /// The current preferences.
@@ -12,7 +14,7 @@ pub type GetPreferences = Arc<dyn Fn() -> Preferences + Send + Sync>;
 
 /// Moves a game (by app ID) between tiers. `Tier::Priority(n)` puts it at
 /// position n (clamped to the end of the list), shifting the others down.
-pub type SetGameTier = Arc<dyn Fn(u32, Tier) -> Result<(), PreferencesError> + Send + Sync>;
+pub type SetGameTier = Arc<dyn Fn(AppId, Tier) -> Result<(), PreferencesError> + Send + Sync>;
 
 /// Farms priority games only, or everything not skipped.
 pub type SetOnlyPriority = Arc<dyn Fn(bool) -> Result<(), PreferencesError> + Send + Sync>;

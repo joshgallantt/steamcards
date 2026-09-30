@@ -4,7 +4,7 @@
 //! have a minimum, so the two differ (research §1.4).
 
 use chrono::{DateTime, Utc};
-use game::SteamLibrary;
+use game::{AppId, SteamLibrary};
 use money::Money;
 
 use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, QuoteSource, SetPrices, Wallet};
@@ -97,7 +97,7 @@ pub fn expected_per_drop(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Opti
 /// says so.
 pub fn value_left(
     library: &SteamLibrary,
-    order: &[u32],
+    order: &[AppId],
     book: &PriceBook,
     basis: Basis,
     wallet: &Wallet,
@@ -162,7 +162,7 @@ mod tests {
     use std::time::Duration;
 
     use chrono::TimeDelta;
-    use game::{CardDrops, Game};
+    use game::{AppId, CardDrops, Game};
 
     use super::*;
     use money::Currency;
@@ -205,7 +205,7 @@ mod tests {
 
     fn set_in(currency: Currency, app_id: u32, asks: &[i64]) -> SetPrices {
         SetPrices {
-            app_id,
+            app_id: AppId(app_id),
             normal: asks
                 .iter()
                 .enumerate()
@@ -223,7 +223,7 @@ mod tests {
 
     fn game(app_id: u32, remaining: u32) -> Game {
         Game {
-            app_id,
+            app_id: AppId(app_id),
             name: format!("Game {app_id}"),
             hours: 5.0,
             drops: CardDrops {
@@ -317,11 +317,11 @@ mod tests {
             game(50, 2),
         ]);
         let mut book = PriceBook::default();
-        book.sets.insert(10, set(10, &[5, 5]));
-        book.sets.insert(20, set(20, &[8]));
-        book.sets.insert(40, set(40, &[100]));
+        book.sets.insert(AppId(10), set(10, &[5, 5]));
+        book.sets.insert(AppId(20), set(20, &[8]));
+        book.sets.insert(AppId(40), set(40, &[100]));
         // Game 50 is skipped: not in the farm order.
-        let order = [10, 20, 30, 40];
+        let order = [10, 20, 30, 40].map(AppId);
 
         let left = value_left(&library, &order, &book, Basis::List, &pounds());
 
@@ -344,11 +344,11 @@ mod tests {
         let hl2 = set_in(Currency::USD, 220, &[13, 13, 14, 14, 12, 14, 16, 14]);
         let dollars = Wallet::new(Currency::USD);
         let mut book = PriceBook::default();
-        book.sets.insert(220, hl2);
+        book.sets.insert(AppId(220), hl2);
         let left = |remaining| {
             value_left(
                 &SteamLibrary::new(vec![game(220, remaining)]),
-                &[220],
+                &[AppId(220)],
                 &book,
                 Basis::Net,
                 &dollars,
@@ -363,16 +363,16 @@ mod tests {
     #[test]
     fn stale_prices_count_and_the_oldest_is_told() {
         let mut book = PriceBook::default();
-        book.sets.insert(10, set(10, &[5]));
+        book.sets.insert(AppId(10), set(10, &[5]));
         let mut fresh = set(20, &[8]);
         fresh.fetched_at = noon() + TimeDelta::hours(7);
         if let Price::Known(q) = &mut fresh.normal[0].price {
             q.fetched_at = noon() + TimeDelta::hours(7);
         }
-        book.sets.insert(20, fresh);
+        book.sets.insert(AppId(20), fresh);
         let cards = [
-            HeldCard::named(10, "Card 0", false),
-            HeldCard::named(20, "Card 0", false),
+            HeldCard::named(AppId(10), "Card 0", false),
+            HeldCard::named(AppId(20), "Card 0", false),
         ];
 
         let at = |hours| noon() + TimeDelta::hours(hours);

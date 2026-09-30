@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use game::AppId;
 
 use crate::DropCard;
 
@@ -9,7 +10,7 @@ pub struct Drop {
     /// When a look at the game, or a read of the library, found it.
     pub at: DateTime<Utc>,
     /// The game it dropped for.
-    pub app_id: u32,
+    pub app_id: AppId,
     pub card: DropCard,
     /// Which copy of that card (by name and border) the account then held,
     /// from its own counts: the set's for a normal card, its foil badge's

@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use game::AppId;
 
 use crate::Mode;
 
@@ -8,7 +9,7 @@ use crate::Mode;
 /// stretches.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stretch {
-    pub app_ids: Vec<u32>,
+    pub app_ids: Vec<AppId>,
     pub mode: Mode,
     pub from: DateTime<Utc>,
     /// `None` while it goes on.

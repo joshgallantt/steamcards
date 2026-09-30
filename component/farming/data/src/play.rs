@@ -4,8 +4,10 @@ use std::{
 };
 
 use async_trait::async_trait;
+use card::AssetId;
 use chrono::DateTime;
 use farming::{FarmingRepository, Signal};
+use game::AppId;
 use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
@@ -147,7 +149,7 @@ impl SteamFarmingRepository {
 
 #[async_trait]
 impl FarmingRepository for SteamFarmingRepository {
-    async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
+    async fn play(&self, app_ids: &[AppId], online: bool) -> anyhow::Result<()> {
         let (conn, told, was_online) = self.take_up().await?;
         if online != was_online {
             conn.set_online(online)?;
@@ -157,10 +159,11 @@ impl FarmingRepository for SteamFarmingRepository {
         let games = if conn.blocked().is_some_and(|b| b.blocked) {
             Vec::new()
         } else {
-            if app_ids != told {
-                conn.play(app_ids)?;
+            let games: Vec<u32> = app_ids.iter().map(|id| id.0).collect();
+            if games != told {
+                conn.play(&games)?;
             }
-            app_ids.to_vec()
+            games
         };
         *self.on.lock().unwrap() = Some(Played {
             account: conn.steam_id(),
@@ -190,12 +193,12 @@ impl FarmingRepository for SteamFarmingRepository {
         self.steam.disconnect().await;
     }
 
-    fn blocked(&self) -> Option<Option<u32>> {
+    fn blocked(&self) -> Option<Option<AppId>> {
         self.steam
             .current()?
             .blocked()
             .filter(|b| b.blocked)
-            .map(|b| b.app_id)
+            .map(|b| b.app_id.map(AppId))
     }
 
     async fn next_signal(&self) -> Signal {
@@ -216,7 +219,7 @@ impl FarmingRepository for SteamFarmingRepository {
                     if let Some(p) = self.on.lock().unwrap().as_mut() {
                         p.games.clear();
                     }
-                    return Signal::Blocked(b.app_id);
+                    return Signal::Blocked(b.app_id.map(AppId));
                 }
                 Ok(Event::PlayingBlocked(_)) => return Signal::Unblocked,
                 Ok(Event::NewItems(announced)) => {
@@ -249,8 +252,8 @@ impl FarmingRepository for SteamFarmingRepository {
 /// source app.
 fn new_item(item: &UnseenItem) -> NewItem {
     NewItem {
-        asset_id: item.asset_id,
-        app_id: item.source_app_id,
+        asset_id: AssetId(item.asset_id),
+        app_id: item.source_app_id.map(AppId),
         gained_at: item
             .gained_at
             .and_then(|at| DateTime::from_timestamp(i64::from(at), 0)),

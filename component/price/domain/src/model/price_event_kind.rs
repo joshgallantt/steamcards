@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use game::AppId;
 
 use crate::MarketPause;
 
@@ -20,7 +21,7 @@ pub enum PriceEventKind {
     Resumed,
     /// A game's prices couldn't be looked up, by app ID: the market's
     /// answer couldn't be used. They're tried again a day later.
-    Failed(u32),
+    Failed(AppId),
     /// The market couldn't be asked, or didn't answer: it's asked again
     /// then, and nothing is taken as failed meanwhile.
     Unanswered { retry_at: DateTime<Utc> },

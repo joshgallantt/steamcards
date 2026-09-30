@@ -1,4 +1,4 @@
-use crate::Game;
+use crate::{AppId, Game};
 
 /// The games on the account that have trading cards: what farming works
 /// through. A game appears once.
@@ -24,7 +24,7 @@ impl SteamLibrary {
         &self.games
     }
 
-    pub fn game(&self, app_id: u32) -> Option<&Game> {
+    pub fn game(&self, app_id: AppId) -> Option<&Game> {
         self.games.iter().find(|g| g.app_id == app_id)
     }
 
@@ -77,7 +77,7 @@ mod tests {
 
     fn game(app_id: u32, received: u32, remaining: u32) -> Game {
         Game {
-            app_id,
+            app_id: AppId(app_id),
             name: format!("Game {app_id}"),
             hours: 0.0,
             drops: CardDrops {
@@ -92,8 +92,8 @@ mod tests {
     fn a_library_counts_the_drops_still_to_come() {
         let library = SteamLibrary::new(vec![game(620, 1, 3), game(220, 3, 0), game(440, 0, 2)]);
         assert_eq!(library.drops_left(), 5);
-        let left: Vec<u32> = library.with_drops_left().map(|g| g.app_id).collect();
-        assert_eq!(left, [620, 440]);
+        let left: Vec<AppId> = library.with_drops_left().map(|g| g.app_id).collect();
+        assert_eq!(left, [AppId(620), AppId(440)]);
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
         let library = SteamLibrary::new(vec![game(620, 1, 3), game(620, 0, 0)]);
         assert_eq!(library.games().len(), 1);
         assert_eq!(
-            library.game(620).unwrap().drops.remaining,
+            library.game(AppId(620)).unwrap().drops.remaining,
             3,
             "the first one"
         );
@@ -113,7 +113,7 @@ mod tests {
         library.update(game(620, 2, 2));
         library.update(game(730, 0, 1));
         assert_eq!(
-            library.game(620).unwrap().drops,
+            library.game(AppId(620)).unwrap().drops,
             CardDrops {
                 received: 2,
                 remaining: 2,

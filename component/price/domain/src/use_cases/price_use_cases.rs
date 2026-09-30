@@ -11,6 +11,7 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
+use game::AppId;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -28,7 +29,7 @@ pub type GetPrices = Arc<dyn Fn() -> Arc<PriceBook> + Send + Sync>;
 
 /// Says which games to price, most urgent first: the game being farmed,
 /// then games with cards this session, then the rest in farm order.
-pub type WantPrices = Arc<dyn Fn(Vec<u32>) + Send + Sync>;
+pub type WantPrices = Arc<dyn Fn(Vec<AppId>) + Send + Sync>;
 
 /// Prices the wanted games' sets, normal cards and foils, until the token is
 /// cancelled, reporting on the channel: each set once, then again once its
@@ -41,7 +42,7 @@ pub type WatchPrices =
 /// Prices a game's set again in the background, if its prices are over an
 /// hour old: one of its cards just dropped, or the user asked. Errs when
 /// Steam has paused lookups, or the market couldn't be asked.
-pub type RefreshPrices = Arc<dyn Fn(u32) -> JoinHandle<Result<(), PriceError>> + Send + Sync>;
+pub type RefreshPrices = Arc<dyn Fn(AppId) -> JoinHandle<Result<(), PriceError>> + Send + Sync>;
 
 /// Looks up the order books of these cards, by market hash name, in the
 /// background: their best offers, which only the instant basis uses. A card
@@ -175,7 +176,7 @@ enum Priced {
 /// set's prices come from one lookup at one time: when either half's answer
 /// can't be used, it keeps the prices it had, and is tried again a day
 /// later. When the market couldn't be asked, it's left as it was.
-async fn price_set(repo: &dyn PriceRepository, app_id: u32, clock: &Clock) -> Priced {
+async fn price_set(repo: &dyn PriceRepository, app_id: AppId, clock: &Clock) -> Priced {
     let mut borders = [Vec::new(), Vec::new()];
     for (foil, cards) in [false, true].into_iter().zip(&mut borders) {
         match repo.look_up_set(app_id, foil).await {
@@ -301,7 +302,7 @@ impl Watcher {
     }
 
     /// Everything wanted is priced: says so, and when the next round is.
-    fn all_priced(&self, wanted: &[u32], book: &PriceBook, now: DateTime<Utc>) {
+    fn all_priced(&self, wanted: &[AppId], book: &PriceBook, now: DateTime<Utc>) {
         let games = match wanted.len() {
             1 => "the 1 game".to_owned(),
             n => format!("all {n} games"),
@@ -351,12 +352,12 @@ impl Watcher {
 
 /// Whether a game's set is due a lookup: never looked up, 6 hours old, or a
 /// day after a failed lookup.
-fn is_due(book: &PriceBook, app_id: u32, now: DateTime<Utc>) -> bool {
+fn is_due(book: &PriceBook, app_id: AppId, now: DateTime<Utc>) -> bool {
     book.sets.get(&app_id).is_none_or(|set| set.due_at() <= now)
 }
 
 /// Each game once, as first listed.
-fn unique(app_ids: Vec<u32>) -> Vec<u32> {
+fn unique(app_ids: Vec<AppId>) -> Vec<AppId> {
     let mut seen = HashSet::new();
     app_ids.into_iter().filter(|id| seen.insert(*id)).collect()
 }
@@ -423,6 +424,9 @@ mod tests {
 
     #[test]
     fn a_game_wanted_twice_is_priced_once() {
-        assert_eq!(unique(vec![620, 440, 620, 730, 440]), [620, 440, 730]);
+        assert_eq!(
+            unique([620, 440, 620, 730, 440].map(AppId).to_vec()),
+            [620, 440, 730].map(AppId)
+        );
     }
 }

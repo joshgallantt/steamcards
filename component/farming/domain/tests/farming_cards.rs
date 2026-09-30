@@ -8,7 +8,7 @@ use card::{describe_cards, look_at_cards, look_at_foils};
 use farming::{
     EventKind, FarmingEvent, FarmingStatus, Status, farm_cards, test_support::InMemorySteam,
 };
-use game::read_library;
+use game::{AppId, read_library};
 use preferences::{Preferences, test_support::ChangingPreferences};
 use session::Mode;
 use tokio::{sync::mpsc, time::Instant};
@@ -93,7 +93,7 @@ impl Player {
     async fn sees_waiting_for(&mut self, app_id: u32) -> FarmingStatus {
         loop {
             let waiting = self.sees(Status::Blocked).await;
-            if waiting.blocked_by == Some(app_id) {
+            if waiting.blocked_by == Some(AppId(app_id)) {
                 return waiting;
             }
         }
@@ -155,7 +155,11 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
     );
     let building = player.sees(Status::Farming).await;
     assert_eq!(building.mode, Some(Mode::Hours));
-    assert_eq!(building.playing, [10, 20, 30], "the most hours first");
+    assert_eq!(
+        building.playing,
+        [AppId(10), AppId(20), AppId(30)],
+        "the most hours first"
+    );
 
     assert_eq!(
         player.reads(EventKind::Info).await,
@@ -179,7 +183,7 @@ async fn the_users_first_choice_is_farmed_first() {
     player.steam.add_game(620, 5.0, 3, Some(30 * MINUTE));
     player.steam.add_game(440, 8.0, 1, Some(30 * MINUTE));
     player.wants(Preferences {
-        priority_games: vec![620],
+        priority_games: vec![AppId(620)],
         ..Default::default()
     });
     player.starts_farming();
@@ -197,7 +201,7 @@ async fn a_first_choice_short_of_three_hours_leads_the_group() {
     player.steam.add_game(440, 1.0, 2, Some(30 * MINUTE));
     player.steam.add_game(220, 2.0, 2, Some(30 * MINUTE));
     player.wants(Preferences {
-        priority_games: vec![440],
+        priority_games: vec![AppId(440)],
         ..Default::default()
     });
     player.starts_farming();
@@ -216,7 +220,7 @@ async fn a_skipped_game_is_never_played() {
     player.steam.add_game(620, 5.0, 1, Some(30 * MINUTE));
     player.steam.add_game(440, 5.0, 1, Some(30 * MINUTE));
     player.wants(Preferences {
-        skipped_games: vec![620],
+        skipped_games: vec![AppId(620)],
         ..Default::default()
     });
     player.starts_farming();
@@ -232,7 +236,7 @@ async fn only_priority_stops_after_the_priorities() {
     player.steam.add_game(620, 5.0, 1, Some(30 * MINUTE));
     player.steam.add_game(440, 5.0, 1, Some(30 * MINUTE));
     player.wants(Preferences {
-        priority_games: vec![620],
+        priority_games: vec![AppId(620)],
         only_priority: true,
         ..Default::default()
     });
@@ -256,7 +260,7 @@ async fn playing_elsewhere_pauses_farming_until_a_minute_after_it_stops() {
 
     player.steam.block(Some(730));
     let blocked = player.sees(Status::Blocked).await;
-    assert_eq!(blocked.blocked_by, Some(730));
+    assert_eq!(blocked.blocked_by, Some(AppId(730)));
 
     player.waits(2 * HOUR).await;
     assert_eq!(
@@ -557,7 +561,7 @@ async fn a_new_first_choice_takes_over_within_moments() {
     );
 
     player.wants(Preferences {
-        priority_games: vec![2],
+        priority_games: vec![AppId(2)],
         ..Default::default()
     });
 

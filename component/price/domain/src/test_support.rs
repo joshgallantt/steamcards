@@ -12,6 +12,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
+use game::AppId;
 use money::{Currency, Money};
 
 use crate::{
@@ -91,7 +92,7 @@ pub fn set_prices(
             .collect()
     };
     SetPrices {
-        app_id,
+        app_id: AppId(app_id),
         normal: cards(normal, false),
         foil: cards(foil, true),
         fetched_at: at,
@@ -147,7 +148,7 @@ pub struct InMemoryMarketRepository {
     held: AtomicU32,
     wallet: Mutex<Option<Wallet>>,
     settings: Mutex<PriceSettings>,
-    wanted: Mutex<Vec<u32>>,
+    wanted: Mutex<Vec<AppId>>,
     set_lookups: Mutex<Vec<SetLookup>>,
     offer_lookups: Mutex<Vec<String>>,
     /// Lookups Steam turned down, and when.
@@ -335,9 +336,10 @@ impl PriceRepository for InMemoryMarketRepository {
 
     async fn look_up_set(
         &self,
-        app_id: u32,
+        app_id: AppId,
         foil: bool,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
+        let app_id = app_id.0;
         if let Some(why) = self.unreachable() {
             return Ok(Lookup::Unanswered(why));
         }
@@ -403,11 +405,11 @@ impl PriceRepository for InMemoryMarketRepository {
         Ok(())
     }
 
-    fn wanted(&self) -> Vec<u32> {
+    fn wanted(&self) -> Vec<AppId> {
         self.wanted.lock().unwrap().clone()
     }
 
-    fn want(&self, app_ids: Vec<u32>) {
+    fn want(&self, app_ids: Vec<AppId>) {
         *self.wanted.lock().unwrap() = app_ids;
     }
 }

@@ -3,10 +3,11 @@
 
 use std::sync::Arc;
 
-use card::{Card, CardAsset, CardRepository};
+use card::{AssetId, Card, CardAsset, CardRepository};
 use card_data::SteamCardRepository;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
+use game::AppId;
 use steam_api::{
     SteamClient,
     test_support::{ACCOUNT, FakeSteam, HeldItem, STEAM_ID, token},
@@ -65,7 +66,7 @@ async fn a_games_own_page_has_its_card_set() {
     .await;
     let repo = repository(&steam, &site, "cards").await;
 
-    let cs = repo.game_cards(730).await.unwrap();
+    let cs = repo.game_cards(AppId(730)).await.unwrap();
 
     assert_eq!(cs.game.drops.remaining, 2);
     assert_eq!(cs.set.len(), 5);
@@ -92,7 +93,7 @@ async fn a_games_foils_are_counted_on_a_page_of_their_own() {
     .await;
     let repo = repository(&steam, &site, "foils").await;
 
-    let foils = repo.foils(730).await.unwrap();
+    let foils = repo.foils(AppId(730)).await.unwrap();
 
     assert_eq!(
         foils.cards()[..3],
@@ -126,13 +127,13 @@ async fn new_items_are_described_as_the_cards_they_are() {
     let repo = repository(&steam, &site, "describe").await;
 
     let cards = repo
-        .describe(&[31_001, 31_002, 31_003, 31_004])
+        .describe(&[31_001, 31_002, 31_003, 31_004].map(AssetId))
         .await
         .unwrap();
 
     let madison = |asset_id| CardAsset {
-        asset_id,
-        app_id: 960_910,
+        asset_id: AssetId(asset_id),
+        app_id: AppId(960_910),
         name: "Madison".into(),
         market_hash_name: "960910-Madison".into(),
         foil: false,
@@ -140,8 +141,8 @@ async fn new_items_are_described_as_the_cards_they_are() {
         tradable: true,
     };
     let scott = CardAsset {
-        asset_id: 31_003,
-        app_id: 960_910,
+        asset_id: AssetId(31_003),
+        app_id: AppId(960_910),
         name: "Scott".into(),
         market_hash_name: "960910-Scott (Foil)".into(),
         foil: true,

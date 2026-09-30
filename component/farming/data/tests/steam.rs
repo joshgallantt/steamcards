@@ -3,11 +3,13 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::AssetId;
 use chrono::DateTime;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use farming::{FarmingRepository, Signal};
 use farming_data::SteamFarmingRepository;
+use game::AppId;
 use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
@@ -54,7 +56,7 @@ async fn signal(repo: &SteamFarmingRepository) -> Signal {
 
 /// Plays `app_id`, and waits for Steam to say what was new already.
 async fn plays(repo: &SteamFarmingRepository, session: &SteamClient, app_id: u32) {
-    repo.play(&[app_id], false).await.unwrap();
+    repo.play(&[AppId(app_id)], false).await.unwrap();
     eventually(|| {
         session
             .current()
@@ -66,8 +68,8 @@ async fn plays(repo: &SteamFarmingRepository, session: &SteamClient, app_id: u32
 /// A card Steam listed, as farming hears of it.
 fn heard(card: UnseenItem) -> NewItem {
     NewItem {
-        asset_id: card.asset_id,
-        app_id: card.source_app_id,
+        asset_id: AssetId(card.asset_id),
+        app_id: card.source_app_id.map(AppId),
         gained_at: card
             .gained_at
             .and_then(|at| DateTime::from_timestamp(at.into(), 0)),
@@ -79,9 +81,9 @@ async fn games_are_played_and_told_again_only_when_they_change() {
     let steam = FakeSteam::start().await;
     let repo = SteamFarmingRepository::new(session(&steam, "play"), Arc::new(KeepAwake::off()));
 
-    repo.play(&[620], false).await.unwrap();
-    repo.play(&[620], false).await.unwrap();
-    repo.play(&[620, 440], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
+    repo.play(&[AppId(620), AppId(440)], false).await.unwrap();
 
     eventually(|| steam.games_played().len() == 2).await;
     assert_eq!(steam.games_played(), [vec![620], vec![620, 440]]);
@@ -93,9 +95,9 @@ async fn appearing_online_is_said_and_unsaid() {
     let steam = FakeSteam::start().await;
     let repo = SteamFarmingRepository::new(session(&steam, "online"), Arc::new(KeepAwake::off()));
 
-    repo.play(&[620], true).await.unwrap();
-    repo.play(&[620], true).await.unwrap();
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], true).await.unwrap();
+    repo.play(&[AppId(620)], true).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
 
     eventually(|| steam.statuses().len() == 2).await;
     assert_eq!(steam.statuses(), [1, 0]);
@@ -109,8 +111,8 @@ async fn steams_news_arrives_as_signals() {
     plays(&repo, &session, 620).await;
 
     steam.block(true, 730);
-    assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
-    assert_eq!(repo.blocked(), Some(Some(730)));
+    assert_eq!(signal(&repo).await, Signal::Blocked(Some(AppId(730))));
+    assert_eq!(repo.blocked(), Some(Some(AppId(730))));
 
     steam.block(false, 0);
     assert_eq!(signal(&repo).await, Signal::Unblocked);
@@ -172,7 +174,7 @@ async fn a_count_alone_says_to_look_when_it_goes_up() {
     steam.block(true, 730);
     assert_eq!(
         signal(&repo).await,
-        Signal::Blocked(Some(730)),
+        Signal::Blocked(Some(AppId(730))),
         "the same count again is nothing new"
     );
 
@@ -240,14 +242,14 @@ async fn an_item_that_arrived_while_signed_off_is_passed_on_when_signed_on_again
         Signal::NewItems(vec![heard(madison)]),
         "what was new at sign-on, since last time"
     );
-    assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
+    assert_eq!(signal(&repo).await, Signal::Blocked(Some(AppId(730))));
 }
 
 #[tokio::test]
 async fn another_session_taking_over_is_its_own_signal() {
     let steam = FakeSteam::start().await;
     let repo = SteamFarmingRepository::new(session(&steam, "replaced"), Arc::new(KeepAwake::off()));
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
 
     steam.sign_off(EResult::LOGON_SESSION_REPLACED);
 
@@ -260,16 +262,16 @@ async fn nothing_is_played_while_another_device_plays() {
     steam.busy_elsewhere(730);
     let repo = SteamFarmingRepository::new(session(&steam, "busy"), Arc::new(KeepAwake::off()));
 
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
     assert_eq!(
         repo.blocked(),
-        Some(Some(730)),
+        Some(Some(AppId(730))),
         "Steam said so as it signed on"
     );
 
     steam.block(false, 0);
     assert_eq!(signal(&repo).await, Signal::Unblocked);
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
 
     eventually(|| !steam.games_played().is_empty()).await;
     assert_eq!(
@@ -287,11 +289,11 @@ async fn games_are_told_again_after_another_device_played() {
     let repo = SteamFarmingRepository::new(session.clone(), Arc::new(KeepAwake::off()));
     plays(&repo, &session, 620).await;
     steam.block(true, 730);
-    assert_eq!(signal(&repo).await, Signal::Blocked(Some(730)));
+    assert_eq!(signal(&repo).await, Signal::Blocked(Some(AppId(730))));
     steam.block(false, 0);
     assert_eq!(signal(&repo).await, Signal::Unblocked);
 
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
 
     eventually(|| steam.games_played().len() == 2).await;
     assert_eq!(steam.games_played(), [vec![620], vec![620]]);
@@ -302,7 +304,7 @@ async fn another_device_taking_over_is_its_own_signal() {
     let steam = FakeSteam::start().await;
     let repo =
         SteamFarmingRepository::new(session(&steam, "taken-over"), Arc::new(KeepAwake::off()));
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
     eventually(|| steam.games_played().len() == 1).await;
 
     steam.take_over(730);
@@ -319,7 +321,7 @@ async fn listening_signs_on_to_hear_another_device_without_playing() {
 
     repo.listen().await.unwrap();
     repo.listen().await.unwrap();
-    assert_eq!(repo.blocked(), Some(Some(730)));
+    assert_eq!(repo.blocked(), Some(Some(AppId(730))));
     steam.block(false, 0);
 
     assert_eq!(signal(&repo).await, Signal::Unblocked);
@@ -331,14 +333,14 @@ async fn listening_signs_on_to_hear_another_device_without_playing() {
 async fn after_a_drop_the_new_connection_is_told_everything() {
     let steam = FakeSteam::start().await;
     let repo = SteamFarmingRepository::new(session(&steam, "again"), Arc::new(KeepAwake::off()));
-    repo.play(&[620], true).await.unwrap();
+    repo.play(&[AppId(620)], true).await.unwrap();
     // Frames still on their way when a connection drops are lost, as they
     // would be: let these arrive first.
     eventually(|| steam.games_played().len() == 1).await;
     steam.hang_up();
     assert!(matches!(signal(&repo).await, Signal::Lost(_)));
 
-    repo.play(&[620], true).await.unwrap();
+    repo.play(&[AppId(620)], true).await.unwrap();
 
     eventually(|| steam.games_played().len() == 2).await;
     assert_eq!(steam.games_played(), [vec![620], vec![620]]);
@@ -352,13 +354,13 @@ async fn the_computer_stays_awake_while_games_play() {
     let awake = Arc::new(KeepAwake::running("sleep", &["60"]));
     let repo = SteamFarmingRepository::new(session(&steam, "awake"), awake.clone());
 
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
     assert!(awake.is_held(), "held while playing");
 
     repo.play(&[], false).await.unwrap();
     assert!(!awake.is_held(), "let go with nothing to play");
 
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
     repo.stop().await;
     assert!(!awake.is_held(), "let go when farming stops");
 }
@@ -367,7 +369,7 @@ async fn the_computer_stays_awake_while_games_play() {
 async fn stopping_stops_the_games_and_signs_off() {
     let steam = FakeSteam::start().await;
     let repo = SteamFarmingRepository::new(session(&steam, "stop"), Arc::new(KeepAwake::off()));
-    repo.play(&[620], false).await.unwrap();
+    repo.play(&[AppId(620)], false).await.unwrap();
 
     repo.stop().await;
 

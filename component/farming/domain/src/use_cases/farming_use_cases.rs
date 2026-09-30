@@ -9,9 +9,9 @@ use std::{
     time::Duration,
 };
 
-use card::{CardAsset, DescribeCards, LookAtCards, LookAtFoils};
+use card::{AssetId, CardAsset, DescribeCards, LookAtCards, LookAtFoils};
 use chrono::Utc;
-use game::{Game, HOURS_BEFORE_DROPS, ReadLibrary, SteamLibrary};
+use game::{AppId, Game, HOURS_BEFORE_DROPS, ReadLibrary, SteamLibrary};
 use preferences::{GetPreferences, Preferences};
 use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
@@ -92,7 +92,7 @@ enum Outcome {
 #[derive(Clone, Copy)]
 enum Elsewhere {
     /// Steam says it's playing: this game, when Steam says.
-    Playing(Option<u32>),
+    Playing(Option<AppId>),
     /// It took over playing, and Steam signed this session off. Its game
     /// may not have started yet.
     TookOver,
@@ -234,7 +234,7 @@ impl Farmer {
     /// stretch of farming alone.
     async fn farm_cards(
         &self,
-        app_id: u32,
+        app_id: AppId,
         run: &Run,
         r: &Reporter,
         token: &CancellationToken,
@@ -395,7 +395,7 @@ impl Farmer {
     /// does.
     async fn build_hours(
         &self,
-        app_ids: Vec<u32>,
+        app_ids: Vec<AppId>,
         run: &Run,
         r: &Reporter,
         token: &CancellationToken,
@@ -416,7 +416,7 @@ impl Farmer {
     /// Steam's badge pages lag behind, so the hours are counted here.
     async fn build(
         &self,
-        app_ids: &[u32],
+        app_ids: &[AppId],
         mut prefs: Preferences,
         run: &Run,
         r: &Reporter,
@@ -612,7 +612,7 @@ impl Farmer {
 
     /// Tells the screens farming waits for another device: while it plays
     /// `by` (when Steam says what), or once it's done, until `until`.
-    fn waiting(&self, by: Option<u32>, until: Option<Instant>, run: &Run, r: &Reporter) {
+    fn waiting(&self, by: Option<AppId>, until: Option<Instant>, run: &Run, r: &Reporter) {
         let prefs = (self.prefs)();
         let status = {
             let kept = run.kept();
@@ -668,7 +668,7 @@ impl Farmer {
                         .map(|g| dropped_message(g, f.count()))
                 })
                 .collect();
-            let games: Vec<u32> = found.iter().map(|f| f.app_id).collect();
+            let games: Vec<AppId> = found.iter().map(|f| f.app_id).collect();
             (lines, kept.take_announced(&games))
         };
         for line in lines {
@@ -746,7 +746,7 @@ impl Farmer {
     /// item.
     async fn described_late(
         &self,
-        app_id: u32,
+        app_id: AppId,
         run: &Run,
         r: &Reporter,
         token: &CancellationToken,
@@ -767,7 +767,7 @@ impl Farmer {
     /// say, or farming stopped first.
     async fn describe(
         &self,
-        asset_ids: Vec<u64>,
+        asset_ids: Vec<AssetId>,
         r: &Reporter,
         token: &CancellationToken,
     ) -> Option<Vec<CardAsset>> {
@@ -821,7 +821,7 @@ impl Farmer {
     fn report(
         &self,
         run: &Run,
-        playing: &[u32],
+        playing: &[AppId],
         mode: Mode,
         next_look: Instant,
         prefs: &Preferences,
@@ -906,7 +906,7 @@ fn look_every(game: &Game) -> Duration {
 }
 
 /// How long until the first of these games has the hours to drop cards.
-fn until_ready(library: &SteamLibrary, app_ids: &[u32]) -> Duration {
+fn until_ready(library: &SteamLibrary, app_ids: &[AppId]) -> Duration {
     let least = app_ids
         .iter()
         .filter_map(|&id| library.game(id))
@@ -1000,7 +1000,7 @@ fn ordinal(n: u32) -> String {
 }
 
 /// Why farming moved on from `name` after the user's choices changed.
-fn switching(name: &str, app_id: u32, prefs: &Preferences) -> String {
+fn switching(name: &str, app_id: AppId, prefs: &Preferences) -> String {
     if prefs.wants(app_id) {
         format!("Moving on from {name}: something is ranked higher now")
     } else {

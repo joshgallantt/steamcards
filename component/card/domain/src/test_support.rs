@@ -10,9 +10,9 @@ use std::{
 };
 
 use async_trait::async_trait;
-use game::{Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 
-use crate::{Card, CardAsset, CardRepository, CardSet, GameCards};
+use crate::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
 
 /// A card of a set, with `owned` copies held.
 pub fn card(name: &str, owned: u32) -> Card {
@@ -26,8 +26,8 @@ pub fn card(name: &str, owned: u32) -> Card {
 /// marketable and tradable, with the market hash name Steam would give it.
 pub fn card_asset(asset_id: u64, app_id: u32, name: &str) -> CardAsset {
     CardAsset {
-        asset_id,
-        app_id,
+        asset_id: AssetId(asset_id),
+        app_id: AppId(app_id),
         name: name.to_owned(),
         market_hash_name: format!("{app_id}-{name}"),
         foil: false,
@@ -44,10 +44,10 @@ pub struct InMemoryCardRepository {
     pub library: Mutex<SteamLibrary>,
     /// Each game's set, as its card page shows it. A game of the library
     /// that isn't here shows none.
-    pub sets: Mutex<HashMap<u32, CardSet>>,
+    pub sets: Mutex<HashMap<AppId, CardSet>>,
     /// Each game's foils, and how many of each the account has. A game of
     /// the library that isn't here has none yet.
-    pub foils: Mutex<HashMap<u32, CardSet>>,
+    pub foils: Mutex<HashMap<AppId, CardSet>>,
     /// The copies of cards the account holds. Anything else it holds isn't
     /// a card, so it's never described.
     pub assets: Mutex<Vec<CardAsset>>,
@@ -69,7 +69,7 @@ impl InMemoryCardRepository {
         self
     }
 
-    fn game(&self, app_id: u32) -> anyhow::Result<Game> {
+    fn game(&self, app_id: AppId) -> anyhow::Result<Game> {
         if self.down.load(Ordering::Relaxed) {
             anyhow::bail!("steamcommunity.com didn't answer");
         }
@@ -84,7 +84,7 @@ impl InMemoryCardRepository {
 
 #[async_trait]
 impl CardRepository for InMemoryCardRepository {
-    async fn game_cards(&self, app_id: u32) -> anyhow::Result<GameCards> {
+    async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards> {
         let game = self.game(app_id)?;
         let set = self
             .sets
@@ -96,7 +96,7 @@ impl CardRepository for InMemoryCardRepository {
         Ok(GameCards { game, set })
     }
 
-    async fn foils(&self, app_id: u32) -> anyhow::Result<CardSet> {
+    async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
         self.game(app_id)?;
         Ok(self
             .foils
@@ -107,7 +107,7 @@ impl CardRepository for InMemoryCardRepository {
             .unwrap_or_default())
     }
 
-    async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
+    async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
         if self.down.load(Ordering::Relaxed) {
             anyhow::bail!("Steam didn't answer in time");
         }
@@ -116,7 +116,7 @@ impl CardRepository for InMemoryCardRepository {
 }
 
 /// The cards in `held` with these asset IDs, each once, in the order asked.
-fn among(held: &[CardAsset], asset_ids: &[u64]) -> Vec<CardAsset> {
+fn among(held: &[CardAsset], asset_ids: &[AssetId]) -> Vec<CardAsset> {
     let mut seen = HashSet::new();
     asset_ids
         .iter()

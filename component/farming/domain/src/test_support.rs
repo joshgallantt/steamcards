@@ -8,8 +8,8 @@ use std::{
 };
 
 use async_trait::async_trait;
-use card::{Card, CardAsset, CardRepository, CardSet, GameCards};
-use game::{CardDrops, Game, GameRepository, SteamLibrary};
+use card::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
+use game::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 
 use session::NewItem;
@@ -43,18 +43,18 @@ struct Farmed {
 }
 
 struct State {
-    games: BTreeMap<u32, Farmed>,
+    games: BTreeMap<AppId, Farmed>,
     /// Cards drop only for a game played alone.
     alone_only: bool,
-    playing: Vec<u32>,
+    playing: Vec<AppId>,
     /// Up to when what's playing has been counted.
     counted_to: Instant,
     /// What another device is playing, if anything, when Steam says.
-    blocked: Option<Option<u32>>,
+    blocked: Option<Option<AppId>>,
     signed_on: bool,
     /// How often a session signed on.
     sign_ons: usize,
-    plays: Vec<(Vec<u32>, bool)>,
+    plays: Vec<(Vec<AppId>, bool)>,
     stops: usize,
     reads: usize,
     down: bool,
@@ -63,7 +63,7 @@ struct State {
     /// Those Steam hasn't announced yet.
     unannounced: Vec<NewItem>,
     /// Every ask to describe items: the asset IDs asked about.
-    describes: Vec<Vec<u64>>,
+    describes: Vec<Vec<AssetId>>,
     cant_describe: bool,
     /// How long Steam takes to say which cards items are.
     describe_takes: Duration,
@@ -121,10 +121,10 @@ impl InMemorySteam {
     /// one every `every` of play once it has 3 hours (`None`: never).
     pub fn add_game(&self, app_id: u32, hours: f64, cards: u32, every: Option<Duration>) {
         self.state.lock().unwrap().games.insert(
-            app_id,
+            AppId(app_id),
             Farmed {
                 game: Game {
-                    app_id,
+                    app_id: AppId(app_id),
                     name: format!("Game {app_id}"),
                     hours,
                     drops: CardDrops {
@@ -145,7 +145,7 @@ impl InMemorySteam {
 
     /// Names a game, as its badge and card page do.
     pub fn name(&self, app_id: u32, name: &str) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.game.name = name.to_owned();
         }
     }
@@ -153,7 +153,7 @@ impl InMemorySteam {
     /// Gives a game its set of cards, with how many of each the account
     /// has. Only its card page shows it; the badge pages don't.
     pub fn set(&self, app_id: u32, cards: &[(&str, u32)]) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.cards = cards
                 .iter()
                 .map(|&(name, owned)| Card {
@@ -166,7 +166,7 @@ impl InMemorySteam {
 
     /// The foils of a game the account holds already: how many of each.
     pub fn holds_foils(&self, app_id: u32, foils: &[(&str, u32)]) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.foils = foils
                 .iter()
                 .map(|&(name, owned)| Card {
@@ -179,7 +179,7 @@ impl InMemorySteam {
 
     /// The next cards to drop for a game, in order: normal ones.
     pub fn will_drop(&self, app_id: u32, names: &[&str]) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.next
                 .extend(names.iter().map(|name| ((*name).to_owned(), false)));
         }
@@ -187,7 +187,7 @@ impl InMemorySteam {
 
     /// The next card to drop for a game is a foil.
     pub fn will_drop_foil(&self, app_id: u32, name: &str) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.next.push_back((name.to_owned(), true));
         }
     }
@@ -197,7 +197,7 @@ impl InMemorySteam {
     pub fn drops_now(&self, app_id: u32) {
         self.settle();
         let mut s = self.state.lock().unwrap();
-        drop_card(&mut s, app_id);
+        drop_card(&mut s, AppId(app_id));
     }
 
     /// Cards drop only for a game played on its own.
@@ -208,7 +208,7 @@ impl InMemorySteam {
     /// A game's cards drop from its first minute of play, as on accounts
     /// Steam doesn't hold back for 3 hours.
     pub fn drops_straight_away(&self, app_id: u32) {
-        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.needs_hours = 0.0;
         }
     }
@@ -216,6 +216,7 @@ impl InMemorySteam {
     /// Another device starts playing `app_id` on the account.
     pub fn block(&self, app_id: Option<u32>) {
         self.settle();
+        let app_id = app_id.map(AppId);
         let mut s = self.state.lock().unwrap();
         s.blocked = Some(app_id);
         if s.signed_on {
@@ -270,7 +271,13 @@ impl InMemorySteam {
 
     /// Every ask to describe items: the asset IDs asked about.
     pub fn describes(&self) -> Vec<Vec<u64>> {
-        self.state.lock().unwrap().describes.clone()
+        self.state
+            .lock()
+            .unwrap()
+            .describes
+            .iter()
+            .map(|asked| asked.iter().map(|id| id.0).collect())
+            .collect()
     }
 
     /// Every copy of a card that has dropped, as Steam describes it.
@@ -311,7 +318,13 @@ impl InMemorySteam {
 
     /// Every list of games played, and whether online, in order.
     pub fn plays(&self) -> Vec<(Vec<u32>, bool)> {
-        self.state.lock().unwrap().plays.clone()
+        self.state
+            .lock()
+            .unwrap()
+            .plays
+            .iter()
+            .map(|(games, online)| (games.iter().map(|g| g.0).collect(), *online))
+            .collect()
     }
 
     /// Just the games of each play.
@@ -321,7 +334,13 @@ impl InMemorySteam {
 
     /// What's playing now.
     pub fn playing(&self) -> Vec<u32> {
-        self.state.lock().unwrap().playing.clone()
+        self.state
+            .lock()
+            .unwrap()
+            .playing
+            .iter()
+            .map(|g| g.0)
+            .collect()
     }
 
     pub fn stops(&self) -> usize {
@@ -340,7 +359,7 @@ impl InMemorySteam {
             .lock()
             .unwrap()
             .games
-            .get(&app_id)
+            .get(&AppId(app_id))
             .map(|f| f.game.clone())
     }
 
@@ -382,8 +401,8 @@ impl InMemorySteam {
 
 /// One card drops for `app_id`: the next it was told of, as a copy of its
 /// own that Steam will announce.
-fn drop_card(s: &mut State, app_id: u32) {
-    let asset_id = FIRST_ASSET + s.held.len() as u64;
+fn drop_card(s: &mut State, app_id: AppId) {
+    let asset_id = AssetId(FIRST_ASSET + s.held.len() as u64);
     let Some(f) = s.games.get_mut(&app_id) else {
         return;
     };
@@ -447,7 +466,7 @@ impl GameRepository for InMemorySteam {
 #[async_trait]
 impl CardRepository for InMemorySteam {
     /// A game's card page, its set and all.
-    async fn game_cards(&self, app_id: u32) -> anyhow::Result<GameCards> {
+    async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards> {
         self.settle();
         let s = self.state.lock().unwrap();
         if s.down {
@@ -463,7 +482,7 @@ impl CardRepository for InMemorySteam {
     }
 
     /// A game's foil badge page: its foils, and how many of each.
-    async fn foils(&self, app_id: u32) -> anyhow::Result<CardSet> {
+    async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
         self.settle();
         let s = self.state.lock().unwrap();
         if s.down {
@@ -476,7 +495,7 @@ impl CardRepository for InMemorySteam {
     }
 
     /// The cards that dropped among these items, in the order asked.
-    async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
+    async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
         let takes = {
             let mut s = self.state.lock().unwrap();
             s.describes.push(asset_ids.to_vec());
@@ -504,7 +523,7 @@ fn sign_on(s: &mut State) {
 
 #[async_trait]
 impl FarmingRepository for InMemorySteam {
-    async fn play(&self, app_ids: &[u32], online: bool) -> anyhow::Result<()> {
+    async fn play(&self, app_ids: &[AppId], online: bool) -> anyhow::Result<()> {
         self.settle();
         let mut s = self.state.lock().unwrap();
         sign_on(&mut s);
@@ -530,7 +549,7 @@ impl FarmingRepository for InMemorySteam {
         s.stops += 1;
     }
 
-    fn blocked(&self) -> Option<Option<u32>> {
+    fn blocked(&self) -> Option<Option<AppId>> {
         let s = self.state.lock().unwrap();
         s.blocked.filter(|_| s.signed_on)
     }

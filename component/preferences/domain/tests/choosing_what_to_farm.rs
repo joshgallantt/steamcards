@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use game::AppId;
 use preferences::{
     GetPreferences, Preferences, PreferencesError, SetAppearOnline, SetGameTier, SetOnlyPriority,
     Tier, get_preferences, set_appear_online, set_game_tier, set_only_priority,
@@ -39,12 +40,22 @@ impl Player {
         (self.get)()
     }
 
+    /// The games farmed first, in order.
+    fn priorities(&self) -> Vec<u32> {
+        self.prefs().priority_games.iter().map(|g| g.0).collect()
+    }
+
+    /// The games never farmed.
+    fn skipped(&self) -> Vec<u32> {
+        self.prefs().skipped_games.iter().map(|g| g.0).collect()
+    }
+
     fn ranks(&self, app_id: u32, rank: usize) {
-        (self.tier)(app_id, Tier::Priority(rank)).unwrap();
+        (self.tier)(AppId(app_id), Tier::Priority(rank)).unwrap();
     }
 
     fn sets(&self, app_id: u32, tier: Tier) {
-        (self.tier)(app_id, tier).unwrap();
+        (self.tier)(AppId(app_id), tier).unwrap();
     }
 }
 
@@ -54,24 +65,24 @@ fn a_game_moves_between_tiers() {
 
     player.ranks(620, 1);
     player.ranks(440, 9); // past the end: goes last
-    assert_eq!(player.prefs().priority_games, [620, 440]);
+    assert_eq!(player.priorities(), [620, 440]);
 
     player.ranks(220, 1); // bumps the others down
-    assert_eq!(player.prefs().priority_games, [220, 620, 440]);
+    assert_eq!(player.priorities(), [220, 620, 440]);
 
     player.ranks(440, 2); // moves, no duplicate
-    assert_eq!(player.prefs().priority_games, [220, 440, 620]);
+    assert_eq!(player.priorities(), [220, 440, 620]);
 
     player.sets(220, Tier::Indifferent);
-    assert_eq!(player.prefs().priority_games, [440, 620]);
+    assert_eq!(player.priorities(), [440, 620]);
 
     player.sets(620, Tier::Skip); // leaves priority
-    assert_eq!(player.prefs().priority_games, [440]);
-    assert_eq!(player.prefs().skipped_games, [620]);
+    assert_eq!(player.priorities(), [440]);
+    assert_eq!(player.skipped(), [620]);
 
     player.ranks(620, 1); // un-skips
-    assert_eq!(player.prefs().priority_games, [620, 440]);
-    assert!(player.prefs().skipped_games.is_empty());
+    assert_eq!(player.priorities(), [620, 440]);
+    assert!(player.skipped().is_empty());
 }
 
 #[test]
@@ -93,9 +104,9 @@ fn only_priority_is_kept() {
 fn a_change_that_did_not_stick_says_so() {
     let player = Player::whose_disk_is_full();
     assert_eq!(
-        (player.tier)(620, Tier::Skip),
+        (player.tier)(AppId(620), Tier::Skip),
         Err(PreferencesError::Unavailable)
     );
     assert_eq!((player.online)(true), Err(PreferencesError::Unavailable));
-    assert!(player.prefs().skipped_games.is_empty(), "nothing changed");
+    assert!(player.skipped().is_empty(), "nothing changed");
 }

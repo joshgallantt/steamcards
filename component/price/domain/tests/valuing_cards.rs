@@ -5,7 +5,7 @@
 
 use card::test_support::card_asset;
 use chrono::{DateTime, TimeDelta, Utc};
-use game::{SteamLibrary, test_support::game};
+use game::{AppId, SteamLibrary, test_support::game};
 use money::{Currency, Money};
 use price::{
     Basis, HeldCard, Offers, Price, PriceBook, SetPrices, expected_per_drop, held_value,
@@ -200,7 +200,7 @@ fn a_card_that_isnt_priced_never_counts_as_nothing() {
 #[test]
 fn a_card_known_only_by_name_is_priced_from_its_set() {
     let book = the_book();
-    let by_name = HeldCard::named(HEAVY_RAIN, "Madison", false);
+    let by_name = HeldCard::named(AppId(HEAVY_RAIN), "Madison", false);
 
     assert_eq!(
         held_value(
@@ -243,7 +243,7 @@ fn a_price_in_another_currency_is_shown_but_left_out_of_totals() {
     let mut book = the_book();
     let dollars = set_prices(GOROGOA, &[("The Boy", 5)], &[], now());
     book.sets.insert(
-        GOROGOA,
+        AppId(GOROGOA),
         SetPrices {
             normal: dollars
                 .normal
@@ -258,7 +258,7 @@ fn a_price_in_another_currency_is_shown_but_left_out_of_totals() {
             ..dollars
         },
     );
-    let the_boy = HeldCard::named(GOROGOA, "The Boy", false);
+    let the_boy = HeldCard::named(AppId(GOROGOA), "The Boy", false);
 
     let Price::Known(quote) = book.price(&the_boy, Basis::List) else {
         panic!("it has a price");
@@ -271,7 +271,7 @@ fn a_price_in_another_currency_is_shown_but_left_out_of_totals() {
 #[test]
 fn heavy_rains_next_drop_is_worth_about_five_pence() {
     let book = the_book();
-    let set = &book.sets[&HEAVY_RAIN];
+    let set = &book.sets[&AppId(HEAVY_RAIN)];
 
     let each = expected_per_drop(set, Basis::List, &pounds());
 
@@ -288,7 +288,7 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
     let mut book = the_book();
     let at = now();
     book.sets.insert(
-        367_380,
+        AppId(367_380),
         set_prices(
             367_380,
             &[
@@ -303,7 +303,7 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
         ),
     );
     book.sets.insert(
-        457_140,
+        AppId(457_140),
         set_prices(
             457_140,
             &[
@@ -327,7 +327,7 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
         game(HADES, 12.0, 4, 0),
     ]);
 
-    let order = [HEAVY_RAIN, 367_380, 457_140, 1_966_720];
+    let order = [HEAVY_RAIN, 367_380, 457_140, 1_966_720].map(AppId);
 
     let left = value_left(&library, &order, &book, Basis::List, &pounds());
 
@@ -357,7 +357,13 @@ fn on_the_instant_basis_cards_still_to_drop_stay_after_fees() {
     let book = the_book();
     let library = SteamLibrary::new(vec![game(HEAVY_RAIN, 4.0, 3, 1)]);
 
-    let left = value_left(&library, &[HEAVY_RAIN], &book, Basis::Instant, &pounds());
+    let left = value_left(
+        &library,
+        &[AppId(HEAVY_RAIN)],
+        &book,
+        Basis::Instant,
+        &pounds(),
+    );
 
     assert_eq!(left.basis, Basis::Net, "and the estimate says so");
     assert_eq!(

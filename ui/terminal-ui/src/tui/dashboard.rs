@@ -1187,7 +1187,7 @@ fn render_footer(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use game::Game;
+    use game::{AppId, Game};
 
     use super::*;
 
@@ -1251,7 +1251,7 @@ mod tests {
     #[test]
     fn a_game_with_nothing_to_come_shows_no_value() {
         let g = Game {
-            app_id: 1,
+            app_id: AppId(1),
             name: "Done".into(),
             hours: 5.0,
             drops: game::CardDrops {

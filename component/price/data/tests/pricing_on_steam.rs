@@ -8,6 +8,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use config_file::{ConfigFile, CredentialStore, Credentials, PriceCache};
 use debug_log::DebugLog;
+use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository, PriceSettings, QuoteSource,
@@ -157,7 +158,7 @@ async fn a_sets_cards_are_priced_in_the_wallets_currency() {
     let disk = Disk::new("currency");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Found(cards) = market.look_up_set(960_910, false).await.unwrap() else {
+    let Lookup::Found(cards) = market.look_up_set(AppId(960_910), false).await.unwrap() else {
         panic!("not paused");
     };
 
@@ -214,7 +215,7 @@ async fn until_steam_says_the_wallets_currency_prices_wait() {
     let disk = Disk::new("no-wallet-yet");
     let (market, _) = disk.market(&steam, &site);
 
-    let looked_up = market.look_up_set(620, true).await.unwrap();
+    let looked_up = market.look_up_set(AppId(620), true).await.unwrap();
 
     assert_eq!(
         looked_up,
@@ -243,7 +244,7 @@ async fn an_account_without_a_wallet_has_its_prices_shown_as_they_come() {
     let disk = Disk::new("no-wallet");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Found(cards) = market.look_up_set(620, false).await.unwrap() else {
+    let Lookup::Found(cards) = market.look_up_set(AppId(620), false).await.unwrap() else {
         panic!("found");
     };
 
@@ -308,7 +309,7 @@ async fn steams_pause_is_kept_across_a_restart() {
     let disk = Disk::new("pause");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Paused(pause) = market.look_up_set(620, false).await.unwrap() else {
+    let Lookup::Paused(pause) = market.look_up_set(AppId(620), false).await.unwrap() else {
         panic!("paused");
     };
     assert_eq!(pause.step, Duration::from_secs(20 * 60));
@@ -339,7 +340,7 @@ async fn a_market_that_cant_be_asked_marks_no_price_failed() {
     let disk = Disk::new("cant-ask");
     let (market, _) = disk.market(&steam, &site);
     let market = Arc::new(market);
-    want_prices(market.clone())(vec![960_910, 1_145_360, 620]);
+    want_prices(market.clone())([960_910, 1_145_360, 620].map(AppId).to_vec());
     let (tx, mut rx) = mpsc::channel(16);
     let token = CancellationToken::new();
 
@@ -396,7 +397,7 @@ async fn prices_are_kept_for_a_week_across_restarts() {
     let set = |app_id: u32, days_old: i64| {
         let at = now - chrono::TimeDelta::days(days_old);
         SetPrices {
-            app_id,
+            app_id: AppId(app_id),
             normal: vec![price::PricedCard {
                 name: "Madison".into(),
                 market_hash_name: format!("{app_id}-Madison"),
@@ -420,9 +421,13 @@ async fn prices_are_kept_for_a_week_across_restarts() {
     market.keep_set(set(620, 8));
 
     let (again, _) = disk.market(&steam, &site);
-    let kept: Vec<u32> = again.book().sets.keys().copied().collect();
-    assert_eq!(kept, [960_910, 1_145_360], "a set over a week old goes");
-    let madison = &again.book().sets[&960_910].normal[0];
+    let kept: Vec<AppId> = again.book().sets.keys().copied().collect();
+    assert_eq!(
+        kept,
+        [960_910, 1_145_360].map(AppId),
+        "a set over a week old goes"
+    );
+    let madison = &again.book().sets[&AppId(960_910)].normal[0];
     assert_eq!(ask(&madison.price), Some(Money::new(5, Currency::GBP)));
 }
 
@@ -448,7 +453,7 @@ async fn the_market_is_priced_end_to_end() {
     let disk = Disk::new("end-to-end");
     let (market, _) = disk.market(&steam, &site);
     let market = Arc::new(market);
-    want_prices(market.clone())(vec![960_910]);
+    want_prices(market.clone())(vec![AppId(960_910)]);
     let (tx, mut rx) = mpsc::channel(16);
     let token = CancellationToken::new();
 
@@ -464,7 +469,7 @@ async fn the_market_is_priced_end_to_end() {
         event.kind,
         PriceEventKind::AllPriced { games: 1, .. }
     ));
-    let heavy_rain = &market.book().sets[&960_910];
+    let heavy_rain = &market.book().sets[&AppId(960_910)];
     assert_eq!(
         ask(&heavy_rain.price("Madison", false)),
         Some(Money::new(5, Currency::GBP))

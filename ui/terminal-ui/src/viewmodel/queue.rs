@@ -2,7 +2,7 @@
 // don't mind about, what they skipped, and what's done. Pure data — built
 // fresh from the latest farming status and preferences on every frame.
 
-use game::{Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 use preferences::{Preferences, Tier};
 use session::Mode;
 
@@ -49,8 +49,8 @@ impl Queue {
     /// empty while farming is paused.
     pub fn build(
         library: &SteamLibrary,
-        order: &[u32],
-        playing: &[u32],
+        order: &[AppId],
+        playing: &[AppId],
         mode: Option<Mode>,
         prefs: &Preferences,
     ) -> Self {
@@ -101,7 +101,7 @@ impl Queue {
         self.sections.iter().flat_map(|(_, v)| v.iter())
     }
 
-    pub fn get(&self, app_id: u32) -> Option<&QueueEntry> {
+    pub fn get(&self, app_id: AppId) -> Option<&QueueEntry> {
         self.entries().find(|e| e.game.app_id == app_id)
     }
 
@@ -120,7 +120,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use game::test_support::game;
+    use game::{AppId, test_support::game};
 
     use super::*;
 
@@ -128,7 +128,7 @@ mod tests {
         q.sections
             .iter()
             .find(|(s, _)| *s == section)
-            .map(|(_, v)| v.iter().map(|e| e.game.app_id).collect())
+            .map(|(_, v)| v.iter().map(|e| e.game.app_id.0).collect())
             .unwrap_or_default()
     }
 
@@ -142,18 +142,24 @@ mod tests {
             game(5, 9.0, 3, 0),
         ]);
         let prefs = Preferences {
-            priority_games: vec![2, 1],
-            skipped_games: vec![4],
+            priority_games: vec![AppId(2), AppId(1)],
+            skipped_games: vec![AppId(4)],
             ..Default::default()
         };
-        let q = Queue::build(&library, &[2, 1, 3], &[2], Some(Mode::Hours), &prefs);
+        let q = Queue::build(
+            &library,
+            &[2, 1, 3].map(AppId),
+            &[AppId(2)],
+            Some(Mode::Hours),
+            &prefs,
+        );
 
         assert_eq!(ids(&q, Section::Priority), [2, 1]);
         assert_eq!(ids(&q, Section::Indifferent), [3]);
         assert_eq!(ids(&q, Section::Skipped), [4]);
         assert_eq!(ids(&q, Section::Done), [5]);
-        assert_eq!(q.get(2).unwrap().playing, Some(Mode::Hours));
-        assert_eq!(q.get(1).unwrap().playing, None);
+        assert_eq!(q.get(AppId(2)).unwrap().playing, Some(Mode::Hours));
+        assert_eq!(q.get(AppId(1)).unwrap().playing, None);
         assert_eq!(q.drops_to_go(), 3 + 2 + 1);
     }
 
@@ -168,12 +174,12 @@ mod tests {
     fn with_only_priority_the_rest_arent_wanted() {
         let library = SteamLibrary::new(vec![game(1, 1.0, 0, 3), game(2, 7.0, 0, 2)]);
         let prefs = Preferences {
-            priority_games: vec![1],
+            priority_games: vec![AppId(1)],
             only_priority: true,
             ..Default::default()
         };
-        let q = Queue::build(&library, &[1], &[], None, &prefs);
-        assert!(!q.get(2).unwrap().wanted);
+        let q = Queue::build(&library, &[AppId(1)], &[], None, &prefs);
+        assert!(!q.get(AppId(2)).unwrap().wanted);
         assert_eq!(q.drops_to_go(), 3);
     }
 }

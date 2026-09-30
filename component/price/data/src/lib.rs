@@ -1,9 +1,9 @@
-//! The market domain's contract, satisfied by Steam and the disk: a set's
+//! The price domain's contract, satisfied by Steam and the disk: a set's
 //! cards from the market's search and a card's order book, through the
 //! Steam session's one market queue; the wallet from the CM connection; the
 //! basis and Steam's pause in the config file, and prices in their own file
-//! beside it. Imports `market` because the contract is declared there;
-//! `market` imports nothing back.
+//! beside it. Imports `price` because the contract is declared there;
+//! `price` imports nothing back.
 
 use std::{
     sync::{Arc, Mutex},
@@ -13,6 +13,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use config_file::{ConfigFile, PriceCache, StoredCard, StoredPause, StoredPrice, StoredSet};
+use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, Lookup, MarketPause, Offers, Price, PriceBook, PriceQuote, PriceRepository,
@@ -38,7 +39,7 @@ pub struct SteamPriceRepository {
     file: Arc<ConfigFile>,
     cache: Arc<PriceCache>,
     book: Mutex<Arc<PriceBook>>,
-    wanted: Mutex<Vec<u32>>,
+    wanted: Mutex<Vec<AppId>>,
 }
 
 impl SteamPriceRepository {
@@ -131,14 +132,14 @@ impl PriceRepository for SteamPriceRepository {
 
     async fn look_up_set(
         &self,
-        app_id: u32,
+        app_id: AppId,
         foil: bool,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
         let currency = match self.currency().await {
             Ok(currency) => currency,
             Err(why) => return Ok(Lookup::Unanswered(why)),
         };
-        let answer = self.steam.market_search(app_id, foil).await;
+        let answer = self.steam.market_search(app_id.0, foil).await;
         self.keep_pause();
         let listed = match answer? {
             Market::Answer(listed) => listed,
@@ -198,11 +199,11 @@ impl PriceRepository for SteamPriceRepository {
         self.file.save_market_basis(basis.to_owned())
     }
 
-    fn wanted(&self) -> Vec<u32> {
+    fn wanted(&self) -> Vec<AppId> {
         self.wanted.lock().unwrap().clone()
     }
 
-    fn want(&self, app_ids: Vec<u32>) {
+    fn want(&self, app_ids: Vec<AppId>) {
         *self.wanted.lock().unwrap() = app_ids;
     }
 }
@@ -323,7 +324,7 @@ fn to_stored_set(set: &SetPrices) -> StoredSet {
             .collect()
     };
     StoredSet {
-        app_id: set.app_id,
+        app_id: set.app_id.0,
         fetched_at: set.fetched_at.timestamp(),
         retry_at: set.retry_at.map(|at| at.timestamp()),
         normal: cards(&set.normal),
@@ -377,7 +378,7 @@ fn to_set(stored: StoredSet) -> Option<SetPrices> {
             .collect::<Option<Vec<_>>>()
     };
     Some(SetPrices {
-        app_id: stored.app_id,
+        app_id: AppId(stored.app_id),
         normal: cards(stored.normal)?,
         foil: cards(stored.foil)?,
         fetched_at: time(stored.fetched_at)?,

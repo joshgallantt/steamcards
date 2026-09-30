@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use card::{Card, CardAsset, CardRepository, CardSet, GameCards};
-use game::{CardDrops, Game};
+use card::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
+use game::{AppId, CardDrops, Game};
 use steam_api::{
     SteamClient,
     badges::{BadgeGame, SetCard},
@@ -28,21 +28,22 @@ impl SteamCardRepository {
 
 #[async_trait]
 impl CardRepository for SteamCardRepository {
-    async fn game_cards(&self, app_id: u32) -> anyhow::Result<GameCards> {
+    async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards> {
         self.steam
-            .game_cards(app_id)
+            .game_cards(app_id.0)
             .await?
             .map(to_game_cards)
             .ok_or_else(|| anyhow!("its card page has no card drops to read"))
     }
 
-    async fn foils(&self, app_id: u32) -> anyhow::Result<CardSet> {
-        let foils = self.steam.foil_cards(app_id).await?;
+    async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
+        let foils = self.steam.foil_cards(app_id.0).await?;
         Ok(CardSet::new(foils.into_iter().map(to_card).collect()))
     }
 
-    async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
-        let items = self.steam.describe_items(asset_ids).await?;
+    async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
+        let ids: Vec<u64> = asset_ids.iter().map(|id| id.0).collect();
+        let items = self.steam.describe_items(&ids).await?;
         Ok(items.into_iter().filter_map(to_card_asset).collect())
     }
 }
@@ -50,7 +51,7 @@ impl CardRepository for SteamCardRepository {
 fn to_game_cards(b: BadgeGame) -> GameCards {
     GameCards {
         game: Game {
-            app_id: b.app_id,
+            app_id: AppId(b.app_id),
             name: b.name,
             hours: b.hours,
             drops: CardDrops {
@@ -77,8 +78,8 @@ fn to_card_asset(item: InventoryItem) -> Option<CardAsset> {
         return None;
     }
     Some(CardAsset {
-        asset_id: item.asset_id,
-        app_id: item.app_id?,
+        asset_id: AssetId(item.asset_id),
+        app_id: AppId(item.app_id?),
         name: item.name,
         market_hash_name: item.market_hash_name,
         foil: item.foil,

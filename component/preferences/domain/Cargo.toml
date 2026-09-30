@@ -16,6 +16,7 @@ workspace = true
 test-support = []
 
 [dependencies]
+game.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]

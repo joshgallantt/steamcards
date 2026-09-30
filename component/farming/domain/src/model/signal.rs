@@ -1,3 +1,4 @@
+use game::AppId;
 use session::NewItem;
 
 /// Something Steam said that the farmer acts on.
@@ -5,7 +6,7 @@ use session::NewItem;
 pub enum Signal {
     /// Another device started playing on the account (what, when Steam
     /// says): nothing played here counts until it stops.
-    Blocked(Option<u32>),
+    Blocked(Option<AppId>),
     /// It stopped.
     Unblocked,
     /// Another device took over playing, and Steam signed this session off

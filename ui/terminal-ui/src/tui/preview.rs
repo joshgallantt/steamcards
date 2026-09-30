@@ -13,10 +13,10 @@ use account::{
     Account as SignedIn, LoginChallenge,
     test_support::{fixed_account, no_refresh, recording_unlink, refusing_link},
 };
-use card::{Card, CardAsset, CardSet, CardSets};
+use card::{AssetId, Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{EventKind, FarmingStatus, Status, test_support::idle_farmer};
-use game::{CardDrops, Game, SteamLibrary, test_support::fixed_library};
+use game::{AppId, CardDrops, Game, SteamLibrary, test_support::fixed_library};
 use preferences::{
     Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
     test_support::InMemoryPreferencesRepository,
@@ -52,7 +52,7 @@ fn cardfarmer() -> Option<SignedIn> {
 
 fn game(app_id: u32, name: &str, hours: f64, received: u32, remaining: u32) -> Game {
     Game {
-        app_id,
+        app_id: AppId(app_id),
         name: name.into(),
         hours,
         drops: CardDrops {
@@ -84,7 +84,7 @@ fn library() -> SteamLibrary {
 fn sets() -> CardSets {
     let mut sets = CardSets::default();
     sets.update(
-        620,
+        AppId(620),
         CardSet::new(vec![
             card("Atlas", 2),
             card("P-Body", 1),
@@ -152,8 +152,8 @@ fn prices() -> PriceBook {
 fn hades_card(asset_id: u64, name: &str, foil: bool) -> DropCard {
     let border = if foil { " (Foil)" } else { "" };
     DropCard::Identified(CardAsset {
-        asset_id,
-        app_id: 1_145_360,
+        asset_id: AssetId(asset_id),
+        app_id: AppId(1_145_360),
         name: name.into(),
         market_hash_name: format!("1145360-{name}{border}"),
         foil,
@@ -165,9 +165,9 @@ fn hades_card(asset_id: u64, name: &str, foil: bool) -> DropCard {
 /// This session: Hades' last cards, a second Zagreus among them and a foil,
 /// then Portal 2's: one named by its card page, one still being found out.
 fn session() -> Session {
-    let drop = |at, app_id, card, copy| Drop {
+    let drop = |at, app_id: u32, card, copy| Drop {
         at,
-        app_id,
+        app_id: AppId(app_id),
         card,
         copy,
     };
@@ -205,13 +205,13 @@ fn session() -> Session {
         ],
         stretches: vec![
             Stretch {
-                app_ids: vec![1_145_360],
+                app_ids: vec![AppId(1_145_360)],
                 mode: Mode::Cards,
                 from: at(12, 30),
                 to: Some(at(13, 58)),
             },
             Stretch {
-                app_ids: vec![620],
+                app_ids: vec![AppId(620)],
                 mode: Mode::Cards,
                 from: at(13, 58),
                 to: None,
@@ -223,8 +223,8 @@ fn session() -> Session {
 
 fn prefs() -> Preferences {
     Preferences {
-        priority_games: vec![620, 413_150],
-        skipped_games: vec![730],
+        priority_games: vec![AppId(620), AppId(413_150)],
+        skipped_games: vec![AppId(730)],
         ..Default::default()
     }
 }
@@ -270,8 +270,14 @@ fn farming_portal() -> FarmingStatus {
         status: Status::Farming,
         library: library(),
         sets: sets(),
-        order: vec![620, 413_150, 1_145_360, 1_086_940, 292_030],
-        playing: vec![620],
+        order: vec![
+            AppId(620),
+            AppId(413_150),
+            AppId(1_145_360),
+            AppId(1_086_940),
+            AppId(292_030),
+        ],
+        playing: vec![AppId(620)],
         mode: Some(Mode::Cards),
         blocked_by: None,
         next_look: Some(now() + chrono::Duration::minutes(12)),
@@ -352,7 +358,7 @@ fn show(name: &str, buf: Buffer) -> String {
 #[tokio::test]
 async fn previews() {
     let mut a = farming_app();
-    a.selected = Some(620);
+    a.selected = Some(AppId(620));
     let big = show(
         "dashboard, the user's window 209×49",
         render(&mut a, 209, 49),
@@ -417,12 +423,12 @@ async fn previews() {
     // Building hours: several games together.
     let mut b = farming_app();
     b.status = Some(FarmingStatus {
-        playing: vec![413_150, 1_086_940, 292_030],
+        playing: vec![AppId(413_150), AppId(1_086_940), AppId(292_030)],
         mode: Some(Mode::Hours),
         next_look: Some(now() + chrono::Duration::minutes(54)),
         ..farming_portal()
     });
-    b.selected = Some(1_086_940);
+    b.selected = Some(AppId(1_086_940));
     let hours = show("dashboard, building hours 120×30", render(&mut b, 120, 30));
     assert!(hours.contains("building hours on 3 games · ready in 54m"));
     assert!(hours.contains("▷"));
@@ -433,7 +439,7 @@ async fn previews() {
         status: Status::Blocked,
         playing: Vec::new(),
         mode: None,
-        blocked_by: Some(730),
+        blocked_by: Some(AppId(730)),
         next_look: None,
         note: "playing on another device — farming waits until it stops".into(),
         ..farming_portal()
@@ -657,7 +663,7 @@ async fn nothing_is_cut_off_at_any_size() {
     states.push(("a long name", named));
     let mut hours = farming_app();
     hours.status = Some(FarmingStatus {
-        playing: vec![413_150, 1_086_940, 292_030],
+        playing: vec![AppId(413_150), AppId(1_086_940), AppId(292_030)],
         mode: Some(Mode::Hours),
         ..farming_portal()
     });
@@ -667,7 +673,7 @@ async fn nothing_is_cut_off_at_any_size() {
         status: Status::Blocked,
         playing: Vec::new(),
         mode: None,
-        blocked_by: Some(730),
+        blocked_by: Some(AppId(730)),
         next_look: None,
         ..farming_portal()
     });
@@ -699,7 +705,7 @@ async fn nothing_is_cut_off_at_any_size() {
     states.push(("reading", reading));
 
     for (name, a) in &mut states {
-        a.selected = Some(620);
+        a.selected = Some(AppId(620));
         let widths = (60..=240).step_by(7).chain([99, 100, 209]);
         for w in widths {
             for h in [16, 19, 24, 30, 40, 49, 70] {
@@ -735,7 +741,7 @@ async fn nothing_is_cut_off_at_any_size() {
 
     // The details, at the edges of every size.
     let mut a = farming_app();
-    a.selected = Some(620);
+    a.selected = Some(AppId(620));
     a.overlay = Some(Overlay::Detail { scroll: 0 });
     for (w, h) in [
         (60, 16),
@@ -813,7 +819,7 @@ fn showcase_library() -> SteamLibrary {
 fn showcase_sets() -> CardSets {
     let mut sets = CardSets::default();
     sets.update(
-        960_910,
+        AppId(960_910),
         CardSet::new(vec![
             card("Ethan", 0),
             card("Carter", 0),
@@ -868,7 +874,7 @@ fn showcase_prices() -> PriceBook {
                 at(13, 0),
             ),
         };
-        book.sets.insert(app_id, set);
+        book.sets.insert(AppId(app_id), set);
     }
     book
 }
@@ -880,12 +886,12 @@ fn showcase_session() -> Session {
     };
     let drop = |(h, m): (u32, u32), app_id: u32, card: DropCard, copy: Option<u32>| Drop {
         at: at(h, m),
-        app_id,
+        app_id: AppId(app_id),
         card,
         copy,
     };
     let stretch = |app_id: u32, from: (u32, u32), to: Option<(u32, u32)>| Stretch {
-        app_ids: vec![app_id],
+        app_ids: vec![AppId(app_id)],
         mode: Mode::Cards,
         from: at(from.0, from.1),
         to: to.map(|(h, m)| at(h, m)),
@@ -940,7 +946,7 @@ fn showcase_session() -> Session {
 /// Farming Heavy Rain, ranked first, with LIMBO next.
 fn showcase_app() -> App {
     let prefs = Preferences {
-        priority_games: vec![960_910, 48_000],
+        priority_games: vec![AppId(960_910), AppId(48_000)],
         ..Default::default()
     };
     let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
@@ -975,7 +981,7 @@ fn showcase_app() -> App {
     a.clock = CLOCK;
     a.farming.start();
     let library = showcase_library();
-    let order: Vec<u32> = library
+    let order: Vec<AppId> = library
         .games()
         .iter()
         .filter(|g| g.has_drops_left())
@@ -986,7 +992,7 @@ fn showcase_app() -> App {
         library,
         sets: showcase_sets(),
         order,
-        playing: vec![960_910],
+        playing: vec![AppId(960_910)],
         mode: Some(Mode::Cards),
         next_look: Some(now() + chrono::Duration::minutes(4)),
         session: showcase_session(),
@@ -1000,7 +1006,7 @@ fn showcase_app() -> App {
         EventKind::Dropped,
         "A card dropped for Heavy Rain — 1 to go".into(),
     );
-    a.selected = Some(960_910);
+    a.selected = Some(AppId(960_910));
     a
 }
 

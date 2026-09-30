@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use card::CardSets;
 use chrono::{DateTime, Utc};
-use game::SteamLibrary;
+use game::{AppId, SteamLibrary};
 use session::{Mode, Session, SetAside};
 
 use crate::Status;
@@ -17,13 +17,13 @@ pub struct FarmingStatus {
     /// since counted in.
     pub sets: CardSets,
     /// The games the farmer means to farm, by app ID, in the order it will.
-    pub order: Vec<u32>,
+    pub order: Vec<AppId>,
     /// What's being played now.
-    pub playing: Vec<u32>,
+    pub playing: Vec<AppId>,
     /// How what's being played is farmed; `None` when nothing is.
     pub mode: Option<Mode>,
     /// While blocked: what the other device is playing, when Steam says.
-    pub blocked_by: Option<u32>,
+    pub blocked_by: Option<AppId>,
     /// When the farmer next looks at the cards; after an error, when it
     /// tries again.
     pub next_look: Option<DateTime<Utc>>,

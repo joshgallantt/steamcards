@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use game::{CardDrops, Game, GameRepository, SteamLibrary};
+use game::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
 use steam_api::{SteamClient, badges::BadgeGame};
 
 /// The account's badges, read signed in.
@@ -29,7 +29,7 @@ impl GameRepository for SteamGameRepository {
 
 fn to_game(b: BadgeGame) -> Game {
     Game {
-        app_id: b.app_id,
+        app_id: AppId(b.app_id),
         name: b.name,
         hours: b.hours,
         drops: CardDrops {
