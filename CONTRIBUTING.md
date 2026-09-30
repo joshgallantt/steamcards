@@ -1,75 +1,513 @@
 # Contributing to steamcards
 
-## Running it from a clone
+Thanks for helping. This guide is the technical side of steamcards: building it yourself, running it on a server, how the code is built, the rules it follows, and how a change gets merged. If you only want to use steamcards, the [README](README.md) is the place.
+
+- [Building from source](#building-from-source)
+- [Running it: the technical details](#running-it-the-technical-details)
+- [Setting up](#setting-up)
+- [Everyday commands](#everyday-commands)
+- [How the code is built](#how-the-code-is-built)
+- [The rules the build enforces](#the-rules-the-build-enforces)
+- [Tests](#tests)
+- [Trying it against Steam](#trying-it-against-steam)
+- [Pull requests](#pull-requests)
+- [Cutting a release](#cutting-a-release)
+- [Reporting bugs](#reporting-bugs)
+
+---
+
+## Building from source
+
+macOS or Linux, with Rust 1.88 or later and a C compiler. First set up your OS:
+
+- **macOS:** install the Xcode command-line tools, then [Rust](https://www.rust-lang.org/tools/install):
+  ```sh
+  xcode-select --install
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+- **Arch-based Linux:**
+  ```sh
+  sudo pacman -S --needed base-devel rustup xdg-utils
+  rustup default stable
+  ```
+  Arch's own `rust` package works instead of `rustup`, since it's always recent.
+- **Debian, Ubuntu and the like:**
+  ```sh
+  sudo apt install build-essential curl xdg-utils
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+
+Then build and install it:
 
 ```sh
-cargo run
+cargo install --git https://github.com/joshgallantt/steamcards --locked steamcards
 ```
 
-To keep your real sign-in and choices out of the way while you work, point
-steamcards at a file of its own:
+This puts `steamcards` in `~/.cargo/bin`, which rustup adds to your `PATH`. From a clone of the repository, `cargo install --path app --locked` does the same. To update it, run the same command with `--force`; to remove it, `cargo uninstall steamcards`.
+
+## Running it: the technical details
+
+### Without the dashboard
+
+Once you've signed in (the dashboard shows the QR code the Steam app scans), steamcards can run with no screen at all, on a server or in a background terminal. It prints a line per event:
 
 ```sh
-STEAMCARDS_CONFIG=/tmp/steamcards-dev.json cargo run
+steamcards --headless                  # until you stop it
+steamcards --headless --duration 3600  # stop after an hour (in seconds)
 ```
 
-`STEAMCARDS_DEBUG=1` writes debug lines (what's said to Steam, and what Steam
-says back) to `debug.log` beside the config; any other value is a path to
-write them to.
+### Environment variables
 
-## Getting set up
+| Variable | What it does |
+| --- | --- |
+| `STEAMCARDS_CONFIG` | Use a different config file, e.g. to keep your own sign-in out of the way while you work. |
+| `STEAMCARDS_DEBUG` | Write a debug log: what's said to Steam, and what Steam says back. `1` puts it beside the config file, as `debug.log`; a path puts it there. In headless mode, debug lines go to the terminal's error output unless this says otherwise. |
+
+### Where your data is
+
+Your sign-in and choices are in one file, `config.json`, readable by your user only, in a folder of steamcards' own. The market's prices are kept beside it, in `prices.json`, and `STEAMCARDS_DEBUG=1` puts the debug log there too:
+
+| OS | Folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/steamcards` |
+| Linux | `$XDG_CONFIG_HOME/steamcards` when `XDG_CONFIG_HOME` is set to a full path, otherwise `~/.config/steamcards` |
+
+That's [`dirs::config_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_dir.html), from Rust's `dirs` crate, plus `steamcards`. It's the only folder of yours the uninstall script deletes: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
+
+### Opening links on Linux
+
+steamcards opens a game's card page in your browser through `$BROWSER` or the desktop's opener, such as `xdg-open` from `xdg-utils`. Most desktops have one. A text browser, like lynx, takes over the terminal until it quits.
+
+### The install script
+
+The one-line installer is [`install/install.sh`](install/install.sh). It downloads the release for your system, checks it against the release's `SHA256SUMS`, and installs it without admin rights, to `~/.local/bin`, or wherever steamcards already is. It won't overwrite a copy that Homebrew or cargo installed; it says how to update that one instead. Run again, it compares `steamcards --version` with the latest release, and only downloads when it's newer.
+
+It reads these variables, all optional:
+
+| Variable | What it does |
+| --- | --- |
+| `STEAMCARDS_VERSION` | Install this release, e.g. `0.1.0`, instead of the latest. It's how to install a pre-release. |
+| `STEAMCARDS_FORCE` | `1` reinstalls, even if that version is already installed. |
+| `STEAMCARDS_INSTALL_DIR` | Install here instead of `~/.local/bin`. |
+| `STEAMCARDS_RELEASES_URL` | Download from a mirror instead of the [releases page](https://github.com/joshgallantt/steamcards/releases). It needs the same layout: `<url>/latest` redirects to `<url>/tag/vX.Y.Z`, and each release's files are in `<url>/download/vX.Y.Z/`. |
+
+For example:
 
 ```sh
-cargo xtask setup
+curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.sh | STEAMCARDS_VERSION=0.1.0 sh
 ```
 
-This installs the tools some checks need, at the versions CI uses (typos,
-cargo-machete and cargo-deny), and turns on the git hook: from then on, every
-commit first checks formatting, lints and tests. To skip the hook once, use
-`git commit --no-verify`.
+Without the script, every release's archives are on the [releases page](https://github.com/joshgallantt/steamcards/releases/latest), one per platform. The [security policy](.github/SECURITY.md#checking-a-download) says how to check one.
+
+### The uninstall script
+
+The one-line uninstaller, in the [README](README.md#your-data-and-uninstalling), is [`install/uninstall.sh`](install/uninstall.sh). It finds steamcards as the install script does, in `~/.local/bin` or else first on your `PATH`, and removes it the way it was installed:
+
+- a copy from Homebrew with `brew uninstall steamcards`, using the `brew` beside it (a Mac can have two Homebrews), then `brew untap joshgallantt/steamcards` if that tap is there;
+- a copy that cargo built, in `~/.cargo/bin` (or `$CARGO_HOME/bin`), with `cargo uninstall steamcards`, so that cargo forgets it too;
+- any other copy by deleting it.
+
+If `brew` or `cargo` can't be found, it stops and says the command to run instead. Like the install script, it never uses `sudo`, so a copy in a folder only an administrator can change is left for you to delete.
+
+Then it asks whether to delete your sign-in and choices too: the folder in [Where your data is](#where-your-data-is), and nothing else. When it can't ask (with no terminal), it keeps it and says where it is. `STEAMCARDS_DELETE_DATA` answers for you: `1` deletes it without asking, and `0` keeps it. For example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/uninstall.sh | STEAMCARDS_DELETE_DATA=1 sh
+```
+
+A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that folder is on your `PATH`.
+
+---
+
+## Setting up
+
+1. Install rustup and your OS's build tools, as in [Building from source](#building-from-source). You don't choose a Rust version: [`rust-toolchain.toml`](rust-toolchain.toml) pins the one CI uses, and rustup installs it the first time you run `cargo` in the repository.
+2. Clone the repository and, before anything else, set it up:
+   ```sh
+   git clone https://github.com/joshgallantt/steamcards
+   cd steamcards
+   cargo xtask setup
+   ```
+   This installs the tools some checks need, at the versions CI uses: [typos](https://github.com/crate-ci/typos), [cargo-machete](https://github.com/bnjbvr/cargo-machete) and [cargo-deny](https://github.com/EmbarkStudios/cargo-deny). `cargo install` builds them, which takes a few minutes the first time. Then it turns on the git hook: from then on, every commit first checks formatting, lints and tests. Git never runs a repository's own hooks until you opt in, and this is the opt-in. To skip the hook once, use `git commit --no-verify`. CI checks the same things on every pull request anyway.
+
+   When a pull request changes a tool's version, run `cargo xtask setup` again. It only installs what's missing or out of date.
+3. Run it with a separate config file, so your own sign-in and choices stay untouched:
+   ```sh
+   STEAMCARDS_CONFIG=/tmp/steamcards-dev.json cargo run
+   ```
+
+## Everyday commands
 
 | Command | What it does |
 | --- | --- |
-| `cargo xtask ci` | Everything CI checks: formatting, spelling, lints, tests, docs, unused dependencies, and the dependencies' advisories, licences and sources. Run it before you push. |
-| `cargo xtask lint`, `test`, `docs` or `deps` | One part of `ci`. |
+| `cargo xtask setup` | Installs the tools the checks need, at the versions CI uses, and turns on the git hook. |
+| `cargo xtask ci` | Everything CI checks: formatting, spelling, lints, tests, docs, the README's screenshots, unused dependencies, and the dependencies' security advisories, licences and sources. Run it before you push. |
+| `cargo xtask lint`, `test`, `docs` or `deps` | One part of `ci`, as CI runs it: formatting, spelling and lints; the tests; the docs and the README's screenshots; or the dependencies. |
 | `cargo xtask pre-commit` | What the git hook runs: formatting, lints and tests. |
 | `cargo xtask fix` | Formats the code and applies clippy's suggestions. |
+| `cargo xtask hooks` | Turns on the git hook, without installing the tools. |
 | `cargo test -p <crate>` | One crate's tests, e.g. `cargo test -p farming`. |
 | `cargo test -p terminal-ui previews -- --nocapture` | Draws every screen, in every state, into your terminal. |
+| `cargo xtask screenshots` | Redraws the README's images, in `docs/images/`, from the previews. |
+| `cargo xtask protect` | Puts the rules for `main` and for tags on GitHub (maintainer only): see [Pull requests](#pull-requests). |
+
+`cargo xtask` is a small Rust tool in [`xtask/`](xtask/src/main.rs), so it works the same everywhere. Three of its checks use a tool that doesn't come with Rust: spelling (typos), unused dependencies (cargo-machete) and the dependencies themselves (cargo-deny). Without the tool, that check is skipped locally, with a hint; CI always runs it. The tools' versions are set in one place, `TOOLS` in [`xtask/src/main.rs`](xtask/src/main.rs), and CI installs the same ones.
+
+After changing the UI, run `cargo xtask screenshots` to redraw the README's images. They're drawn from the previews' made-up data (`readme_previews` in [`preview.rs`](ui/terminal-ui/src/tui/preview.rs)), so they never show a real account; don't replace them with screenshots of a signed-in steamcards. With `PREVIEW_DUMP=<dir>`, the previews also write each screen's cells as JSON. The screens' design, and the rules that keep anything from being cut off, are in [docs/design/ui.md](docs/design/ui.md).
+
+---
 
 ## How the code is built
 
-The folder tree is the dependency graph: each business concept under
-`component/` has a `domain` crate (the entities, the rules and the
-contracts), a `data` crate (what satisfies the contracts, over Steam or the
-config file) and a `di` crate (what wires the two). Screens depend on domain
-crates only. The [architecture reference](docs/architecture.md) has the whole
-picture, and [the research](docs/research/steam-card-farming.md) says why
-farming works the way it does.
+The code is laid out the way Robert C. Martin's *Clean Architecture* describes, and every boundary is enforced by Cargo rather than by good intentions. This section follows **one keypress through every layer**. The full reference is [docs/architecture.md](docs/architecture.md).
+
+### The one idea
+
+> *"Source code dependencies must point only inward, toward higher-level policies."*
+> — Robert C. Martin, *Clean Architecture* (2017), Chapter 22
+
+```
+Presentation ──▶ Domain ◀── Data
+     └──────────────────────────▶ (never)
+```
+
+The domain is the rules: what gets farmed first, one game at a time or together, what a card is worth. It sits in the middle and depends on nothing. The screens depend on it. The Steam client depends on it. Nothing depends on them.
+
+### Where everything lives
+
+```
+├── component/     Domain + Data + DI. One folder per business concept.
+│   ├── account/       The one Steam account: signing in with a QR code, and out.
+│   ├── library/       The games with trading cards, their drops, and their card sets.
+│   ├── preferences/   What you want farmed first.
+│   ├── farming/       What to play, playing it, and this session's drops.
+│   └── market/        What cards are worth: prices, money, the wallet.
+├── library/       Infrastructure with no domain knowledge.
+│   ├── steam-api/     The CM connection, QR sign-in, badge pages, the market.
+│   ├── config-file/   The one JSON file: the saved sign-in and preferences.
+│   ├── debug-log/     The opt-in debug log.
+│   └── keep-awake/    Keeping the computer awake while games play.
+├── ui/            Presentation. Depends on domain crates only.
+│   ├── terminal-ui/   View models and the ratatui dashboard.
+│   └── headless/      --headless: events as plain text.
+├── app/           The composition root: the one crate that names concrete types.
+└── xtask/         Project tooling, run as `cargo xtask <task>`.
+```
+
+Each component is split into a `domain` crate (the rules and the contracts), a `data` crate (what satisfies the contracts) and a `di` crate (what wires the two). Each folder is its own crate, so the folder tree *is* the dependency graph. See [docs/architecture.md](docs/architecture.md#module-dependencies) for the whole graph.
+
+### The walkthrough: you press `1` on a game
+
+On the dashboard, you select a game and press `1`. You want its cards first. Here are the files that press reaches, in order:
+
+```
+      press 1
+        │
+        ▼
+ ①  App::set_tier → Farming::set_tier   ui/terminal-ui                presentation
+        │  calls a use case function
+        ▼
+ ②  set_game_tier                       component/preferences/domain  domain  ── the rule
+        │  calls a repository trait
+        ▼
+ ③  PreferencesRepository               component/preferences/domain  domain  ── the contract
+        ┆  ...is implemented by
+        ▼
+ ④  FilePreferencesRepository           component/preferences/data    data    ── the detail
+        │
+        ▼
+ ⑤  ConfigFile                          library/config-file           disk
+```
+
+The line at ③ is where it turns. The contract lives in the **domain**, and the thing that satisfies it lives in **data**. So the import arrow between them points *up* the page while the call goes *down*.
+
+#### ① The screen holds only what it calls
+
+**[`ui/terminal-ui/src/viewmodel/farming.rs`](ui/terminal-ui/src/viewmodel/farming.rs)**
+```rust
+pub struct Farming {
+    farm: FarmCards,
+    end_session: EndSession,
+    account: GetAccount,
+    get_preferences: GetPreferences,
+    set_tier: SetGameTier,
+    ...
+```
+
+Use cases, each a function the view model actually calls. It holds no repository, no Steam connection and no config file. Its crate can't hold them either: [`ui/terminal-ui/Cargo.toml`](ui/terminal-ui/Cargo.toml) lists domain crates only, so `use farming_data` doesn't resolve.
+
+#### ② The rule lives in the domain, once
+
+**[`component/preferences/domain/src/use_cases.rs`](component/preferences/domain/src/use_cases.rs)**
+```rust
+pub type SetGameTier = Arc<dyn Fn(u32, Tier) -> Result<(), PreferencesError> + Send + Sync>;
+
+pub fn set_game_tier(repo: Arc<dyn PreferencesRepository>) -> SetGameTier {
+    Arc::new(move |app_id, tier| {
+        let mut p = repo.preferences();
+        p.priority_games.retain(|&g| g != app_id);
+        p.skipped_games.retain(|&g| g != app_id);
+        match tier {
+            Tier::Priority(rank) => {
+                let at = rank.saturating_sub(1).min(p.priority_games.len());
+                p.priority_games.insert(at, app_id);
+            }
+            Tier::Indifferent => {}
+            Tier::Skip => p.skipped_games.push(app_id),
+        }
+        save(&*repo, p)
+    })
+}
+```
+
+A use case is a function value. The type names the capability, and the constructor builds the real one over the repository. Rust can't make a struct callable, so the screen calls it as `(self.set_tier)(app_id, tier)`, and a test double is just a closure.
+
+"A game is in exactly one tier" and "#1 bumps the others down" are business rules, so they live in the domain. A second screen that ranks games (the games pop-up does) calls this same use case and gets the same rules.
+
+The failure is in the user's vocabulary, not the disk's:
+
+```rust
+pub enum PreferencesError {
+    Unavailable,
+}
+```
+
+To the user, a full disk and a failed rename are the same thing: *the change didn't stick*.
+
+#### ③ The contract belongs to the domain
+
+**[`component/preferences/domain/src/repository.rs`](component/preferences/domain/src/repository.rs)**
+```rust
+pub trait PreferencesRepository: Send + Sync {
+    fn preferences(&self) -> Preferences;
+
+    /// Errs when the preferences could not be kept, so a caller cannot report
+    /// a change that did not happen. What `preferences` returns afterwards is
+    /// what was kept.
+    fn save(&self, preferences: Preferences) -> anyhow::Result<()>;
+}
+```
+
+**The domain states what it needs, and the data layer is written to fit.** The doc comment is part of the contract. Any implementation that swallowed a write failure would still compile, but the user would be told their ranking changed when it didn't.
+
+#### ④ The detail satisfies the contract
+
+**[`component/preferences/data/src/lib.rs`](component/preferences/data/src/lib.rs)** maps `Preferences` onto the file's shape, and **[`library/config-file/src/lib.rs`](library/config-file/src/lib.rs)** writes it:
+
+```rust
+fn update(&self, change: impl FnOnce(&mut FileDto)) -> anyhow::Result<()> {
+    let mut model = self.model.lock().unwrap();
+    let mut next = model.clone();
+    change(&mut next);
+    self.persist(&next)?;
+    *model = next;
+    Ok(())
+}
+```
+
+It writes first, then keeps. If it kept first, a failed write would leave memory holding a ranking the file doesn't have.
+
+Here's the structural claim, which you can check yourself:
+
+```
+component/preferences/
+├── domain/   ← crate `preferences`       (the rule, the contract)
+├── data/     ← crate `preferences-data`  (the implementation)
+└── di/       ← crate `preferences-di`    (the wiring)
+```
+
+[`component/preferences/domain/Cargo.toml`](component/preferences/domain/Cargo.toml) doesn't list `preferences-data`. **Import the data layer from the domain and the workspace stops building.** That's the difference between an architecture and a diagram of one.
+
+#### ⑤ …and back out
+
+If the write succeeded, the dashboard flashes *"Hades is now priority #1."* If it failed:
+
+**[`ui/terminal-ui/src/tui/mod.rs`](ui/terminal-ui/src/tui/mod.rs)**
+```rust
+if let Err(err) = self.farming.set_tier(e.game.app_id, tier) {
+    return self.didnt_stick(err);
+}
+```
+
+Instead of confirming a change that didn't happen, it says *"That didn't stick — preferences couldn't be saved. Try again?"*
+
+The farmer never hears about the keypress. Every tick, it calls `GetPreferences` to see what the user wants. [`component/farming/domain/src/use_cases.rs`](component/farming/domain/src/use_cases.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
+
+### What that buys
+
+- **Dependency inversion** (③): `LibraryRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `MarketRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
+- **Interface segregation** (①): one function per use case, so the games pop-up holds the preference functions it needs and the account pop-up holds the account ones. Neither sees the farmer.
+- **Liskov substitution**: the acceptance tests drive the real `farm_cards` over an in-memory Steam, and the farmer can't tell the difference.
+
+---
 
 ## The rules the build enforces
 
-- No `unsafe`, no dead code, `pub` only on what a crate exports.
-- An exception to a lint says why, and fails once it's no longer needed:
-  `#[expect(lint, reason = "…")]`, never `#[allow]`.
-- No global state, no extension traits, no `Deref` to an inner type
-  (`app/tests/language_rules.rs`).
-- Only `app/src/settings.rs` reads the environment or the OS's directories.
-- Only presentation prints.
-- Dependencies come from crates.io, with licences that allow an MIT binary
-  (`deny.toml`).
+None of these are conventions to remember. Break one and the build, a test or CI fails.
+
+**The dependency rule.** Each layer may only depend on the layers it's allowed to:
+
+| Layer | Crates | May depend on |
+| --- | --- | --- |
+| Domain | `account`, `library`, `preferences`, `farming`, `market` | Domain |
+| Data | `*-data` | Domain, Library |
+| DI | `*-di` | Domain, Data, Library |
+| Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
+| Presentation | `terminal-ui`, `headless` | Domain |
+| App | `steamcards` | Domain, DI, Library, Presentation |
+| Tooling | `xtask` | nothing in the workspace |
+
+The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using one it shouldn't (farming never uses market), and on production code enabling a `test-support` feature.
+
+**Rust features this codebase doesn't use:** extension traits, global `static` state, `Deref` as inheritance, reading the environment outside [`app/src/settings.rs`](app/src/settings.rs), glob imports, printing outside presentation, and `unsafe`. [`app/tests/language_rules.rs`](app/tests/language_rules.rs), the workspace lints and [`clippy.toml`](clippy.toml) check them. [docs/architecture.md](docs/architecture.md#rust-features-this-codebase-doesnt-use) says why each one is out, and what to do instead.
+
+**Use cases are function types.** Each is a documented type alias, like `pub type UnlinkAccount = Arc<dyn Fn() -> Result<(), UnlinkError> + Send + Sync>`, built by a constructor like `pub fn unlink_account(repo) -> UnlinkAccount`. Repositories stay traits, because each has several methods.
+
+**Lints are errors, not warnings.** They're set once for the whole workspace in the root [`Cargo.toml`](Cargo.toml):
+- no dead code: an unused function, field, import, variable or ignored `#[must_use]` result fails the build;
+- `unreachable_pub`: an item is `pub` only if its crate exports it;
+- clippy's default set, plus no glob imports, no printing outside presentation, and no `dbg!`, `todo!` or `unimplemented!`;
+- broken links in doc comments.
+
+**Exceptions say why.** When a rule really doesn't fit, write `#[expect(lint, reason = "…")]`. `#[allow]` is itself denied. An `expect` also fails the checks once it's no longer needed, so none are left behind.
+
+**Dependencies are checked too.** Every crate comes from crates.io, under a licence that works in an MIT binary, with no known security advisory, in a version its author hasn't pulled. [`deny.toml`](deny.toml) lists the licences allowed, the crates that aren't and why, and any advisory accepted for now, with its reason. A new dependency that breaks one of these fails the checks until it's been looked at.
+
+**Everything is pinned, and updated on purpose.** `Cargo.lock` holds every crate's exact version and checksum, and CI and releases build with `--locked`. Every GitHub Action is pinned to a commit, and the compiler and CI's tools to versions. Nothing changes until a pull request changes it. [Dependabot](.github/dependabot.yml) opens those pull requests once a week: one for compatible Cargo updates, one for GitHub Actions, and one for each new Rust. A release has to be a week old before it's proposed, and security fixes come straight away. Merge them when the tests pass, after a look at what changes. Breaking upgrades aren't proposed: make those by hand, now and then.
+
+**Spelling** is checked in code, comments and docs. When typos flags a word that's right, add it to [`typos.toml`](typos.toml), as narrowly as you can, with a comment saying why.
+
+**Formatting** is plain `rustfmt`, with no configuration. `cargo xtask fix` applies it.
+
+---
 
 ## Tests
 
-Every change comes with its tests, at the tier that speaks its language: unit
-tests beside the code, acceptance tests in the user's words in
-`component/*/domain/tests/`, data tests against the stand-in Steam server in
-`steam-api`'s `test_support`, and screen previews. No test talks to Steam.
+| Tier | Where | Speaks |
+| --- | --- | --- |
+| Unit | `#[cfg(test)]` next to the code | the system's terms |
+| Acceptance | `tests/` in each domain crate | the user's terms: `player.starts_farming()`, `player.reads(EventKind::Dropped)` |
+| End to end | `tests/` in the data and library crates | real code against local stand-ins for Steam: a CM server over a real WebSocket (`steam-api`'s `test_support`), and [wiremock](https://crates.io/crates/wiremock) for steamcommunity.com |
+| Screens | [`ui/terminal-ui/src/tui/preview.rs`](ui/terminal-ui/src/tui/preview.rs) | what's on screen, and that nothing is cut off at any size |
+| Architecture | [`app/tests/`](app/tests/) | the rules above |
 
-## Being a good Steam citizen
+An acceptance test reads like the user's day:
 
-steamcards asks Steam only for what the Steam client and the community site
-ask for, at a polite pace. Stopping and restarting games to shake drops
-loose is disputed (ASF calls it exploiting a Steam glitch; see the research
-doc): it isn't in steamcards, and would need measuring first, and then only
-as an opt-in.
+**[`component/farming/domain/tests/farming_cards.rs`](component/farming/domain/tests/farming_cards.rs)**
+```rust
+#[tokio::test(start_paused = true)]
+async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
+    let mut player = Player::new();
+    player.steam.drops_only_alone();
+    player.steam.add_game(620, 5.0, 3, Some(30 * MINUTE));
+    player.steam.add_game(440, 1.0, 2, Some(30 * MINUTE));
+    player.starts_farming();
+
+    assert_eq!(
+        player.reads(EventKind::Playing).await,
+        "Farming Game 620 — 3 cards to drop"
+    );
+    ...
+}
+```
+
+This runs the real farmer through hours of drops in milliseconds, on paused time, with no network.
+
+- **Doubles** come from the domain crates' `test-support` features, which production builds never enable.
+- **No test touches the real Steam.** End-to-end tests point `steam-api` at a local stand-in through its `Endpoints`.
+- **Use made-up account names, Steam IDs and tokens** in tests, fixtures and docs, never real ones.
+- **A test should fail when the code is wrong.** If you add one, break the code on purpose once and watch it fail.
+
+**The install and uninstall scripts** have tests of their own, in [`install/tests/`](install/tests/). Each scenario runs one of the scripts with a home, install folder and data folder of its own, so your own steamcards and sign-in are never touched: the install script against a local stand-in for GitHub Releases, and the uninstall script with stand-ins for Homebrew and cargo. `uninstall.sh` runs with no terminal, as on CI, or with one of its own that answers its question ([`terminal.py`](install/tests/terminal.py)). They need Python 3. `sh install/tests/run.sh` tests both scripts under sh, dash and BusyBox, whichever you have. CI runs them on Linux and macOS whenever the scripts change.
+
+---
+
+## Trying it against Steam
+
+**Only what Steam's own client does.** steamcards asks Steam only for what the Steam client and the community site ask for, at a polite pace, and farms one account. Never add anything that fakes or gets around Steam's security, or that games the drop timer: stopping and restarting games to shake drops loose is disputed (ArchiSteamFarm calls it exploiting a Steam glitch), so it isn't in steamcards. A pull request that does otherwise won't be merged.
+
+Much of what steamcards calls is undocumented and changes without notice. How farming works, cross-checked against the other farmers, is in [docs/research/steam-card-farming.md](docs/research/steam-card-farming.md); where prices, drops and the wallet come from is in [docs/research/market-and-session.md](docs/research/market-and-session.md). If you find that something changed, add to them.
+
+When you try a change for real:
+
+- **Always use a separate config file** (`STEAMCARDS_CONFIG`), never the one you use day to day.
+- **Turn on the debug log** with `STEAMCARDS_DEBUG=1`, or give it a path.
+- **Don't share tokens, account names or Steam IDs.** Keep them out of issues, pull requests, commits and test fixtures. Check a debug log before you attach it.
+- **Be gentle.** The market's pages are rate-limited: steamcards asks one thing at a time, seconds apart, and waits when Steam says to. Don't make it faster.
+
+---
+
+## Pull requests
+
+1. **Branch from `main`**, and keep each pull request to one change.
+2. **Test the change.** New behaviour gets a test; a bug fix gets a test that failed before the fix.
+3. **Update the docs.** The README covers anything a user sees; this guide and [docs/architecture.md](docs/architecture.md) cover how the code is built.
+4. **Title it for the people who use steamcards:** what's different, not how, like "Show foils' prices in a game's details". The next release's notes list each merged pull request by its title.
+5. **Run `cargo xtask ci`.** It's what CI runs.
+6. **Open the pull request.** The template's checklist matches these steps.
+
+CI is one workflow, **Tests** ([`tests.yml`](.github/workflows/tests.yml)), run on every pull request and every push to `main`, with a job for each check:
+- formatting, spelling and lints (`cargo xtask lint`), the docs and the README's screenshots (`cargo xtask docs`), and the dependencies (`cargo xtask deps`), once, on Linux;
+- `cargo check` on the oldest supported Rust, the `rust-version` in [`Cargo.toml`](Cargo.toml), and actionlint and zizmor on the workflows themselves;
+- the tests (`cargo xtask test`) on every system steamcards supports: Linux, macOS and an Arch Linux container;
+- when the install scripts change, ShellCheck on them, and their tests on Linux and macOS.
+
+Its last job, "Tests passed", passes once every other job has passed or was skipped as not needed. It's the one check pull requests need.
+
+Two more workflows run less often. [`release.yml`](.github/workflows/release.yml) publishes a release (see [Cutting a release](#cutting-a-release)). When a release changes the Homebrew formula, [`homebrew.yml`](.github/workflows/homebrew.yml) installs it and checks it runs.
+
+**Merging and releasing.** Two GitHub rulesets, kept in [`.github/rulesets/`](.github/rulesets/), protect the repository:
+- [`main.json`](.github/rulesets/main.json): changes reach `main` through pull requests, and the tests have to pass. Only the maintainer can merge them, or push to `main` at all, and `main` can't be force-pushed or deleted.
+- [`tags.json`](.github/rulesets/tags.json): only the maintainer can create, move or delete a tag. Pushing a `v*` tag is what publishes a release, so only the maintainer can publish one.
+
+The maintainer can go around the rules when needed: releases push straight to `main`. `cargo xtask protect` puts both rulesets on GitHub, or brings them back in line with the files. GitHub enforces rules on a public repository, or on a private one with GitHub Pro.
+
+A pull request merges once the tests pass and the maintainer has reviewed it.
+
+**Commit messages:** a short summary in the imperative ("Show foils' prices in a game's details"), then a blank line and why, if it isn't obvious.
+
+---
+
+## Cutting a release
+
+One command does it, and asks once before anything leaves your machine:
+
+```sh
+cargo xtask release minor    # or patch, major, or a version like 0.3.0-rc.1
+```
+
+It needs the [GitHub CLI](https://cli.github.com), signed in (`gh auth login`). It stops if nothing has changed since the last release.
+
+What it does:
+
+1. **Checks** you're on `main`, with nothing uncommitted, level with GitHub.
+2. **Prepares the release on your machine.** It works out the version, bumps `Cargo.toml` and `Cargo.lock`, and runs `cargo xtask ci`. Then it commits "Release vX.Y.Z" and tags it.
+3. **Asks, then pushes** `main` and the tag together. `--yes` skips the question.
+4. **Follows the release build** ([`release.yml`](.github/workflows/release.yml)) to the end. The build:
+   - waits for the tests to pass on the tagged commit, which pushing it to `main` started;
+   - builds macOS (Apple silicon and Intel) and Linux (x86_64 and arm64, static), and checks each build runs and reports the tag's version;
+   - publishes them as a GitHub release, with `SHA256SUMS` and, for a public repository, [build-provenance attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations). Its notes say how to install it, then GitHub lists the pull requests merged since the last release, grouped as [`.github/release.yml`](.github/release.yml) says. Edit them on the release's page to add anything else;
+   - for a public repository, installs the release with the install script, the way users do on each platform, checks it runs, and uninstalls it again.
+5. **Points the [Homebrew formula](Formula/steamcards.rb) at the release**, and pushes that to `main`. [`homebrew.yml`](.github/workflows/homebrew.yml) then installs it with Homebrew and checks it runs.
+
+It needs no secrets, tokens or repository settings. The workflows never push to `main`; only you do, which is what lets `main` stay protected.
+
+**If something stops it** (a failed check, Ctrl-C, a closed laptop), run the same command again with the same version: it carries on from where it stopped. Once the tag is pushed, the release itself finishes on GitHub whether or not your machine is watching; running the command again afterwards points Homebrew at it. If the build fails before publishing, nothing is published: fix it on `main` and release the next version, or move the tag to the fix (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`) and run the command again.
+
+**A pre-release** is a version with a hyphen, like `0.3.0-rc.1`. It's marked as one on GitHub, and Homebrew and the install script's "latest" skip it. People install it by name, with `STEAMCARDS_VERSION`.
+
+---
+
+## Reporting bugs
+
+Open an issue using the bug report template. The useful things to include are your OS, your terminal, what happened and what you expected. A debug log helps (`STEAMCARDS_DEBUG=1`); read it first and remove anything private: account names, Steam IDs and tokens.
+
+---
+
+## References
+
+- Robert C. Martin, *Clean Architecture: A Craftsman's Guide to Software Structure and Design* (2017)
+- Eric Evans, *Domain-Driven Design* (2003)
+- Mark Seemann & Steven van Deursen, *Dependency Injection: Principles, Practices, and Patterns* (2019)
+- The layout follows [Real Clean Architecture in iOS](https://github.com/joshgallantt/Real-Clean-Architecture-in-iOS-Example), translated from Swift packages to Cargo crates.

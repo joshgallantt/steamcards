@@ -103,8 +103,9 @@ done, and move it into a numbered section if it grows.
       details, help and quit.
 - [x] Previews of every screen, as streamdrops' `preview.rs` does.
 - [x] `--headless` prints the same events.
-- [ ] Screenshots for the README, as streamdrops' `xtask screenshots` makes
-      them.
+- [x] Screenshots for the README, drawn from the previews by `cargo xtask
+      screenshots`, and checked by CI against what the UI draws
+      (2026-09-30).
 
 ## 5. Live checks `[~]`
 
@@ -118,11 +119,20 @@ done, and move it into a numbered section if it grows.
 - [ ] Save a real badge page as a test fixture (the current fixtures are
       modelled on ASF's selectors).
 
-## 6. Release `[ ]`
+## 6. Release `[~]`
 
-- [x] README, CONTRIBUTING and architecture docs.
-- [ ] Install scripts and a Homebrew formula (macOS and Linux), the release
-      workflow and CI.
+- [x] README, CONTRIBUTING and architecture docs, set out as streamdrops'
+      are, with a code of conduct, a security policy, issue and pull request
+      templates (2026-09-30).
+- [x] Install and uninstall scripts (macOS and Linux) with their own tests,
+      a Homebrew formula in the repository as its own tap, the release
+      workflow and `cargo xtask release`, CI on every push and pull request,
+      Dependabot, and rulesets for `main` and tags (2026-09-30).
+- [ ] The first release, v0.1.0: `cargo xtask release 0.1.0`. It fills in
+      the Homebrew formula's checksums.
+- [ ] Make the repository public, then `cargo xtask protect`: GitHub applies
+      rulesets to a private repository only with GitHub Pro, and the install
+      lines work for nobody else until it's public.
 
 ## 7. The redesign `[~]`
 
