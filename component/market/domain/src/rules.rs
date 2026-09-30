@@ -20,6 +20,14 @@ pub(crate) const OFFERS_FRESH_FOR: Duration = Duration::from_secs(30 * 60);
 /// (research §1.3 and §1.5).
 pub(crate) const RETRY_FAILED: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// While the market can't be asked, or doesn't answer (no sign-in, no
+/// network, a server error twice), the next lookup waits a minute, then
+/// twice as long each time it still can't, up to half an hour: soon, but
+/// never quickly again and again. Nothing is taken as failed meanwhile
+/// (research §1.3: after a server error, a price is stale, not failed).
+pub(crate) const UNANSWERED_FIRST: Duration = Duration::from_secs(60);
+pub(crate) const UNANSWERED_LONGEST: Duration = Duration::from_secs(30 * 60);
+
 /// When a card drops, its game's set is looked up again if its prices are
 /// over an hour old (ui.md §5.3).
 pub(crate) const ASKED_AGAIN_AFTER: Duration = Duration::from_secs(60 * 60);

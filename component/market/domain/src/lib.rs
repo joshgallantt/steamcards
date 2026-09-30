@@ -22,8 +22,8 @@ pub mod test_support;
 
 pub use model::{
     Basis, Estimate, Held, HeldCard, Lookup, MarketError, MarketEvent, MarketEventKind,
-    MarketPause, MarketSettings, Price, PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices,
-    Wallet,
+    MarketPause, MarketSettings, Offers, Price, PriceBook, PriceQuote, PricedCard, QuoteSource,
+    SetPrices, Wallet,
 };
 pub use money::{Currency, Money};
 pub use repository::MarketRepository;

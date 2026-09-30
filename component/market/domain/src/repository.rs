@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::{Lookup, MarketSettings, Price, PriceBook, PricedCard, SetPrices, Wallet};
+use crate::{Lookup, MarketSettings, Offers, Price, PriceBook, PricedCard, SetPrices, Wallet};
 
 /// Where prices, the wallet and the market's settings come from, and where
 /// they're kept. Declared here, beside the use cases that need it; the data
@@ -10,8 +10,9 @@ use crate::{Lookup, MarketSettings, Price, PriceBook, PricedCard, SetPrices, Wal
 ///
 /// Every lookup goes through Steam's one market queue, which keeps its own
 /// pace: a lookup can take a while, and while Steam has paused lookups, it
-/// says so at once, without asking. Errors carry a reason fit to show the
-/// user.
+/// says so at once, without asking. A market that couldn't be asked, or
+/// didn't answer, is [`Lookup::Unanswered`]. An error is an answer that
+/// couldn't be used, with a reason fit to show the user.
 #[async_trait]
 pub trait MarketRepository: Send + Sync {
     /// Everything priced so far, including what was kept from before a
@@ -22,10 +23,12 @@ pub trait MarketRepository: Send + Sync {
     fn keep_set(&self, set: SetPrices);
 
     /// Keeps a card's order book in the book, by its market hash name.
-    fn keep_offers(&self, market_hash_name: &str, price: Price);
+    fn keep_offers(&self, market_hash_name: &str, offers: Offers);
 
     /// A game's cards as the market lists them now, with their lowest
-    /// listings: its normal cards, or its foils.
+    /// listings: its normal cards, or its foils. The market's search doesn't
+    /// say which currency it answers in, so its prices are read as the
+    /// wallet's: until Steam has said what that is, the market isn't asked.
     async fn look_up_set(&self, app_id: u32, foil: bool)
     -> anyhow::Result<Lookup<Vec<PricedCard>>>;
 

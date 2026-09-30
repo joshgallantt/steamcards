@@ -4,7 +4,9 @@
 //!
 //! The market decides what to price, and in what order. How fast requests
 //! go is Steam's business: every lookup waits its turn in the data layer's
-//! one market queue.
+//! one market queue. An answer that can't be used is tried again a day
+//! later; a market that couldn't be asked at all, soon, with nothing taken
+//! as failed.
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
@@ -14,8 +16,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     Basis, Lookup, MarketError, MarketEvent, MarketEventKind, MarketPause, MarketRepository,
-    MarketSettings, Price, PriceBook, SetPrices, Wallet,
-    rules::{ASKED_AGAIN_AFTER, OFFERS_FRESH_FOR, RETRY_FAILED, TICK, between, later},
+    MarketSettings, Offers, Price, PriceBook, SetPrices, Wallet,
+    rules::{
+        ASKED_AGAIN_AFTER, OFFERS_FRESH_FOR, RETRY_FAILED, TICK, UNANSWERED_FIRST,
+        UNANSWERED_LONGEST, between, later,
+    },
 };
 
 /// What time it is. The real clock is the system's; a test's can move with
@@ -39,13 +44,14 @@ pub type WatchPrices =
 
 /// Prices a game's set again in the background, if its prices are over an
 /// hour old: one of its cards just dropped, or the user asked. Errs when
-/// Steam has paused lookups.
+/// Steam has paused lookups, or the market couldn't be asked.
 pub type RefreshPrices = Arc<dyn Fn(u32) -> JoinHandle<Result<(), MarketError>> + Send + Sync>;
 
 /// Looks up the order books of these cards, by market hash name, in the
 /// background: their best offers, which only the instant basis uses. A card
-/// whose order book is under half an hour old isn't looked up again. Errs
-/// when Steam has paused lookups; the rest wait for the next ask.
+/// whose order book was looked up under half an hour ago isn't looked up
+/// again, whatever it said. Errs when Steam has paused lookups, or the
+/// market couldn't be asked; the rest wait for the next ask.
 pub type PriceOffers =
     Arc<dyn Fn(Vec<String>) -> JoinHandle<Result<(), MarketError>> + Send + Sync>;
 
@@ -97,6 +103,7 @@ pub fn refresh_prices(repo: Arc<dyn MarketRepository>, clock: Clock) -> RefreshP
             }
             match price_set(&*repo, app_id, &clock).await {
                 Priced::Paused(pause) => Err(MarketError::Paused(pause)),
+                Priced::Unanswered(_) => Err(MarketError::Unanswered),
                 Priced::Done | Priced::Failed(_) => Ok(()),
             }
         })
@@ -113,11 +120,20 @@ pub fn price_offers(repo: Arc<dyn MarketRepository>, clock: Clock) -> PriceOffer
                 if is_recent(book.offers.get(&hash), clock()) {
                     continue;
                 }
-                match repo.look_up_offers(&hash).await {
-                    Ok(Lookup::Found(price)) => repo.keep_offers(&hash, price),
+                let price = match repo.look_up_offers(&hash).await {
+                    Ok(Lookup::Found(price)) => price,
                     Ok(Lookup::Paused(pause)) => return Err(MarketError::Paused(pause)),
-                    Err(_) => repo.keep_offers(&hash, Price::failed(clock())),
-                }
+                    Ok(Lookup::Unanswered(_)) => return Err(MarketError::Unanswered),
+                    Err(_) => Price::failed(clock()),
+                };
+                let looked_up_at = clock();
+                repo.keep_offers(
+                    &hash,
+                    Offers {
+                        price,
+                        looked_up_at,
+                    },
+                );
             }
             Ok(())
         })
@@ -143,11 +159,14 @@ pub fn set_basis(repo: Arc<dyn MarketRepository>) -> SetBasis {
 
 /// An order book looked up under half an hour ago, or a failed one not due
 /// again yet.
-fn is_recent(offers: Option<&Price>, now: DateTime<Utc>) -> bool {
+fn is_recent(offers: Option<&Offers>, now: DateTime<Utc>) -> bool {
     match offers {
-        Some(Price::Known(quote)) => quote.age(now) < OFFERS_FRESH_FOR,
-        Some(Price::Failed { retry_at }) => *retry_at > now,
-        _ => false,
+        Some(Offers {
+            price: Price::Failed { retry_at },
+            ..
+        }) => *retry_at > now,
+        Some(offers) => between(offers.looked_up_at, now) < OFFERS_FRESH_FOR,
+        None => false,
     }
 }
 
@@ -157,17 +176,22 @@ enum Priced {
     Paused(MarketPause),
     /// Steam's answer couldn't be used, for this reason.
     Failed(String),
+    /// The market couldn't be asked, or didn't answer, for this reason:
+    /// nothing was kept.
+    Unanswered(String),
 }
 
 /// Looks a game's set up afresh, normal cards then foils, and keeps it. A
-/// set's prices come from one lookup at one time: when either half fails,
-/// it keeps the prices it had, and is tried again a day later.
+/// set's prices come from one lookup at one time: when either half's answer
+/// can't be used, it keeps the prices it had, and is tried again a day
+/// later. When the market couldn't be asked, it's left as it was.
 async fn price_set(repo: &dyn MarketRepository, app_id: u32, clock: &Clock) -> Priced {
     let mut borders = [Vec::new(), Vec::new()];
     for (foil, cards) in [false, true].into_iter().zip(&mut borders) {
         match repo.look_up_set(app_id, foil).await {
             Ok(Lookup::Found(found)) => *cards = found,
             Ok(Lookup::Paused(pause)) => return Priced::Paused(pause),
+            Ok(Lookup::Unanswered(why)) => return Priced::Unanswered(why),
             Err(e) => {
                 let now = clock();
                 let failed = match repo.book().sets.get(&app_id) {
@@ -206,6 +230,8 @@ impl Watcher {
         let mut looked_up = 0;
         // Steam's pause, from when it's first told until Steam answers.
         let mut paused = None;
+        // How long the last wait for a market that couldn't be asked was.
+        let mut unanswered: Option<Duration> = None;
         loop {
             if token.is_cancelled() {
                 return;
@@ -246,6 +272,25 @@ impl Watcher {
                 }
                 continue;
             }
+            // Nothing was kept: the same set is due again after the wait.
+            if let Priced::Unanswered(why) = priced {
+                let wait = unanswered.map_or(UNANSWERED_FIRST, |w| (w * 2).min(UNANSWERED_LONGEST));
+                unanswered = Some(wait);
+                self.report(
+                    MarketEventKind::Unanswered {
+                        retry_at: later((self.clock)(), wait),
+                    },
+                    format!(
+                        "Couldn't ask the market for prices: {why}. Asking again in {}.",
+                        minutes(wait)
+                    ),
+                );
+                if !sleep(wait, token).await {
+                    return;
+                }
+                continue;
+            }
+            unanswered = None;
             if paused.take().is_some() {
                 self.report(
                     MarketEventKind::Resumed,
@@ -271,16 +316,19 @@ impl Watcher {
             1 => "the 1 game".to_owned(),
             n => format!("all {n} games"),
         };
-        let next = wanted
+        let next_round = wanted
             .iter()
             .filter_map(|id| book.sets.get(id))
             .map(SetPrices::due_at)
-            .min()
-            .map_or_else(String::new, |next| {
-                format!("; the next round is in {}", in_words(between(now, next)))
-            });
+            .min();
+        let next = next_round.map_or_else(String::new, |next| {
+            format!("; the next round is in {}", in_words(between(now, next)))
+        });
         self.report(
-            MarketEventKind::AllPriced,
+            MarketEventKind::AllPriced {
+                games: wanted.len(),
+                next_round,
+            },
             format!("Prices: {games} looked up{next}."),
         );
     }

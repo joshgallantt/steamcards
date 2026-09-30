@@ -29,6 +29,11 @@ impl Currency {
         self.0
     }
 
+    /// Every currency in Valve's table, by id.
+    pub fn every() -> impl Iterator<Item = Currency> {
+        (1..=47).chain([9000, 9001]).map(Self)
+    }
+
     /// Its three-letter code, "GBP"; `None` for an id Valve's table doesn't
     /// have.
     pub fn code(self) -> Option<&'static str> {
@@ -252,6 +257,14 @@ mod tests {
 
     fn written(minor: i64, id: u32) -> String {
         Money::new(minor, Currency::from_id(id)).to_string()
+    }
+
+    #[test]
+    fn every_currency_is_valves_whole_table() {
+        let every: Vec<Currency> = Currency::every().collect();
+        assert_eq!(every.len(), 49);
+        assert!(every.iter().all(|c| c.code().is_some()));
+        assert_eq!(every[1], Currency::GBP);
     }
 
     #[test]

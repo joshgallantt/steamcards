@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use config_file::{ConfigFile, PriceCache, StoredCard, StoredPause, StoredPrice, StoredSet};
 use market::{
-    Basis, Currency, Lookup, MarketPause, MarketRepository, MarketSettings, Money, Price,
+    Basis, Currency, Lookup, MarketPause, MarketRepository, MarketSettings, Money, Offers, Price,
     PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
 };
 use steam_api::{
@@ -25,6 +25,11 @@ use steam_api::{
 /// How long a set's prices are kept once looked up: shown dim with their
 /// age after 6 hours, and gone after a week (research §1.3's cache).
 const KEPT_FOR: TimeDelta = TimeDelta::days(7);
+
+/// How long to wait for Steam to tell of the wallet once signed on, a tenth
+/// of a second at a time: it comes as a session signs on.
+const WALLET_WAITS: u32 = 10;
+const WALLET_WAIT: Duration = Duration::from_millis(100);
 
 /// The market as the Steam session sees it, and what's kept of it.
 pub struct SteamMarketRepository {
@@ -72,10 +77,22 @@ impl SteamMarketRepository {
         }
     }
 
-    /// The currency the market is asked in: the wallet's, or dollars until
-    /// Steam says, as Valve's pages do.
-    fn currency(&self) -> Currency {
-        self.wallet().map_or(Currency::USD, |w| w.currency)
+    /// The wallet's currency, which the market's prices are read in. Steam
+    /// tells of the wallet as a session signs on: until it has, a session
+    /// signs on, and it's waited for a moment. Why not, when it can't be
+    /// told.
+    async fn currency(&self) -> Result<Currency, String> {
+        if let Some(wallet) = self.wallet() {
+            return Ok(wallet.currency);
+        }
+        self.session.connection().await.map_err(|e| e.to_string())?;
+        for _ in 0..WALLET_WAITS {
+            if let Some(wallet) = self.wallet() {
+                return Ok(wallet.currency);
+            }
+            tokio::time::sleep(WALLET_WAIT).await;
+        }
+        Err("Steam hasn't said the wallet's currency yet".into())
     }
 }
 
@@ -104,10 +121,10 @@ impl MarketRepository for SteamMarketRepository {
         }
     }
 
-    fn keep_offers(&self, market_hash_name: &str, price: Price) {
+    fn keep_offers(&self, market_hash_name: &str, offers: Offers) {
         let mut book = self.book.lock().unwrap();
         let mut next = PriceBook::clone(&book);
-        next.offers.insert(market_hash_name.to_owned(), price);
+        next.offers.insert(market_hash_name.to_owned(), offers);
         *book = Arc::new(next);
     }
 
@@ -116,13 +133,18 @@ impl MarketRepository for SteamMarketRepository {
         app_id: u32,
         foil: bool,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
+        let currency = match self.currency().await {
+            Ok(currency) => currency,
+            Err(why) => return Ok(Lookup::Unanswered(why)),
+        };
         let answer = self.session.market_search(app_id, foil).await;
         self.keep_pause();
         let listed = match answer? {
             Market::Answer(listed) => listed,
             Market::Paused(pause) => return Ok(Lookup::Paused(to_pause(pause))),
+            Market::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
         };
-        let (currency, now) = (self.currency(), Utc::now());
+        let now = Utc::now();
         Ok(Lookup::Found(
             listed
                 .into_iter()
@@ -138,6 +160,7 @@ impl MarketRepository for SteamMarketRepository {
         Ok(match answer? {
             Market::Answer(book) => Lookup::Found(to_offers(book, Utc::now())),
             Market::Paused(pause) => Lookup::Paused(to_pause(pause)),
+            Market::Unanswered(why) => Lookup::Unanswered(why),
         })
     }
 
@@ -199,13 +222,17 @@ fn is_border(card: &Listed, foil: bool) -> bool {
 /// A card the market listed, priced. The market's search doesn't say which
 /// currency it answered in, so its price is written in the wallet's
 /// currency, and failing that in dollars, and compared with the market's
-/// own text; a price in neither isn't used (research §1.2, rule 4).
+/// own text (research §1.2, rule 4). Failing both, it's in whichever of
+/// Valve's currencies its text is written as: shown so, and never counted
+/// with the wallet's (rule 3), as an account without a wallet's prices
+/// are. A price written as none isn't used.
 fn to_priced_card(card: Listed, currency: Currency, now: DateTime<Utc>) -> PricedCard {
     let price = if card.sell_listings == 0 || card.sell_price <= 0 {
         Price::NoMarket
     } else {
         let written_in = [currency, Currency::USD]
             .into_iter()
+            .chain(Currency::every())
             .find(|&c| is_written_as(Money::new(card.sell_price, c), &card.sell_price_text));
         match written_in {
             Some(c) => Price::Known(PriceQuote {
@@ -430,9 +457,14 @@ mod tests {
         );
         assert_eq!(ask(&card("$0.06 USD")), Some(Money::new(6, Currency::USD)));
         assert_eq!(
-            card("0,06€").price,
+            ask(&card("0,06€")),
+            Some(Money::new(6, Currency::EUR)),
+            "neither: as it came, never counted with pounds"
+        );
+        assert_eq!(
+            card("6 gold").price,
             Price::failed(now),
-            "neither: the price isn't used"
+            "no currency at all: the price isn't used"
         );
         let euros = to_priced_card(listed("Chell", 100, "1,--€", 40), Currency::EUR, now);
         assert_eq!(ask(&euros), Some(Money::new(100, Currency::EUR)));

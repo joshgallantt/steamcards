@@ -80,7 +80,7 @@ The dashboard, top to bottom. At the large size the Now panel, the chosen game a
 | This session 16 of 252 drops · 5 of 62 games | `FarmingSession.drops.len()`, `drops_left_at_start`, `finished.len()`, `games_at_start` | new: farming session |
 | Your library 183 of 421 drops · 5 of 63 games | `SteamLibrary::drops_received()`, `drops_total()`, `games_done()`, `games().len()` | new methods on an existing entity |
 | ≥ £1.45 this session · 3 unpriced | `market::held_value(&[HeldCard], unidentified, &PriceBook, basis, &Wallet, now) -> Held`, each `HeldCard` from a drop's `CardAsset` | new: market |
-| ≈ £15.34 still to drop | `market::value_left(&SteamLibrary, &PriceBook, basis, &Wallet) -> Estimate` | new: market |
+| ≈ £15.34 still to drop | `market::value_left(&SteamLibrary, order, &PriceBook, basis, &Wallet) -> Estimate`, over `FarmingStatus.order`: a game never farmed drops nothing | new: market |
 | ≈ £16.79 on completion, excl. foils | `market::on_completion(&Held, &Estimate) -> Estimate { value, excl_foils, unpriced_games, basis }` | new: market |
 | 2 spares this session: £0.13 | the session's drops whose `copy` is 2 or more, priced | new: farming session + market |
 | ▶ Heavy Rain, ▷ building hours, ‖ waiting | `FarmingStatus { status, playing, mode, blocked_by }` | exists |
@@ -1124,7 +1124,7 @@ The account gains two facts: the wallet's currency, which every price is shown i
 
 ### The log
 
-The log is a view like the others and follows the newest event. It shows how a card is identified, and what happens when Steam is slow to say (research §2.3).
+The log is a view like the others and follows the newest event. It shows how a card is identified, and what happens when Steam is slow to say (research §2.3). The market's lines are written from its events' kinds, with each game's name from the library and times on the local clock: the market itself knows neither, and says "the next round is in 3h 58m" where the log says "at 21:21".
 
 ```mockup 120x30 the log
  steamcards   ● farming for 8h 17m · since 09:14              Steam ● alice · appears offline · keeping awake   [?] help
@@ -1549,12 +1549,12 @@ Fees are worked out per card, then summed (research §1.4): never on a total.
 | Pending | a dim "…" | unpriced |
 | No market | "no market" | unpriced |
 | Not marketable | "—" | left out |
-| Failed | "?"; tried again after 24 hours | unpriced |
+| Failed | "?"; tried again after 24 hours. Only an answer that couldn't be used fails: when the market can't be asked at all (no sign-in, no network, a server error twice), prices stay as they were, and it's asked again within minutes | unpriced |
 | Stale | the price, dim, with its age | counted; totals show the oldest age |
 | Another currency | the amount as it came ("$0.07") | unpriced, never converted |
 | Paused by Steam | as before, plus a banner "‖ prices paused by Steam until 17:41" | as before |
 
-**Never £0.00 for a price that isn't known.** A partial sum always says what it leaves out. The queue's title carries no money, and the completion value waits ("on completion: once they're priced") until every game with drops left is priced.
+**Never £0.00 for a price that isn't known.** A partial sum always says what it leaves out. The queue's title carries no money, and the completion value waits ("on completion: once they're priced") until every game to be farmed is priced; a skipped game is never priced, and never waited for.
 
 **Expected value of a drop** (research §3.3): the mean of the set's normal cards, each priced on the basis first. Foils are left out until a foil rate is known, so estimates say "excl. foils". Value on completion = this session's value + Σ drops left × expected value of a drop.
 
@@ -1631,6 +1631,7 @@ It reads in light and dark themes because it uses named colours only, reversed v
 | A card not identified yet | "⠋ finding out which card" in the haul, Now and the strip. The log says each fallback (research §2.3). If only the card page can tell (fallback C), the name shows without a market link, and quick-sell later says it can't be sold from here. |
 | Prices paused (a 429) | A banner in the value column, the strip and the market view; prices past 6 hours dim with their age; pending ones stay "…" (mockups h). |
 | A lookup failed | "?" on the card; it counts as unpriced; tried again after 24 hours. |
+| The market can't be asked | No sign-in, no network, or the site down: prices stay as they were, dim once 6 hours old, and nothing reads "?". The log says why, and when it asks again, a minute on, then longer each time, up to half an hour. |
 | The set not read yet | "The set · not read yet", its price range, and "[enter] reads its card page" (mockup b). |
 | A game set aside | STATUS "set aside" (or in ≈ DONE IN where STATUS is gone); the details say "No card in 10 hours of play, so it went behind the others" (mockup a, scrolled). |
 | The badges couldn't be read | The queue keeps the last read; the strip says "Couldn't read your badges: reason. Trying again in 5m." |
@@ -1714,7 +1715,7 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `Price::{Pending, Known(PriceQuote), NoMarket, NotMarketable, Failed { retry_at }}` | a card's price state (research §1.5) | "…", "no market", "—", "?" | new |
 | `PricedCard { name, market_hash_name, price }` | a card of a set as the market lists it, named as the set names it | matching prices to the set by name | new |
 | `SetPrices { app_id, normal, foil, fetched_at, retry_at }`; `card(name, foil)`, `by_hash(hash)`, `price(name, foil)` | a game's set, priced, both borders from one lookup; `retry_at` after a failed one, which keeps the prices from before | the set's columns, ranges, expected value | new |
-| `PriceBook { sets, offers }`; `price(&HeldCard, basis)` | everything priced so far: sets by game, order books by hash | every price on screen | new |
+| `PriceBook { sets, offers }`; `price(&HeldCard, basis)` | everything priced so far: sets by game, order books by hash (`Offers { price, looked_up_at }`, since nobody buying or selling is an answer too) | every price on screen | new |
 | `Basis::{List, Net, Instant}`; `still_to_drop()` | the value basis; instant is net for cards still to drop | b | new |
 | `MarketSettings { basis }` | the market's settings, kept in the config file's `market` section; later `sell_policy` | b, games & settings | new |
 | `MarketPause { until, step }` | Steam's pause on lookups; kept across restarts | the banner | new |
@@ -1724,10 +1725,10 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `value_of(&Price, Basis, &Wallet) -> Option<Money>` | pure: a card's worth on a basis; another currency is `None` | every price shown | new |
 | `held_value(&[HeldCard], unidentified, &PriceBook, Basis, &Wallet, now) -> Held` | pure | the session's value, the haul | new |
 | `expected_per_drop(&SetPrices, Basis, &Wallet) -> Option<Money>` | pure; per card first, then the mean (research §3.3) | ≈ A DROP | new |
-| `value_left(&SteamLibrary, &PriceBook, Basis, &Wallet) -> Estimate` | pure | ≈ LEFT, still to drop, section rules | new |
+| `value_left(&SteamLibrary, order: &[u32], &PriceBook, Basis, &Wallet) -> Estimate` | pure: the games in the farm order, each game's drops left × its mean, rounded once for the game | ≈ LEFT, still to drop, section rules | new |
 | `on_completion(&Held, &Estimate) -> Estimate` | pure: this session's value plus what's still to drop (research §3.3) | ≈ on completion | new |
 | `WantPrices(Vec<u32>)` | the games to price, most urgent first: the farming game, games with cards this session, then the farm order | the order prices arrive in | new |
-| `WatchPrices(token, events)` | the background pricing through the one market queue: each wanted set, then again at 6 hours; waits out the pause; `MarketEvent`s for the log | every price | new |
+| `WatchPrices(token, events)` | the background pricing through the one market queue: each wanted set, then again at 6 hours; waits out the pause, and a market it couldn't ask; `MarketEvent`s for the log, each carrying what the screens write their line from (`AllPriced { games, next_round }`, `Paused(MarketPause)`, `Failed(app_id)`, `Unanswered { retry_at }`) | every price | new |
 | `GetPrices`, `RefreshPrices(app_id)` | the price book now; look at one game again (queued) if it's over an hour old | a card dropped; the market view's r | new |
 | `PriceOffers(Vec<hash>)` | order books for held cards and the chosen game's cards, each again after 30 minutes | the instant basis | new |
 | `GetWallet`, `GetMarketSettings`, `SetBasis` | the wallet; the basis | the account; b | new |
@@ -1851,7 +1852,7 @@ Before listing, the checks Valve's page makes (research §4.1): a wallet currenc
 
 | View model | Built from | Gives the screens |
 | --- | --- | --- |
-| `Progress` | `Forecast`, `FarmingSession`, `SteamLibrary`, `Held`, `Estimate`, `MarketPause` | each Progress line's variants, longest first |
+| `Progress` | `Forecast`, `FarmingSession`, `SteamLibrary`, `FarmingStatus.order`, `Held`, `Estimate`, `MarketPause` | each Progress line's variants, longest first |
 | `Now` | `FarmingStatus`, `FarmingSession`, the farming game, its `SetPrices` | the Now panel's rows and the Now line's variants |
 | `Queue` (exists) | as today, plus `Forecast.per_game`, `PriceBook`, `set_aside` | per row: pips (had, today, foils), STATUS, ≈ a drop, ≈ left, ≈ done in; each section's value |
 | `ChosenGame` | the chosen `Game`, `PriceBook`, `Forecast`, this session's drops of it | the panel's forms and the details' lines: a count per card, prices, short of a badge |

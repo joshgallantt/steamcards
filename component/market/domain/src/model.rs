@@ -297,6 +297,15 @@ impl SetPrices {
     }
 }
 
+/// A card's order book as last looked up: what it said, and when. Nobody
+/// buying or selling is an answer too, so an order book says when it was
+/// looked up whatever it said.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Offers {
+    pub price: Price,
+    pub looked_up_at: DateTime<Utc>,
+}
+
 /// Everything priced so far: each game's set, and each card's best offers
 /// that have been looked up.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -304,7 +313,7 @@ pub struct PriceBook {
     /// Sets, by app ID.
     pub sets: BTreeMap<u32, SetPrices>,
     /// Order books, by market hash name.
-    pub offers: BTreeMap<String, Price>,
+    pub offers: BTreeMap<String, Offers>,
 }
 
 impl PriceBook {
@@ -335,8 +344,7 @@ impl PriceBook {
                         .map(|c| c.market_hash_name.as_str())
                 });
                 hash.and_then(|h| self.offers.get(h))
-                    .cloned()
-                    .unwrap_or(Price::Pending)
+                    .map_or(Price::Pending, |offers| offers.price.clone())
             }
         }
     }
@@ -414,11 +422,17 @@ pub struct Estimate {
     pub basis: Basis,
 }
 
-/// What the market said to a lookup, or that Steam has paused lookups.
+/// What the market said to a lookup, that Steam has paused lookups, or
+/// that the market couldn't be asked.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lookup<T> {
     Found(T),
     Paused(MarketPause),
+    /// The market couldn't be asked, or didn't answer, for this reason: not
+    /// signed in, no network, a server error twice, or the wallet's currency
+    /// not known yet to read prices in. Nothing is wrong with the prices,
+    /// so none is taken as failed: it's asked again soon.
+    Unanswered(String),
 }
 
 /// Something the price watcher did, for the log.
@@ -429,18 +443,28 @@ pub struct MarketEvent {
     pub message: String,
 }
 
-/// What a market event is about, so the UI can show the ones that matter.
+/// What a market event is about, so the UI can show the ones that matter,
+/// and write its own line from what each carries: a game's name for its app
+/// ID, a time on the clock for a time. The event's message says the same,
+/// in the market's own words, with durations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MarketEventKind {
-    /// Every game wanted priced has been looked up, for now.
-    AllPriced,
+    /// Every game wanted priced has been looked up, for now: how many, and
+    /// when the next round is due.
+    AllPriced {
+        games: usize,
+        next_round: Option<DateTime<Utc>>,
+    },
     /// Steam turned a lookup down: lookups wait until the pause ends.
     Paused(MarketPause),
     /// Steam's pause is over: the first lookup since wasn't turned down.
     Resumed,
-    /// A game's prices couldn't be looked up, by app ID. They're tried
-    /// again a day later.
+    /// A game's prices couldn't be looked up, by app ID: the market's
+    /// answer couldn't be used. They're tried again a day later.
     Failed(u32),
+    /// The market couldn't be asked, or didn't answer: it's asked again
+    /// then, and nothing is taken as failed meanwhile.
+    Unanswered { retry_at: DateTime<Utc> },
 }
 
 /// Why something asked of the market didn't happen, in the user's terms.
@@ -450,6 +474,8 @@ pub enum MarketError {
     Unavailable,
     /// Steam has paused price lookups until the pause ends.
     Paused(MarketPause),
+    /// The market couldn't be asked just now: no sign-in, or no network.
+    Unanswered,
 }
 
 impl fmt::Display for MarketError {
@@ -457,6 +483,7 @@ impl fmt::Display for MarketError {
         match self {
             MarketError::Unavailable => write!(f, "the market settings couldn't be saved"),
             MarketError::Paused(_) => write!(f, "Steam has paused price lookups"),
+            MarketError::Unanswered => write!(f, "the market couldn't be asked just now"),
         }
     }
 }
@@ -679,7 +706,13 @@ mod tests {
             Price::Pending,
             "no order book yet"
         );
-        book.offers.insert("960910-Madison".into(), Price::NoMarket);
+        book.offers.insert(
+            "960910-Madison".into(),
+            Offers {
+                price: Price::NoMarket,
+                looked_up_at: noon(),
+            },
+        );
         assert_eq!(
             book.price(&by_name, Basis::Instant),
             Price::NoMarket,

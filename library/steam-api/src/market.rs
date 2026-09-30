@@ -12,6 +12,11 @@
 //! the pause doubles, to an hour at most. A server error is asked once more,
 //! 30 seconds later. The queue sits on top of the site's own gap between
 //! requests, never in place of it, and the site's quick retries never apply.
+//!
+//! A market that couldn't be asked, or didn't answer (no sign-in, no
+//! network, a server error twice), is told apart from an answer that can't
+//! be used: nothing is wrong with what was asked for, and it's worth asking
+//! again soon.
 
 use std::{
     future::Future,
@@ -73,11 +78,15 @@ pub struct MarketPause {
     pub step: Duration,
 }
 
-/// What a market request came to: the market's answer, or Steam's pause.
+/// What a market request came to: the market's answer, Steam's pause, or
+/// no answer at all.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Market<T> {
     Answer(T),
     Paused(MarketPause),
+    /// The market couldn't be asked, or didn't answer, for this reason: not
+    /// signed in, no network, or a server error twice.
+    Unanswered(String),
 }
 
 /// A card of a game's set as the market lists it: one result of
@@ -145,7 +154,8 @@ impl MarketQueue {
     /// Sends one market request with `send` when its turn comes, signed in
     /// or out. While Steam's pause lasts, nothing is sent. A 429 pauses the
     /// market; a server error is asked once more, a while later; anything
-    /// else ends the pause. Errs when the market said no, or didn't answer.
+    /// else ends the pause. No answer, or a server error twice, is
+    /// [`Market::Unanswered`]; errs when the market said no.
     pub(crate) async fn send<F, Fut>(
         &self,
         signed_in: bool,
@@ -166,7 +176,10 @@ impl MarketQueue {
             }
             let answer = send().await;
             *last = Some(Instant::now());
-            let reply = answer?;
+            let reply = match answer {
+                Ok(reply) => reply,
+                Err(e) => return Ok(Market::Unanswered(e.to_string())),
+            };
             if reply.status == StatusCode::TOO_MANY_REQUESTS {
                 return Ok(Market::Paused(self.turned_down()));
             }
@@ -177,7 +190,10 @@ impl MarketQueue {
                 continue;
             }
             if reply.status.is_server_error() {
-                bail!("steamcommunity.com's market said {}, twice", reply.status);
+                return Ok(Market::Unanswered(format!(
+                    "steamcommunity.com's market said {}, twice",
+                    reply.status
+                )));
             }
             if !reply.status.is_success() {
                 bail!("steamcommunity.com's market said {}", reply.status);
@@ -429,6 +445,7 @@ mod tests {
         match queue.send(signed_in, || stand.reply()).await {
             Ok(Market::Answer(reply)) => Market::Answer(reply.status),
             Ok(Market::Paused(p)) => Market::Paused(p),
+            Ok(Market::Unanswered(why)) => Market::Unanswered(why),
             Err(e) => panic!("{e}"),
         }
     }
@@ -546,6 +563,23 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn a_request_that_goes_unanswered_says_so() {
+        let queue = MarketQueue::new(MarketPace::default());
+
+        let answer = queue
+            .send(true, || async {
+                Err(anyhow!("steamcommunity.com didn't answer (timed out)"))
+            })
+            .await
+            .unwrap();
+
+        assert!(
+            matches!(&answer, Market::Unanswered(why) if why == "steamcommunity.com didn't answer (timed out)"),
+            "not an error: nothing wrong with what was asked for"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn a_pause_is_over_once_the_systems_clock_says_so() {
         // The computer slept through it: tokio's clock didn't move.
         let queue = MarketQueue::new(MarketPace::default());
@@ -597,10 +631,12 @@ mod tests {
         assert!(sent[1] - sent[0] >= 30 * SECOND, "{sent:?}");
 
         let stand = Stand::answering(&[500, 503]);
-        let e = queue.send(true, || stand.reply()).await.unwrap_err();
         assert_eq!(
-            e.to_string(),
-            "steamcommunity.com's market said 503 Service Unavailable, twice"
+            ask(&queue, &stand, true).await,
+            Market::Unanswered(
+                "steamcommunity.com's market said 503 Service Unavailable, twice".into()
+            ),
+            "no answer: nothing wrong with what was asked for"
         );
         let stand = Stand::answering(&[404]);
         let e = queue.send(true, || stand.reply()).await.unwrap_err();

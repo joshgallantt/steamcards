@@ -379,13 +379,17 @@ impl Session {
     /// A game's cards as the market lists them now, normal cards or foils,
     /// with their lowest listings: every page of `search/render`, signed in,
     /// each through the market's queue. A card is listed once, should a
-    /// page repeat one.
+    /// page repeat one. Without a sign-in to ask as, the market goes
+    /// unasked.
     pub async fn market_search(
         &self,
         app_id: u32,
         foil: bool,
     ) -> anyhow::Result<Market<Vec<Listed>>> {
-        let who = self.web_login(false).await?;
+        let who = match self.web_login(false).await {
+            Ok(who) => who,
+            Err(e) => return Ok(Market::Unanswered(e.to_string())),
+        };
         let mut listed: Vec<Listed> = Vec::new();
         let mut start = 0;
         for _ in 0..MAX_SET_PAGES {
@@ -397,6 +401,7 @@ impl Session {
             {
                 Market::Answer(reply) => reply,
                 Market::Paused(pause) => return Ok(Market::Paused(pause)),
+                Market::Unanswered(why) => return Ok(Market::Unanswered(why)),
             };
             let page = market::read_search(&reply.body)?;
             let read = u32::try_from(page.listed.len()).unwrap_or(u32::MAX);
@@ -423,7 +428,10 @@ impl Session {
     /// some sessions (research §1.1, D5).
     pub async fn order_book(&self, market_hash_name: &str) -> anyhow::Result<Market<OrderBook>> {
         let path = market::orderbook_path(market_hash_name);
-        let who = self.web_login(false).await?;
+        let who = match self.web_login(false).await {
+            Ok(who) => who,
+            Err(e) => return Ok(Market::Unanswered(e.to_string())),
+        };
         let signed_in = self
             .market
             .send(true, || {
@@ -432,6 +440,7 @@ impl Session {
             .await?;
         let reply = match signed_in {
             Market::Paused(pause) => return Ok(Market::Paused(pause)),
+            Market::Unanswered(why) => return Ok(Market::Unanswered(why)),
             Market::Answer(reply) if !reply.html => reply,
             Market::Answer(_) => {
                 self.log
@@ -445,6 +454,7 @@ impl Session {
                 {
                     Market::Answer(reply) => reply,
                     Market::Paused(pause) => return Ok(Market::Paused(pause)),
+                    Market::Unanswered(why) => return Ok(Market::Unanswered(why)),
                 }
             }
         };

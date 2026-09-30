@@ -142,11 +142,21 @@ async fn the_farming_game_is_priced_first_then_the_others_in_order() {
     player.is_shown(&[HEAVY_RAIN, HADES, CELESTE]);
     player.starts_farming();
 
-    let all = player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    let all = player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     assert_eq!(
         all.message,
         "Prices: all 3 games looked up; the next round is in 6h."
+    );
+    assert_eq!(
+        all.kind,
+        MarketEventKind::AllPriced {
+            games: 3,
+            next_round: Some(after(test_support::session_start(), 6 * HOUR)),
+        },
+        "what the screens write their own line from: \"the next round is at 15:14\""
     );
     assert_eq!(
         player.market.looked_up(),
@@ -180,7 +190,9 @@ async fn prices_are_looked_up_again_once_they_are_six_hours_old() {
     let mut player = Player::new();
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
-    player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     player.waits(6 * HOUR - MINUTE).await;
     assert_eq!(player.market.looked_up().len(), 2, "still fresh");
@@ -196,7 +208,9 @@ async fn a_game_that_starts_to_matter_is_priced_within_moments() {
     let mut player = Player::new();
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
-    player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     // A card dropped for Hades: it's shown near the top now.
     player.is_shown(&[HEAVY_RAIN, HADES]);
@@ -218,7 +232,9 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
     let mut player = Player::new();
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
-    player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     player.waits(30 * MINUTE).await;
     (player.refresh)(HEAVY_RAIN).await.unwrap().unwrap();
@@ -272,7 +288,9 @@ async fn lookups_wait_while_steam_has_paused_them() {
         resumed.message,
         "Steam's pause on price lookups is over: they carry on."
     );
-    player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     assert_eq!(
         player.market.turned_down(),
@@ -303,7 +321,9 @@ async fn a_pause_from_before_a_restart_is_waited_out() {
         paused.message,
         "Steam turned down a price lookup: lookups wait 40 minutes. Farming carries on."
     );
-    player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
 
     assert!(player.market.turned_down().is_empty(), "nothing was asked");
     assert_eq!(player.market.set_lookups()[0].at, after(start, 40 * MINUTE));
@@ -326,7 +346,7 @@ async fn a_pause_that_outlasts_the_clock_after_a_sleep_is_told_once() {
     player.starts_farming();
 
     let lines = player
-        .reads_up_to(|k| *k == MarketEventKind::AllPriced)
+        .reads_up_to(|k| matches!(k, MarketEventKind::AllPriced { .. }))
         .await;
 
     let kinds: Vec<&MarketEventKind> = lines.iter().map(|l| &l.kind).collect();
@@ -336,7 +356,7 @@ async fn a_pause_that_outlasts_the_clock_after_a_sleep_is_told_once() {
             [
                 MarketEventKind::Paused(_),
                 MarketEventKind::Resumed,
-                MarketEventKind::AllPriced
+                MarketEventKind::AllPriced { .. }
             ]
         ),
         "the pause told once: {kinds:?}"
@@ -365,7 +385,9 @@ async fn a_lookup_whose_answer_cant_be_used_is_tried_again_a_day_later() {
         "Couldn't look up the prices of app 1145360's cards: steamcommunity.com's market said \
          502 Bad Gateway, twice. They're tried again in 24 hours."
     );
-    let all = player.reads(|k| *k == MarketEventKind::AllPriced).await;
+    let all = player
+        .reads(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
     assert_eq!(
         all.message,
         "Prices: all 2 games looked up; the next round is in 6h."
@@ -389,6 +411,82 @@ async fn a_lookup_whose_answer_cant_be_used_is_tried_again_a_day_later() {
     assert_eq!(hades(&player), 1, "not before a day has passed");
     player.waits(2 * HOUR).await;
     assert_eq!(hades(&player), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_market_that_cant_be_asked_is_asked_again_soon_and_nothing_is_failed() {
+    let mut player = Player::new();
+    let start = player.now();
+    player
+        .market
+        .cant_be_asked(3, "couldn't sign on to Steam: no network");
+    player.is_shown(&[CELESTE, HADES]);
+    player.starts_farming();
+
+    let lines = player
+        .reads_up_to(|k| matches!(k, MarketEventKind::AllPriced { .. }))
+        .await;
+
+    let waits: Vec<&str> = lines
+        .iter()
+        .filter(|l| matches!(l.kind, MarketEventKind::Unanswered { .. }))
+        .map(|l| l.message.as_str())
+        .collect();
+    assert_eq!(
+        waits,
+        [
+            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in a minute.",
+            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in 2 minutes.",
+            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in 4 minutes.",
+        ],
+        "sooner than a day, and never over and over"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|l| matches!(l.kind, MarketEventKind::Failed(_))),
+        "nothing failed"
+    );
+    assert_eq!(
+        player.market.set_lookups()[0],
+        test_support::SetLookup {
+            app_id: CELESTE,
+            foil: false,
+            at: after(start, 7 * MINUTE),
+        },
+        "the same game first, once the market could be asked"
+    );
+    assert_eq!(player.listed_at(HADES, "Nyx", false), Some(9));
+}
+
+#[tokio::test(start_paused = true)]
+async fn prices_from_before_stay_while_the_market_cant_be_asked() {
+    let player = Player::new();
+    let eight_hours_ago = player.now() - TimeDelta::hours(8);
+    player.market.knows(vec![test_support::set_prices(
+        CELESTE,
+        &[("Badeline", 6)],
+        &[],
+        eight_hours_ago,
+    )]);
+    player.market.cant_be_asked(2, "no network");
+
+    let refreshed = (player.refresh)(CELESTE).await.unwrap();
+    let offers = (player.offers)(vec!["504230-Badeline".into()])
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed, Err(MarketError::Unanswered));
+    assert_eq!(offers, Err(MarketError::Unanswered));
+    assert_eq!(
+        player.listed_at(CELESTE, "Badeline", false),
+        Some(6),
+        "stale, and still shown"
+    );
+    assert!(
+        (player.prices)().offers.is_empty(),
+        "no order book taken as failed"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -443,7 +541,7 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
         "each card once"
     );
     let book = (player.prices)();
-    assert_eq!(book.offers["1145360-Zagreus"], Price::NoMarket);
+    assert_eq!(book.offers["1145360-Zagreus"].price, Price::NoMarket);
     let madison = HeldCard {
         market_hash_name: Some("960910-Madison".into()),
         ..HeldCard::named(HEAVY_RAIN, "Madison", false)
@@ -474,6 +572,33 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
         .unwrap()
         .unwrap();
     assert_eq!(player.market.offer_lookups().len(), 3, "half an hour old");
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_order_book_nobody_is_on_is_looked_up_again_only_after_half_an_hour() {
+    let player = Player::new();
+
+    (player.offers)(vec!["1145360-Zagreus".into()])
+        .await
+        .unwrap()
+        .unwrap();
+    player.waits(29 * MINUTE).await;
+    (player.offers)(vec!["1145360-Zagreus".into()])
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        player.market.offer_lookups().len(),
+        1,
+        "nobody buying or selling is an answer too"
+    );
+
+    player.waits(2 * MINUTE).await;
+    (player.offers)(vec!["1145360-Zagreus".into()])
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(player.market.offer_lookups().len(), 2);
 }
 
 #[tokio::test(start_paused = true)]

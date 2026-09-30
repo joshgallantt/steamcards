@@ -107,10 +107,12 @@ the data layer's concern.
 
 The market's valuations are functions of what's known: `value_of(price,
 basis, wallet)`, `held_value(cards, unidentified, book, basis, wallet, now)`,
-`expected_per_drop(set, basis, wallet)`, `value_left(library, book, basis,
-wallet)` and `on_completion(held, left)`. A card that isn't priced never
-counts as nothing, fees come off card by card, and on the instant basis,
-cards still to drop are valued after fees and say so.
+`expected_per_drop(set, basis, wallet)`, `value_left(library, order, book,
+basis, wallet)` and `on_completion(held, left)`. A card that isn't priced
+never counts as nothing, fees come off card by card, what's left to drop is
+counted over the farm order (games never farmed drop nothing) and rounded
+once for each game, and on the instant basis, cards still to drop are
+valued after fees and say so.
 
 ### Use cases
 
@@ -136,7 +138,7 @@ constructor builds the real one over the repositories. Call sites read
 | | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | market | `GetPrices` (`get_prices`) | The price book now. |
 | | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
-| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause; reports `MarketEvent`s. |
+| | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `MarketEvent`s. |
 | | `RefreshPrices` (`refresh_prices`) | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
 | | `PriceOffers` (`price_offers`) | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
 | | `GetWallet` (`get_wallet`) | The wallet, once Steam has said. |

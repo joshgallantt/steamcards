@@ -15,7 +15,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 
 use crate::{
     Clock, Currency, GetPrices, Lookup, MarketPause, MarketRepository, MarketSettings, Money,
-    Price, PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
+    Offers, Price, PriceBook, PriceQuote, PricedCard, QuoteSource, SetPrices, Wallet,
 };
 
 /// Tuesday 29 September 2026, 09:14: when the session in the design's
@@ -136,6 +136,8 @@ pub struct InMemoryMarketRepository {
     books: Mutex<HashMap<String, (i64, i64)>>,
     /// Games whose lookups get an answer that can't be used.
     failing: Mutex<HashSet<u32>>,
+    /// How many more lookups can't reach the market, and why.
+    unreachable: Mutex<Option<(u32, String)>>,
     pause: Mutex<Option<MarketPause>>,
     /// How many more lookups Steam turns down.
     turn_down: AtomicU32,
@@ -162,6 +164,7 @@ impl InMemoryMarketRepository {
             listed: Mutex::default(),
             books: Mutex::default(),
             failing: Mutex::default(),
+            unreachable: Mutex::default(),
             pause: Mutex::default(),
             turn_down: AtomicU32::new(0),
             held: AtomicU32::new(0),
@@ -200,6 +203,12 @@ impl InMemoryMarketRepository {
     /// Lookups of `app_id`'s set get an answer that can't be used.
     pub fn fails(&self, app_id: u32) {
         self.failing.lock().unwrap().insert(app_id);
+    }
+
+    /// The next `times` lookups can't reach the market, for this reason: no
+    /// sign-in, no network.
+    pub fn cant_be_asked(&self, times: u32, why: &str) {
+        *self.unreachable.lock().unwrap() = Some((times, why.to_owned()));
     }
 
     /// Steam has paused lookups, as a real market kept it from before.
@@ -263,6 +272,14 @@ impl InMemoryMarketRepository {
         self.turned_down.lock().unwrap().clone()
     }
 
+    /// Why a lookup can't reach the market now, if it can't.
+    fn unreachable(&self) -> Option<String> {
+        let mut unreachable = self.unreachable.lock().unwrap();
+        let (left, why) = unreachable.as_mut().filter(|(left, _)| *left > 0)?;
+        *left -= 1;
+        Some(why.clone())
+    }
+
     /// Whether a lookup may go now, as Steam's market queue decides: the
     /// pause if not.
     fn queue(&self) -> Option<MarketPause> {
@@ -308,10 +325,10 @@ impl MarketRepository for InMemoryMarketRepository {
         self.knows(vec![set]);
     }
 
-    fn keep_offers(&self, market_hash_name: &str, price: Price) {
+    fn keep_offers(&self, market_hash_name: &str, offers: Offers) {
         let mut book = self.book.lock().unwrap();
         let mut next = PriceBook::clone(&book);
-        next.offers.insert(market_hash_name.to_owned(), price);
+        next.offers.insert(market_hash_name.to_owned(), offers);
         *book = Arc::new(next);
     }
 
@@ -320,6 +337,9 @@ impl MarketRepository for InMemoryMarketRepository {
         app_id: u32,
         foil: bool,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
+        if let Some(why) = self.unreachable() {
+            return Ok(Lookup::Unanswered(why));
+        }
         if let Some(pause) = self.queue() {
             return Ok(Lookup::Paused(pause));
         }
@@ -348,6 +368,9 @@ impl MarketRepository for InMemoryMarketRepository {
     }
 
     async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
+        if let Some(why) = self.unreachable() {
+            return Ok(Lookup::Unanswered(why));
+        }
         if let Some(pause) = self.queue() {
             return Ok(Lookup::Paused(pause));
         }

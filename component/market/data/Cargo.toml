@@ -18,11 +18,11 @@ steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 debug-log.workspace = true
 serde_json.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
-tokio.workspace = true
 tokio-util.workspace = true
 wiremock.workspace = true

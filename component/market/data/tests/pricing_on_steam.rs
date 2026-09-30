@@ -14,7 +14,7 @@ use market::{
 };
 use market_data::SteamMarketRepository;
 use steam_api::{
-    Session,
+    EResult, Session,
     market::MarketPace,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
@@ -176,9 +176,10 @@ async fn a_sets_cards_are_priced_in_the_wallets_currency() {
         Some(Money::new(7, Currency::USD)),
         "in dollars: shown so, and never converted"
     );
-    assert!(
-        matches!(price("Scott").unwrap(), Price::Failed { .. }),
-        "in neither: not used"
+    assert_eq!(
+        ask(&price("Scott").unwrap()),
+        Some(Money::new(4, Currency::EUR)),
+        "in euros: shown as it came, never counted with pounds"
     );
     assert_eq!(price("Ethan").unwrap(), Price::NoMarket, "nobody selling");
     assert_eq!(price("Carter"), None, "a foil isn't a normal card");
@@ -191,7 +192,7 @@ async fn a_sets_cards_are_priced_in_the_wallets_currency() {
 }
 
 #[tokio::test]
-async fn before_steam_says_the_wallets_currency_prices_are_read_as_dollars() {
+async fn until_steam_says_the_wallets_currency_prices_wait() {
     let steam = FakeSteam::start().await;
     let site = MockServer::start().await;
     lists(
@@ -203,37 +204,55 @@ async fn before_steam_says_the_wallets_currency_prices_are_read_as_dollars() {
             &[(
                 "Chell (Foil)",
                 29,
-                "$0.29",
+                "£0.29",
                 64,
                 "Portal 2 Foil Trading Card",
             )],
         ),
     )
     .await;
-    let disk = Disk::new("dollars");
+    let disk = Disk::new("no-wallet-yet");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Found(cards) = market.look_up_set(620, true).await.unwrap() else {
-        panic!("not paused");
-    };
+    let looked_up = market.look_up_set(620, true).await.unwrap();
 
-    assert_eq!(cards[0].name, "Chell");
-    assert_eq!(cards[0].market_hash_name, "620-Chell (Foil)");
-    assert_eq!(ask(&cards[0].price), Some(Money::new(29, Currency::USD)));
+    assert_eq!(
+        looked_up,
+        Lookup::Unanswered("Steam hasn't said the wallet's currency yet".into()),
+        "a pound price isn't read as dollars"
+    );
     assert_eq!(market.wallet(), None, "Steam hasn't said");
+    assert!(
+        site.received_requests().await.unwrap().is_empty(),
+        "nor is the market asked"
+    );
 }
 
 #[tokio::test]
-async fn an_account_without_a_wallet_is_priced_in_dollars() {
+async fn an_account_without_a_wallet_has_its_prices_shown_as_they_come() {
     let steam = FakeSteam::start().await;
     steam.wallet_in(0);
     let site = MockServer::start().await;
+    lists(
+        &site,
+        620,
+        0,
+        listing(620, &[("Chell", 6, "£0.06", 40, "Portal 2 Trading Card")]),
+    )
+    .await;
     let disk = Disk::new("no-wallet");
-    let (market, session) = disk.market(&steam, &site);
+    let (market, _) = disk.market(&steam, &site);
 
-    session.connection().await.unwrap();
+    let Lookup::Found(cards) = market.look_up_set(620, false).await.unwrap() else {
+        panic!("found");
+    };
 
     assert_eq!(market.wallet(), Some(Wallet::new(Currency::USD)));
+    assert_eq!(
+        ask(&cards[0].price),
+        Some(Money::new(6, Currency::GBP)),
+        "in pounds, as it came: never counted with dollars"
+    );
 }
 
 #[tokio::test]
@@ -280,6 +299,7 @@ async fn an_order_book_is_priced_as_its_listing_and_its_offer() {
 #[tokio::test]
 async fn steams_pause_is_kept_across_a_restart() {
     let steam = FakeSteam::start().await;
+    steam.wallet_in(2);
     let site = MockServer::start().await;
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(429))
@@ -309,6 +329,38 @@ async fn steams_pause_is_kept_across_a_restart() {
         1,
         "nothing asked during the pause, before or after the restart"
     );
+}
+
+#[tokio::test]
+async fn a_market_that_cant_be_asked_marks_no_price_failed() {
+    let steam = FakeSteam::start().await;
+    steam.refuse_logon(EResult::TRY_ANOTHER_CM);
+    let site = MockServer::start().await;
+    let disk = Disk::new("cant-ask");
+    let (market, _) = disk.market(&steam, &site);
+    let market = Arc::new(market);
+    want_prices(market.clone())(vec![960_910, 1_145_360, 620]);
+    let (tx, mut rx) = mpsc::channel(16);
+    let token = CancellationToken::new();
+
+    let watching = watch_prices(market.clone(), system_clock())(token.clone(), tx);
+    let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    token.cancel();
+    watching.await.unwrap();
+
+    assert!(
+        !matches!(event.kind, MarketEventKind::Failed(_)),
+        "{}",
+        event.message
+    );
+    assert!(
+        market.book().sets.is_empty(),
+        "nothing to show as failed for a day"
+    );
+    assert!(site.received_requests().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -408,7 +460,10 @@ async fn the_market_is_priced_end_to_end() {
     token.cancel();
     watching.await.unwrap();
 
-    assert_eq!(event.kind, MarketEventKind::AllPriced);
+    assert!(matches!(
+        event.kind,
+        MarketEventKind::AllPriced { games: 1, .. }
+    ));
     let heavy_rain = &market.book().sets[&960_910];
     assert_eq!(
         ask(&heavy_rain.price("Madison", false)),

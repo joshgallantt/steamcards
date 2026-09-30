@@ -83,26 +83,21 @@ pub fn held_value(
 /// estimates built on this are "excl. foils". On the instant basis it's the
 /// value after fees (see [`Basis::still_to_drop`]).
 pub fn expected_per_drop(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Option<Money> {
-    let basis = basis.still_to_drop();
-    let values: Vec<i64> = set
-        .normal
-        .iter()
-        .filter_map(|card| value_of(&card.price, basis, wallet))
-        .map(|value| value.minor)
-        .collect();
-    let n = i64::try_from(values.len()).ok().filter(|&n| n > 0)?;
-    let sum = values.iter().try_fold(0i64, |sum, v| sum.checked_add(*v))?;
-    // The nearest hundredth, halves up.
-    let mean = (sum.checked_mul(2)? + n).div_euclid(2 * n);
-    Some(Money::new(mean, wallet.currency))
+    let (sum, n) = normal_values(set, basis, wallet)?;
+    Some(Money::new(nearest(sum, n)?, wallet.currency))
 }
 
-/// What the cards still to drop across the library are likely worth: each
-/// game's drops left times what a drop of it is worth. Games whose sets
-/// aren't priced are left out, and counted. On the instant basis, the cards
-/// still to drop are valued after fees, and the estimate says so.
+/// What the cards still to drop in the games farmed are likely worth: each
+/// game's drops left times what a drop of it is worth, rounded once for the
+/// game, not for each drop. `order` is the farm order, as farming's own
+/// forecast takes it: a game not in it (skipped, a sale's badge, not a
+/// priority with "only priority" on) isn't farmed, so drops nothing. Games
+/// whose sets aren't priced are left out, and counted. On the instant
+/// basis, the cards still to drop are valued after fees, and the estimate
+/// says so.
 pub fn value_left(
     library: &SteamLibrary,
+    order: &[u32],
     book: &PriceBook,
     basis: Basis,
     wallet: &Wallet,
@@ -113,19 +108,43 @@ pub fn value_left(
         unpriced_games: 0,
         basis: basis.still_to_drop(),
     };
-    for game in library.with_drops_left() {
+    let farmed = order
+        .iter()
+        .filter_map(|&id| library.game(id))
+        .filter(|g| g.has_drops_left());
+    for game in farmed {
         let value = book
             .sets
             .get(&game.app_id)
-            .and_then(|set| expected_per_drop(set, basis, wallet))
-            .and_then(|each| each.times(game.drops.remaining))
-            .and_then(|value| left.value.checked_add(value));
+            .and_then(|set| normal_values(set, basis, wallet))
+            .and_then(|(sum, n)| nearest(sum.checked_mul(i64::from(game.drops.remaining))?, n))
+            .and_then(|minor| left.value.checked_add(Money::new(minor, wallet.currency)));
         match value {
             Some(value) => left.value = value,
             None => left.unpriced_games += 1,
         }
     }
     left
+}
+
+/// A set's normal cards that have a value on `basis`, each valued on its
+/// own: the sum, and how many there are. On the instant basis, after fees.
+fn normal_values(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Option<(i64, i64)> {
+    let basis = basis.still_to_drop();
+    let values: Vec<i64> = set
+        .normal
+        .iter()
+        .filter_map(|card| value_of(&card.price, basis, wallet))
+        .map(|value| value.minor)
+        .collect();
+    let n = i64::try_from(values.len()).ok().filter(|&n| n > 0)?;
+    let sum = values.iter().try_fold(0i64, |sum, v| sum.checked_add(*v))?;
+    Some((sum, n))
+}
+
+/// `sum / n` to the nearest whole hundredth, halves up.
+fn nearest(sum: i64, n: i64) -> Option<i64> {
+    Some((sum.checked_mul(2)? + n).div_euclid(2 * n))
 }
 
 /// The value once every card has dropped: what's held now, and what's still
@@ -289,21 +308,55 @@ mod tests {
 
     #[test]
     fn whats_left_to_drop_is_each_games_drops_left_times_a_drop() {
-        let library = SteamLibrary::new(vec![game(10, 3), game(20, 2), game(30, 4), game(40, 0)]);
+        let library = SteamLibrary::new(vec![
+            game(10, 3),
+            game(20, 2),
+            game(30, 4),
+            game(40, 0),
+            game(50, 2),
+        ]);
         let mut book = PriceBook::default();
         book.sets.insert(10, set(10, &[5, 5]));
         book.sets.insert(20, set(20, &[8]));
         book.sets.insert(40, set(40, &[100]));
+        // Game 50 is skipped: not in the farm order.
+        let order = [10, 20, 30, 40];
 
-        let left = value_left(&library, &book, Basis::List, &pounds());
+        let left = value_left(&library, &order, &book, Basis::List, &pounds());
 
         assert_eq!(left.value, Money::new(3 * 5 + 2 * 8, Currency::GBP));
-        assert_eq!(left.unpriced_games, 1, "game 30 isn't priced");
+        assert_eq!(
+            left.unpriced_games, 1,
+            "game 30 isn't priced; game 50, never farmed, never is"
+        );
         assert!(left.excl_foils);
         assert_eq!(left.basis, Basis::List);
-        let instant = value_left(&library, &book, Basis::Instant, &pounds());
+        let instant = value_left(&library, &order, &book, Basis::Instant, &pounds());
         assert_eq!(instant.basis, Basis::Net, "cards to drop stay after fees");
         assert_eq!(instant.value, Money::new(3 * 3 + 2 * 6, Currency::GBP));
+    }
+
+    #[test]
+    fn whats_left_is_rounded_once_for_each_game_not_for_each_drop() {
+        // Half-Life 2's net values, 11.75¢ a drop: 4 drops are 47¢, and 10
+        // are 117.5¢, not 4 or 10 of a drop rounded to 12¢.
+        let hl2 = set_in(Currency::USD, 220, &[13, 13, 14, 14, 12, 14, 16, 14]);
+        let dollars = Wallet::new(Currency::USD);
+        let mut book = PriceBook::default();
+        book.sets.insert(220, hl2);
+        let left = |remaining| {
+            value_left(
+                &SteamLibrary::new(vec![game(220, remaining)]),
+                &[220],
+                &book,
+                Basis::Net,
+                &dollars,
+            )
+            .value
+            .minor
+        };
+        assert_eq!(left(4), 47);
+        assert_eq!(left(10), 118, "117.5¢, halves up");
     }
 
     #[test]

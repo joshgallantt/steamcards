@@ -14,7 +14,7 @@ use std::{
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    Session,
+    EResult, Session,
     cm::WalletInfo,
     market::{Listed, Market, MarketPace, OrderBook},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
@@ -341,6 +341,22 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
 }
 
 #[tokio::test]
+async fn without_a_sign_in_the_market_goes_unasked() {
+    let steam = FakeSteam::start().await;
+    steam.refuse_logon(EResult::TRY_ANOTHER_CM);
+    let site = MockServer::start().await;
+    let session = signed_in(&steam, &site, "unasked");
+
+    let answer = session.market_search(620, false).await.unwrap();
+
+    assert!(
+        matches!(&answer, Market::Unanswered(why) if why.contains("TryAnotherCM")),
+        "{answer:?}"
+    );
+    assert!(site.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn a_pause_from_before_a_restart_is_kept() {
     let steam = FakeSteam::start().await;
     let site = MockServer::start().await;
@@ -369,11 +385,12 @@ async fn a_server_error_is_asked_once_more_then_reported() {
         .await;
     let session = signed_in(&steam, &site, "server-error");
 
-    let e = session.market_search(620, false).await.unwrap_err();
+    let answer = session.market_search(620, false).await.unwrap();
 
     assert_eq!(
-        e.to_string(),
-        "steamcommunity.com's market said 502 Bad Gateway, twice"
+        answer,
+        Market::Unanswered("steamcommunity.com's market said 502 Bad Gateway, twice".into()),
+        "no answer: nothing wrong with the cards asked for"
     );
     assert_eq!(site.received_requests().await.unwrap().len(), 2);
     assert_eq!(session.market_pause(), None, "not a pause");

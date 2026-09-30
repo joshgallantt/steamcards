@@ -9,8 +9,8 @@ use library::{
     test_support::{card_asset, game},
 };
 use market::{
-    Basis, Currency, HeldCard, Money, Price, PriceBook, SetPrices, expected_per_drop, held_value,
-    on_completion,
+    Basis, Currency, HeldCard, Money, Offers, Price, PriceBook, SetPrices, expected_per_drop,
+    held_value, on_completion,
     test_support::{order_book, pounds, session_start, set_prices},
     value_left,
 };
@@ -98,14 +98,23 @@ fn the_book() -> PriceBook {
         ("557600-The Boy", 4, 3),
         ("960910-Madison", 5, 4),
     ];
+    let looked_up_at = now() - TimeDelta::minutes(5);
     for (hash, ask, bid) in offers {
         book.offers.insert(
             hash.into(),
-            order_book(ask, bid, now() - TimeDelta::minutes(5)),
+            Offers {
+                price: order_book(ask, bid, looked_up_at),
+                looked_up_at,
+            },
         );
     }
-    book.offers
-        .insert("557600-The Fruit".into(), Price::NoMarket);
+    book.offers.insert(
+        "557600-The Fruit".into(),
+        Offers {
+            price: Price::NoMarket,
+            looked_up_at,
+        },
+    );
     book
 }
 
@@ -319,7 +328,9 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
         game(HADES, 12.0, 4, 0),
     ]);
 
-    let left = value_left(&library, &book, Basis::List, &pounds());
+    let order = [HEAVY_RAIN, 367_380, 457_140, 1_966_720];
+
+    let left = value_left(&library, &order, &book, Basis::List, &pounds());
 
     assert_eq!(
         left.value.to_string(),
@@ -347,7 +358,7 @@ fn on_the_instant_basis_cards_still_to_drop_stay_after_fees() {
     let book = the_book();
     let library = SteamLibrary::new(vec![game(HEAVY_RAIN, 4.0, 3, 1)]);
 
-    let left = value_left(&library, &book, Basis::Instant, &pounds());
+    let left = value_left(&library, &[HEAVY_RAIN], &book, Basis::Instant, &pounds());
 
     assert_eq!(left.basis, Basis::Net, "and the estimate says so");
     assert_eq!(
