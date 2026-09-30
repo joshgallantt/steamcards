@@ -1,7 +1,11 @@
-//! The farming domain's contract, satisfied by Steam: games to play in, a CM
-//! session playing them, and what Steam says back out. Imports `farming`
-//! because the contract is declared there; `farming` imports nothing back.
+//! The farming domain's contract, satisfied by Steam: the repository plays
+//! through a client, keeping the computer awake meanwhile, and the client is
+//! Steam's: games to play in, a CM session playing them, and what Steam says
+//! back out. Imports `farming` because the contract is declared there;
+//! `farming` imports nothing back.
 
-mod play;
+mod default_farming_repository;
+mod farming_client;
 
-pub use play::SteamFarmingRepository;
+pub use default_farming_repository::DefaultFarmingRepository;
+pub use farming_client::{FarmingClient, SteamFarmingClient};

@@ -6,9 +6,8 @@ use std::{
 use async_trait::async_trait;
 use card::AssetId;
 use chrono::DateTime;
-use farming::{FarmingRepository, Signal};
+use farming::Signal;
 use game::AppId;
-use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
@@ -16,14 +15,33 @@ use steam_api::{
 };
 use tokio::sync::broadcast;
 
+/// Steam's side of farming: what's played, and what Steam says back.
+#[async_trait]
+pub trait FarmingClient: Send + Sync {
+    /// Tells Steam these games are played, and whether to show online.
+    /// While another device plays, it's told nothing: see `blocked`.
+    async fn play(&self, app_ids: &[AppId], online: bool) -> anyhow::Result<()>;
+
+    /// Signs on to hear what Steam says, playing nothing.
+    async fn listen(&self) -> anyhow::Result<()>;
+
+    /// Stops playing, and signs off.
+    async fn stop(&self);
+
+    /// Whether another device is playing, and its game when Steam says:
+    /// `None` when none is.
+    fn blocked(&self) -> Option<Option<AppId>>;
+
+    /// What Steam says next.
+    async fn next_signal(&self) -> Signal;
+}
+
 /// Playing games on the Steam session's CM connection, as the Steam client
 /// does: nothing is launched, Steam is told what's being played. While
 /// another device plays, nothing is: Steam signs off a session that says
-/// it's playing then. While anything is to be played, the computer is kept
-/// awake.
-pub struct SteamFarmingRepository {
+/// it's playing then.
+pub struct SteamFarmingClient {
     steam: Arc<SteamClient>,
-    awake: Arc<KeepAwake>,
     /// The connection being played on, and what it was last told: a
     /// connection that went is replaced, and the new one told afresh.
     on: Mutex<Option<Played>>,
@@ -84,11 +102,10 @@ impl Heard {
     }
 }
 
-impl SteamFarmingRepository {
-    pub fn new(steam: Arc<SteamClient>, awake: Arc<KeepAwake>) -> Self {
+impl SteamFarmingClient {
+    pub fn new(steam: Arc<SteamClient>) -> Self {
         Self {
             steam,
-            awake,
             on: Mutex::default(),
             news: tokio::sync::Mutex::default(),
             heard: Mutex::default(),
@@ -148,7 +165,7 @@ impl SteamFarmingRepository {
 }
 
 #[async_trait]
-impl FarmingRepository for SteamFarmingRepository {
+impl FarmingClient for SteamFarmingClient {
     async fn play(&self, app_ids: &[AppId], online: bool) -> anyhow::Result<()> {
         let (conn, told, was_online) = self.take_up().await?;
         if online != was_online {
@@ -171,11 +188,6 @@ impl FarmingRepository for SteamFarmingRepository {
             games,
             online,
         });
-        if app_ids.is_empty() {
-            self.awake.let_sleep();
-        } else {
-            self.awake.hold();
-        }
         Ok(())
     }
 
@@ -189,7 +201,6 @@ impl FarmingRepository for SteamFarmingRepository {
             let _ = p.conn.play(&[]);
         }
         *self.news.lock().await = None;
-        self.awake.let_sleep();
         self.steam.disconnect().await;
     }
 

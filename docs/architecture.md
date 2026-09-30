@@ -233,7 +233,7 @@ cards joins the two.
 | `GameRepository` | `game` | `DefaultGameRepository` in `game-data`, through a `SteamGameClient` |
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
-| `FarmingRepository` | `farming` | `SteamFarmingRepository` in `farming-data` |
+| `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient`, keeping the computer awake while anything plays |
 | `PriceRepository` | `price` | `SteamPriceRepository` in `price-data` |
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,

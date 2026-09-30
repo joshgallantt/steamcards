@@ -1,6 +1,6 @@
 [package]
 name = "farming-data"
-description = "Playing games on Steam's CM servers, keeping the computer awake meanwhile, and hearing of the new items Steam announces, written to fit the farming domain's FarmingRepository."
+description = "Playing games on Steam's CM servers through a client of its own, keeping the computer awake meanwhile, and hearing of the new items Steam announces, written to fit the farming domain's FarmingRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
