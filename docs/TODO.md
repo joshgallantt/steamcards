@@ -34,7 +34,8 @@ done, and move it into a numbered section if it grows.
       `systemd-inhibit` on Linux, let go when there's nothing to farm
       (2026-09-29).
 - [x] First real run (2026-09-29): signed in with the Steam app, signed on
-      with the saved sign-in, read the badges and started farming. A first run's debug log couldn't open before the config's
+      with the saved sign-in, read the badges and started farming. A first
+      run's debug log couldn't open before the config's
       folder existed; fixed.
 - [ ] Keeping awake as a setting, for anyone who'd rather it didn't.
 - [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
@@ -128,11 +129,32 @@ done, and move it into a numbered section if it grows.
       a Homebrew formula in the repository as its own tap, the release
       workflow and `cargo xtask release`, CI on every push and pull request,
       Dependabot, and rulesets for `main` and tags (2026-09-30).
+- [x] Nothing personal in the history (2026-09-30): no account names,
+      local paths or details of a real account. The history was rewritten
+      and the GitHub repository recreated from it, so no old copy is left.
+      Keep it that way: made-up names in tests, fixtures, docs and
+      screenshots, and check a debug log before quoting it.
+- [ ] CI on GitHub: Actions won't start jobs until the account's billing
+      is sorted (Settings → Billing and plans). Once public, they run free.
+
+### Going public
+
+In this order, on the day:
+
+- [ ] Check the history once more: `git log --all -p` for anything
+      personal. Rewriting it is only simple before anyone has cloned it.
+- [ ] Make the repository public (Settings → General → Danger zone).
+- [ ] Turn on private vulnerability reporting, which the security policy's
+      "Report a vulnerability" link needs:
+      `gh api -X PUT repos/joshgallantt/steamcards/private-vulnerability-reporting`.
+- [ ] `cargo xtask protect`: the rulesets for `main` and tags. GitHub applies
+      them to a private repository only with GitHub Pro.
 - [ ] The first release, v0.1.0: `cargo xtask release 0.1.0`. It fills in
-      the Homebrew formula's checksums.
-- [ ] Make the repository public, then `cargo xtask protect`: GitHub applies
-      rulesets to a private repository only with GitHub Pro, and the install
-      lines work for nobody else until it's public.
+      the Homebrew formula's checksums, and the release workflow installs
+      and uninstalls it with the one-liners to check them.
+- [ ] Take the "hasn't had its first release yet" paragraph out of the
+      README's Install section, and check the README's screenshots show on
+      GitHub.
 
 ## 7. The redesign `[~]`
 
@@ -167,7 +189,8 @@ done, and move it into a numbered section if it grows.
       numbered from the account's counts, the market's failures are told
       from a market it couldn't ask, and another account's sign-in ends
       the session.
-- [~] Try it on the real account (2026-09-30). The wallet's currency came through, prices are looked up at the intended pace, and Steam lists
+- [~] Try it on the real account (2026-09-30). The wallet's currency came
+      through, prices are looked up at the intended pace, and Steam lists
       unseen card drops with their asset IDs and games (research §6,
       question 1, answered). With nothing unseen it doesn't answer at
       all, which misfiled the first drop; fixed. Still to see: prices in
