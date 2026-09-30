@@ -46,10 +46,7 @@ impl PresentationAssembler {
                 d.market.want.clone(),
                 d.market.watch.clone(),
                 d.market.refresh.clone(),
-                d.market.offers.clone(),
                 d.market.wallet.clone(),
-                d.market.settings.clone(),
-                d.market.set_basis.clone(),
             ),
         )
     }

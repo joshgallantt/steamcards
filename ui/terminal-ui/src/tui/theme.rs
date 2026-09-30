@@ -15,6 +15,23 @@ pub(super) const DIM: Color = Color::DarkGray;
 
 pub(super) const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+/// Played on its own: its cards are dropping.
+pub(super) const FARMING: &str = "▶";
+/// Played with others, building hours.
+pub(super) const HOURS: &str = "▷";
+pub(super) const SIGNED_IN: &str = "●";
+pub(super) const IDLE: &str = "○";
+pub(super) const FAILED: &str = "✕";
+pub(super) const PAUSED: &str = "‖";
+pub(super) const DONE: &str = "✓";
+pub(super) const SKIPPED: &str = "✕";
+pub(super) const RADIO_ON: &str = "◉";
+pub(super) const RADIO_OFF: &str = "○";
+
+pub(super) fn plain() -> Style {
+    Style::new()
+}
+
 pub(super) fn dim() -> Style {
     Style::new().fg(DIM)
 }

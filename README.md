@@ -30,7 +30,12 @@ played, the way the Steam client tells it.
   `systemd-inhibit` on Linux), and lets it sleep when there's nothing to
   farm. The screen can still turn off. A closed laptop lid still sleeps
   unless it's plugged into a display.
-- **Every game with cards in one list,** with its hours, drops and card set.
+- **See what you've got, and what it's worth.** The cards that dropped this
+  session, each at its Steam market price; how many are left, and about how
+  long they'll take; and what it'll all be worth when every card has dropped.
+- **Every game with cards in one list,** with its drops and what they're
+  worth. Open one to see its set: how many of each card you have (a card can
+  drop twice), and what each is worth.
 - **macOS and Linux.**
 
 ## Install

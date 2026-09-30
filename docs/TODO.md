@@ -130,8 +130,7 @@ done, and move it into a numbered section if it grows.
       completion estimates come from, and what quick-sell will need:
       [docs/research/market-and-session.md](research/market-and-session.md).
 - [x] Design: five designs from different angles, judged, and one spec
-      made from them (`docs/design/ui.md`). Its questions for you (§9)
-      are still open; the screens can start from its defaults.
+      made from them. Built, then replaced by a simpler one (below).
 - [x] Domain first (2026-09-30): the farming session and its card drops,
       one drop per copy, each named where Steam or its card page can tell
       and numbered from the account's counts, and the time to finish
@@ -142,22 +141,15 @@ done, and move it into a numbered section if it grows.
       over the CM connection, set prices from the market at a polite pace
       (one queue, 5 s apart; Steam's pause and the prices outlast a
       restart), fee maths.
-- [x] The screens' foundations (2026-09-30): text that's never cut, the
-      spec's formats, the size classes and every region's ladder, the view
-      models, the spec's data set as fixtures, and golden tests that hold a
-      screen to its mockup. The market is in the app: the composition root
-      builds `MarketComponent`, with `prices.json` beside the config, and
-      the keys b, t, h and m.
-- [~] The new screens, drawn on the foundations, each held to its mockup,
-      and a check that nothing is cut off at any size (`docs/design/ui.md`,
-      §8). The dashboard (2026-09-30): every region, in every state, at
-      every size class, and each of its mockups held to the spec by a
-      golden test. Next, the sweep (§8.4) as a test, with its assertions.
-- [x] The pop-ups and onboarding (2026-09-30): the game's details, this
-      session's cards, the market, games & settings, the account, signing
-      in, the log, help and quitting, each over whole panels with what's
-      behind faded; the Start step sizing up the job; the Welcome whole at
-      60 × 16. Each mocked one held to its mockup.
+- [x] Screens, first go (2026-09-30): a large design, with a progress
+      panel, a track of the day, value bases, a market view and golden
+      tests. Stopped: "way too complex and confusing". It's in git history.
+- [x] Screens, simplified (2026-09-30): one dashboard, as picked: a
+      summary (this session, what's to go, every game, the value when
+      done), the games beside this session's cards, and a game's details
+      on enter, with a count and a price for each card. Market prices
+      only. Nothing cut off: every state tested at sizes from 60×16 to
+      240×70 ([docs/design/ui.md](design/ui.md)).
 - [x] Review the domain and data adversarially (2026-09-30): three
       reviewers, on fidelity to the spec, Steam's own behaviour and the
       engineering. Fixed: each drop is checked against its game's counts,

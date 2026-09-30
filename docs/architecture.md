@@ -220,24 +220,22 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 ### `terminal-ui`
 
 - **`viewmodel/`** turns use cases into screen state and keys into use case
-  calls. It depends on domain crates only. Each frame, a `Snapshot` of the
-  domain values (the farmer's status and forecast, the library, the price
-  book, the wallet and the basis, the account, the clock) builds the
-  screens' view models afresh: `Progress`, `Now`, `Queue`, `ChosenGame`,
-  `Haul`, `MarketView`, `AccountView`, the Start step's `Job`, and the
-  strip. `Market` runs the market's use cases: pricing in the background,
-  what's wanted first, and the order books the instant basis needs.
+  calls. It depends on domain crates only. `Summary` and the functions
+  beside it (`session_cards`, `value_to_come`, `card_price`) work out, each
+  frame, what the dashboard shows from the farmer's status and session and
+  the market's prices, using the market's own valuations. `Market` runs the
+  market's use cases: pricing in the background, the games wanted first,
+  and a game's set again when one of its cards drops.
 - **`tui/`** draws that state with ratatui and forwards keys. It holds no
-  business rule. `tui/text.rs` is how text reaches the screen: padded to
-  its area, wrapped whole, never cut, a test failing on anything wider;
-  `tui/format.rs` writes numbers, money and time as the spec does;
-  `tui/layout/` holds the size classes, every region's ladder, and where a
-  pop-up goes. `tui/dashboard.rs` puts the regions together at the window's
-  size class; `tui/popups/` draws each pop-up over whole panels and handles
-  its keys; `tui/onboarding.rs` draws the steps of getting set up.
-  `tui/golden.rs` holds each screen to its mockup in `docs/design/ui.md`,
-  and `tui/preview.rs` renders every screen into an in-memory terminal from
-  the spec's data set.
+  business rule. `tui/dashboard.rs` draws the header, the summary, the
+  games beside this session's cards, and the details pop-up's content;
+  `tui/overlays.rs` the pop-ups; `tui/onboarding.rs` the steps of getting
+  set up. Each piece of text comes in a few lengths and the longest that
+  fits is drawn; `widgets::fitted` fails a test on any line wider than its
+  area. `tui/preview.rs` renders every screen into an in-memory terminal
+  with the domain crates' test doubles, and sweeps every state across
+  sizes from 60×16 to 240×70. The design is in
+  [docs/design/ui.md](design/ui.md).
 
 ### `headless`
 

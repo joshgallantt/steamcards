@@ -1,10 +1,4 @@
-use std::time::Duration;
-
 use account::GetAccount;
-use farming::farm_order;
-use market::Basis;
-
-use super::screen::Snapshot;
 
 /// The steps of getting set up, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,53 +87,6 @@ impl Onboarding {
     }
 }
 
-/// What the Start step sizes up before farming begins (docs/design/ui.md,
-/// mockup o): who's signed in, the games picked, how friends see the games,
-/// the games and drops to farm in the order the farmer will take them, how
-/// long that should take at first, and how values are read.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Job {
-    /// The account's name, when signed in: empty when Steam didn't say it.
-    pub account: Option<String>,
-    /// The priority games, by name, in rank order.
-    pub picked: Vec<String>,
-    pub only_priority: bool,
-    pub appear_online: bool,
-    /// The games to farm and their drops; `None` until the library is read.
-    pub to_farm: Option<(usize, u32)>,
-    /// The time to finish, and the part of it building hours, as first
-    /// worked out: at 30 minutes a drop, until drops teach it better.
-    pub eta: Option<(Duration, Duration)>,
-    pub basis: Basis,
-}
-
-impl Job {
-    pub fn build(s: &Snapshot<'_>) -> Self {
-        let library = s.library();
-        let set_aside = s.status.map_or(&[][..], |st| st.set_aside.as_slice());
-        let order = farm_order(library, s.prefs, set_aside);
-        let drops = order
-            .iter()
-            .filter_map(|&id| library.game(id))
-            .map(|g| g.drops.remaining)
-            .sum();
-        Self {
-            account: s.account.map(|a| a.name.clone()),
-            picked: s
-                .prefs
-                .priority_games
-                .iter()
-                .map(|&id| s.name(id))
-                .collect(),
-            only_priority: s.prefs.only_priority,
-            appear_online: s.prefs.appear_online,
-            to_farm: (!library.is_empty()).then_some((order.len(), drops)),
-            eta: s.forecast.map(|f| (f.eta, f.hours_term)),
-            basis: s.basis,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::{
@@ -225,38 +172,5 @@ mod tests {
         signed_in.store(false, Ordering::Relaxed);
         o.signed_out();
         assert_eq!(o.step(), Some(Step::SignIn), "not the welcome again");
-    }
-
-    #[test]
-    fn the_start_sizes_up_the_job_as_the_farmer_will_take_it() {
-        let data = crate::viewmodel::fixtures::first_minutes();
-        let job = Job::build(&data.snapshot());
-        assert_eq!(job.account.as_deref(), Some("alice"));
-        assert_eq!(
-            job.to_farm,
-            Some((62, 252)),
-            "62 games · 252 drops: Counter-Strike 2 is skipped"
-        );
-        let (eta, hours) = job.eta.unwrap();
-        assert_eq!(crate::tui::format::eta(eta), "≈ 5d 9h");
-        assert_eq!(crate::tui::format::estimate(hours), "3h");
-        assert!(job.picked.is_empty() && !job.only_priority && !job.appear_online);
-        assert_eq!(job.basis, Basis::List);
-    }
-
-    #[test]
-    fn only_priority_farms_the_games_picked() {
-        let mut data = crate::viewmodel::fixtures::first_minutes();
-        data.prefs.priority_games = vec![
-            crate::viewmodel::fixtures::STRAY,
-            crate::viewmodel::fixtures::LIMBO,
-        ];
-        data.prefs.only_priority = true;
-        let job = Job::build(&data.snapshot());
-        assert_eq!(job.picked, ["Stray", "LIMBO"]);
-        assert_eq!(job.to_farm, Some((2, 3)), "Stray's 1 and LIMBO's 2");
-        let mut unread = crate::viewmodel::fixtures::first_minutes();
-        unread.status.library = library::SteamLibrary::default();
-        assert_eq!(Job::build(&unread.snapshot()).to_farm, None);
     }
 }
