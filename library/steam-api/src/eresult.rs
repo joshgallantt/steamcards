@@ -22,10 +22,12 @@ impl EResult {
     pub const SERVICE_UNAVAILABLE: EResult = EResult(20);
     pub const REVOKED: EResult = EResult(26);
     pub const EXPIRED: EResult = EResult(27);
+    pub const DUPLICATE_REQUEST: EResult = EResult(29);
     pub const LOGON_SESSION_REPLACED: EResult = EResult(34);
     pub const ACCOUNT_DISABLED: EResult = EResult(43);
     pub const TRY_ANOTHER_CM: EResult = EResult(48);
     pub const SUSPENDED: EResult = EResult(51);
+    pub const REMOTE_CALL_FAILED: EResult = EResult(55);
     pub const ACCOUNT_LOCKED_DOWN: EResult = EResult(73);
     pub const RATE_LIMIT_EXCEEDED: EResult = EResult(84);
     pub const ACCOUNT_LOGIN_DENIED_THROTTLE: EResult = EResult(87);
@@ -71,6 +73,20 @@ impl EResult {
         .contains(&self)
     }
 
+    /// Steam turned a call away, but it may go through a moment later: the
+    /// ones ASF asks for its inventory again on (`ArchiHandler`).
+    pub fn is_worth_asking_again(self) -> bool {
+        [
+            Self::BUSY,
+            Self::DUPLICATE_REQUEST,
+            Self::FAIL,
+            Self::REMOTE_CALL_FAILED,
+            Self::SERVICE_UNAVAILABLE,
+            Self::TIMEOUT,
+        ]
+        .contains(&self)
+    }
+
     fn name(self) -> Option<&'static str> {
         Some(match self {
             Self::OK => "OK",
@@ -86,10 +102,12 @@ impl EResult {
             Self::SERVICE_UNAVAILABLE => "ServiceUnavailable",
             Self::REVOKED => "Revoked",
             Self::EXPIRED => "Expired",
+            Self::DUPLICATE_REQUEST => "DuplicateRequest",
             Self::LOGON_SESSION_REPLACED => "LogonSessionReplaced",
             Self::ACCOUNT_DISABLED => "AccountDisabled",
             Self::TRY_ANOTHER_CM => "TryAnotherCM",
             Self::SUSPENDED => "Suspended",
+            Self::REMOTE_CALL_FAILED => "RemoteCallFailed",
             Self::ACCOUNT_LOCKED_DOWN => "AccountLockedDown",
             Self::RATE_LIMIT_EXCEEDED => "RateLimitExceeded",
             Self::ACCOUNT_LOGIN_DENIED_THROTTLE => "AccountLoginDeniedThrottle",
@@ -128,5 +146,13 @@ mod tests {
         assert!(!EResult::TRY_ANOTHER_CM.is_sign_in_rejected());
         assert!(EResult::TRY_ANOTHER_CM.is_temporary());
         assert!(!EResult::ACCESS_DENIED.is_temporary());
+    }
+
+    #[test]
+    fn a_busy_steam_is_asked_again_and_a_refusal_is_not() {
+        assert!(EResult::DUPLICATE_REQUEST.is_worth_asking_again());
+        assert!(EResult::REMOTE_CALL_FAILED.is_worth_asking_again());
+        assert!(!EResult::ACCESS_DENIED.is_worth_asking_again());
+        assert_eq!(EResult(55).to_string(), "RemoteCallFailed (55)");
     }
 }

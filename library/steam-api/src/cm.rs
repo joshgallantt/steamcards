@@ -145,6 +145,18 @@ impl fmt::Display for Refused {
 
 impl std::error::Error for Refused {}
 
+/// Steam didn't answer a call in time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoAnswer;
+
+impl fmt::Display for NoAnswer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Steam didn't answer in time")
+    }
+}
+
+impl std::error::Error for NoAnswer {}
+
 /// What signing on with a refresh token takes.
 #[derive(Debug, Clone)]
 pub struct LogOn<'a> {
@@ -430,7 +442,8 @@ impl Connection {
     }
 
     /// Calls a service method (`"Authentication.PollAuthSessionStatus#1"`)
-    /// and reads its answer. Errs with [`Refused`] when Steam says no.
+    /// and reads its answer. Errs with [`Refused`] when Steam says no, and
+    /// [`NoAnswer`] when it doesn't answer in time.
     pub(crate) async fn call<Req: Message, Resp: Message + Default>(
         &self,
         method: &str,
@@ -458,7 +471,7 @@ impl Connection {
         };
         self.state.pending.lock().unwrap().remove(&job);
         let packet = answer
-            .map_err(|_| anyhow!("Steam didn't answer in time"))?
+            .map_err(|_| NoAnswer)?
             .map_err(|_| anyhow!("the connection to Steam closed"))?;
         let eresult = EResult::of(packet.header.eresult);
         if !eresult.is_ok() {

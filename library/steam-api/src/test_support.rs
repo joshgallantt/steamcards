@@ -172,6 +172,8 @@ struct State {
     revoked: Vec<String>,
     log_offs: usize,
     inventory: Vec<HeldItem>,
+    /// How many more asks about items Steam turns away, and saying what.
+    inventory_refused: Option<(usize, EResult)>,
     /// Asset IDs asked about so far.
     asked_about: HashSet<u64>,
     inventory_asks: Vec<InventoryAsk>,
@@ -219,6 +221,7 @@ impl FakeSteam {
             revoked: Vec::new(),
             log_offs: 0,
             inventory: Vec::new(),
+            inventory_refused: None,
             asked_about: HashSet::new(),
             inventory_asks: Vec::new(),
             unseen: Vec::new(),
@@ -285,6 +288,11 @@ impl FakeSteam {
         self.state().wallet = Some((currency != 0, currency));
     }
 
+    /// Steam doesn't tell a session signing on of the wallet from now on.
+    pub fn wallet_unsaid(&self) {
+        self.state().wallet = None;
+    }
+
     /// Steam renews the refresh token whenever it makes a site token.
     pub fn renew_refresh_tokens(&self) {
         self.state().renews = true;
@@ -317,6 +325,12 @@ impl FakeSteam {
     /// The account's community items are these, in place of any before.
     pub fn hold(&self, items: Vec<HeldItem>) {
         self.state().inventory = items;
+    }
+
+    /// Steam turns away the next `times` asks to describe items, saying
+    /// `e`, as when it's busy.
+    pub fn refuse_inventory(&self, times: usize, e: EResult) {
+        self.state().inventory_refused = Some((times, e));
     }
 
     /// Every ask to describe items, in order.
@@ -597,6 +611,11 @@ impl State {
                     language: req.language.unwrap_or_default(),
                     asset_ids: req.filters.map(|f| f.assetids).unwrap_or_default(),
                 };
+                if let Some((left, e)) = self.inventory_refused.filter(|&(left, _)| left > 0) {
+                    self.inventory_refused = Some((left - 1, e));
+                    self.inventory_asks.push(ask);
+                    return (e, Vec::new());
+                }
                 let items = self.items(&ask);
                 self.inventory_asks.push(ask);
                 (EResult::OK, items.encode_to_vec())

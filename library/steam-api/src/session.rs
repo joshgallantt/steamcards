@@ -25,7 +25,7 @@ use crate::{
         BadgeGame, Seen, SetCard, read_badge_page, read_foil_cards_page, read_game_cards_page,
         seen_by,
     },
-    cm::{Connection, LogOn, Refused, WalletInfo},
+    cm::{Connection, LogOn, NoAnswer, Refused, WalletInfo},
     community::{Community, WebLogin},
     directory,
     inventory::{self, Described, InventoryItem},
@@ -42,9 +42,10 @@ const MAX_PAGES: u32 = 100;
 const WEB_TOKEN_MARGIN: i64 = 5 * 60;
 /// CM servers tried, best first, before giving up on connecting.
 const SERVERS_TRIED: usize = 3;
-/// How long to wait before asking again about items Steam didn't describe:
-/// it can tell of a new item a moment before it can describe it. ASF waits
-/// as long before asking for its inventory again.
+/// How long to wait before asking again about items Steam didn't describe,
+/// or when it turned the ask away: it can tell of a new item a moment before
+/// it can describe it. ASF waits as long before asking for its inventory
+/// again.
 const ASK_AGAIN_AFTER: Duration = Duration::from_secs(2);
 
 pub struct Session {
@@ -65,6 +66,8 @@ pub struct Session {
     /// The account's wallet, as Steam last said: kept when the connection
     /// goes.
     wallet: Mutex<Option<WalletInfo>>,
+    /// How long before asking Steam about items again.
+    ask_again_after: Duration,
 }
 
 impl Session {
@@ -94,6 +97,7 @@ impl Session {
             web: Mutex::default(),
             market: MarketQueue::new(MarketPace::default()),
             wallet: Mutex::default(),
+            ask_again_after: ASK_AGAIN_AFTER,
         }
     }
 
@@ -101,6 +105,13 @@ impl Session {
     /// can't wait minutes.
     pub fn with_market_pace(mut self, pace: MarketPace) -> Self {
         self.market = MarketQueue::new(pace);
+        self
+    }
+
+    /// The same, asking Steam about items again after `after` in place of 2
+    /// seconds: for tests that can't wait.
+    pub fn with_ask_again_after(mut self, after: Duration) -> Self {
+        self.ask_again_after = after;
         self
     }
 
@@ -166,9 +177,9 @@ impl Session {
         self.set_rejected(false);
         *self.web.lock().unwrap() = token::read(&approved.access_token)
             .map(|t| (approved.access_token.clone(), t.expires_at));
+        self.disconnect().await;
         // Perhaps another account's: the next sign-on says.
         *self.wallet.lock().unwrap() = None;
-        self.disconnect().await;
         Ok(())
     }
 
@@ -233,7 +244,10 @@ impl Session {
                 return Err(anyhow!("couldn't sign on to Steam: {e}"));
             }
         };
-        *self.live.lock().unwrap() = Some(conn.clone());
+        let gone = self.live.lock().unwrap().replace(conn.clone());
+        if let Some(gone) = gone {
+            self.keep_wallet(&gone);
+        }
         Ok(conn)
     }
 
@@ -250,7 +264,15 @@ impl Session {
     pub async fn disconnect(&self) {
         let live = self.live.lock().unwrap().take();
         if let Some(conn) = live {
+            self.keep_wallet(&conn);
             conn.log_off().await;
+        }
+    }
+
+    /// Keeps what a connection going away said of the wallet.
+    fn keep_wallet(&self, conn: &Connection) {
+        if let Some(wallet) = conn.wallet() {
+            *self.wallet.lock().unwrap() = Some(wallet);
         }
     }
 
@@ -300,7 +322,9 @@ impl Session {
     /// IDs Steam doesn't know are left out. Signs on first if need be.
     ///
     /// Any not described at first are asked about once more, a moment
-    /// later. If that fails, what the first ask found still stands.
+    /// later; if that fails, what the first ask found still stands. An ask
+    /// Steam turns away as busy, or doesn't answer, is made once more too,
+    /// as ASF asks for its inventory.
     pub async fn describe_items(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<InventoryItem>> {
         let mut seen = HashSet::new();
         let wanted: Vec<u64> = asset_ids
@@ -312,7 +336,15 @@ impl Session {
         if wanted.is_empty() {
             return Ok(Vec::new());
         }
-        let first = self.describe_once(&wanted).await?;
+        let first = match self.describe_once(&wanted).await {
+            Err(e) if worth_asking_again(&e) => {
+                self.log
+                    .line(&format!("describing {wanted:?}: {e}; asking again"));
+                tokio::time::sleep(self.ask_again_after).await;
+                self.describe_once(&wanted).await?
+            }
+            first => first?,
+        };
         let mut found = first.items;
         let late: Vec<u64> = wanted
             .iter()
@@ -324,7 +356,7 @@ impl Session {
                 "items not described yet: {late:?} (missing: {:?}); asking again",
                 first.missing
             ));
-            tokio::time::sleep(ASK_AGAIN_AFTER).await;
+            tokio::time::sleep(self.ask_again_after).await;
             match self.describe_once(&late).await {
                 Ok(again) => found.extend(again.items),
                 Err(e) => self.log.line(&format!("describing {late:?} again: {e}")),
@@ -498,6 +530,14 @@ impl Session {
     }
 }
 
+/// Whether an ask Steam turned away, or didn't answer, may go through a
+/// moment later.
+fn worth_asking_again(e: &anyhow::Error) -> bool {
+    e.is::<NoAnswer>()
+        || e.downcast_ref::<Refused>()
+            .is_some_and(|r| r.eresult.is_worth_asking_again())
+}
+
 /// Connects to the best CM server that answers and signs on with `creds`.
 async fn sign_on(
     endpoints: &Endpoints,
@@ -551,4 +591,24 @@ fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::EResult;
+
+    #[test]
+    fn a_busy_steam_or_no_answer_is_worth_asking_again() {
+        let refused = |eresult| {
+            anyhow::Error::new(Refused {
+                eresult,
+                message: String::new(),
+            })
+        };
+        assert!(worth_asking_again(&anyhow::Error::new(NoAnswer)));
+        assert!(worth_asking_again(&refused(EResult::BUSY)));
+        assert!(!worth_asking_again(&refused(EResult::ACCESS_DENIED)));
+        assert!(!worth_asking_again(&anyhow!("not signed in to Steam")));
+    }
 }

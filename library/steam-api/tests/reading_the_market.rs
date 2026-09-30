@@ -6,7 +6,10 @@
 //!
 //! Also the wallet, which Steam tells over the CM connection.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
@@ -21,16 +24,26 @@ use wiremock::{
     matchers::{header, header_exists, header_regex, method, path, query_param},
 };
 
-/// The market's pace, a thousand times over or more.
+/// The market's pace, a thousand times over or more. Its pause is long
+/// enough to be sure a request made at once lands in it.
 fn quick() -> MarketPace {
     MarketPace {
         signed_in: Duration::from_millis(1),
         jitter: Duration::ZERO,
         signed_out: Duration::from_millis(1),
-        first_pause: Duration::from_millis(200),
-        longest_pause: Duration::from_millis(800),
+        first_pause: Duration::from_millis(400),
+        longest_pause: Duration::from_millis(1_600),
         after_server_error: Duration::from_millis(10),
     }
+}
+
+/// Waits until a moment after Steam's pause ends, by its own end.
+async fn past(pause: steam_api::market::MarketPause) {
+    let left = pause
+        .until
+        .duration_since(SystemTime::now())
+        .unwrap_or_default();
+    tokio::time::sleep(left + Duration::from_millis(50)).await;
 }
 
 /// A session signed in as the stand-in's account, with the site at `site`.
@@ -296,7 +309,7 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     let Market::Paused(first) = session.market_search(620, false).await.unwrap() else {
         panic!("paused");
     };
-    assert_eq!(first.step, Duration::from_millis(200));
+    assert_eq!(first.step, Duration::from_millis(400));
     assert!(matches!(
         session.order_book("620-Chell").await.unwrap(),
         Market::Paused(_)
@@ -307,15 +320,15 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
         "no quick retries, and nothing during the pause"
     );
 
-    tokio::time::sleep(Duration::from_millis(250)).await;
+    past(first).await;
     let Market::Paused(again) = session.market_search(620, false).await.unwrap() else {
         panic!("paused");
     };
-    assert_eq!(again.step, Duration::from_millis(400), "twice as long");
+    assert_eq!(again.step, Duration::from_millis(800), "twice as long");
     assert_eq!(session.market_pause(), Some(again));
     assert_eq!(requests().await, 2, "one request to see");
 
-    tokio::time::sleep(Duration::from_millis(450)).await;
+    past(again).await;
     assert!(matches!(
         session.market_search(620, false).await.unwrap(),
         Market::Answer(_)
@@ -333,7 +346,7 @@ async fn a_pause_from_before_a_restart_is_kept() {
     let site = MockServer::start().await;
     let session = signed_in(&steam, &site, "kept");
     let pause = steam_api::market::MarketPause {
-        until: std::time::SystemTime::now() + Duration::from_secs(20 * 60),
+        until: SystemTime::now() + Duration::from_secs(20 * 60),
         step: Duration::from_secs(20 * 60),
     };
 
@@ -364,6 +377,48 @@ async fn a_server_error_is_asked_once_more_then_reported() {
     );
     assert_eq!(site.received_requests().await.unwrap().len(), 2);
     assert_eq!(session.market_pause(), None, "not a pause");
+}
+
+/// Waits until the signed-on connection has heard of the wallet.
+async fn wallet_told(session: &Session) {
+    for _ in 0..100 {
+        if session.current().and_then(|c| c.wallet()).is_some() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("Steam never told of the wallet");
+}
+
+#[tokio::test]
+async fn the_wallet_is_kept_when_the_connection_goes_unasked() {
+    let steam = FakeSteam::start().await;
+    steam.wallet_in(2);
+    let site = MockServer::start().await;
+    let session = signed_in(&steam, &site, "wallet-kept");
+    let pounds = WalletInfo {
+        has_wallet: true,
+        currency: 2,
+    };
+
+    session.connection().await.unwrap();
+    wallet_told(&session).await;
+    session.disconnect().await;
+    assert_eq!(session.wallet(), Some(pounds), "signed off: a pause");
+
+    session.connection().await.unwrap();
+    wallet_told(&session).await;
+    steam.hang_up();
+    steam.wallet_unsaid();
+    while session.current().is_some() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    session.connection().await.unwrap();
+    assert_eq!(
+        session.wallet(),
+        Some(pounds),
+        "a lost connection's, until a new one says"
+    );
 }
 
 #[tokio::test]

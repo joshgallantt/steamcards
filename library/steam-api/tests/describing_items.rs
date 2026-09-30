@@ -9,10 +9,14 @@ use std::{
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
-    Session,
+    EResult, Session,
     inventory::InventoryItem,
     test_support::{ACCOUNT, FakeSteam, HeldItem, InventoryAsk, STEAM_ID, token},
 };
+
+/// How long before asking Steam again: Steam's own 2 seconds is tested on
+/// paused time beside the session; over a real socket, a moment.
+const AGAIN: Duration = Duration::from_millis(20);
 
 /// A session signed in as the stand-in's account, with a sign-in good for
 /// months.
@@ -28,7 +32,7 @@ fn signed_in(steam: &FakeSteam, name: &str) -> Session {
             login_id: 7,
         })
         .unwrap();
-    Session::with_endpoints(store, &DebugLog::off(), steam.endpoints())
+    Session::with_endpoints(store, &DebugLog::off(), steam.endpoints()).with_ask_again_after(AGAIN)
 }
 
 fn asked_ids(steam: &FakeSteam) -> Vec<Vec<u64>> {
@@ -129,10 +133,7 @@ async fn an_item_steam_hasnt_caught_up_with_is_asked_about_again() {
 
     let items = session.describe_items(&[21, 22]).await.unwrap();
 
-    assert!(
-        started.elapsed() >= Duration::from_secs(2),
-        "a moment later"
-    );
+    assert!(started.elapsed() >= AGAIN, "a moment later");
     assert_eq!(asked_ids(&steam), [vec![21, 22], vec![22]]);
     let copies: Vec<(u64, &str)> = items
         .iter()
@@ -143,6 +144,41 @@ async fn an_item_steam_hasnt_caught_up_with_is_asked_about_again() {
         [(21, "Madison"), (22, "Madison")],
         "two copies of one card"
     );
+}
+
+#[tokio::test]
+async fn an_ask_steam_turns_away_is_asked_once_more() {
+    let steam = FakeSteam::start().await;
+    steam.hold(vec![HeldItem::card(21, 960_910, "Madison")]);
+    steam.refuse_inventory(1, EResult::BUSY);
+    let session = signed_in(&steam, "busy");
+
+    let items = session.describe_items(&[21]).await.unwrap();
+
+    assert_eq!(items.len(), 1, "Madison, the second time");
+    assert_eq!(asked_ids(&steam), [vec![21], vec![21]]);
+}
+
+#[tokio::test]
+async fn an_ask_steam_keeps_turning_away_says_why() {
+    let steam = FakeSteam::start().await;
+    steam.refuse_inventory(2, EResult::SERVICE_UNAVAILABLE);
+    let session = signed_in(&steam, "unavailable");
+
+    let e = session.describe_items(&[21]).await.unwrap_err();
+
+    assert_eq!(e.to_string(), "Steam said ServiceUnavailable (20)");
+    assert_eq!(asked_ids(&steam).len(), 2, "asked twice, and no more");
+}
+
+#[tokio::test]
+async fn an_ask_steam_refuses_outright_isnt_asked_again() {
+    let steam = FakeSteam::start().await;
+    steam.refuse_inventory(1, EResult::ACCESS_DENIED);
+    let session = signed_in(&steam, "denied");
+
+    assert!(session.describe_items(&[21]).await.is_err());
+    assert_eq!(asked_ids(&steam).len(), 1);
 }
 
 #[tokio::test]
