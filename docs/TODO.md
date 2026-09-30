@@ -133,10 +133,11 @@ done, and move it into a numbered section if it grows.
       made from them (`docs/design/ui.md`). Its questions for you (§9)
       are still open; the screens can start from its defaults.
 - [x] Domain first (2026-09-30): the farming session and its card drops,
-      one drop per copy, each named and numbered as the copy it made, and
-      the time to finish learnt from real drops; a `market` component
-      with money, prices, the wallet and the value basis, and what the
-      cards held and still to drop are worth.
+      one drop per copy, each named where Steam or its card page can tell
+      and numbered from the account's counts, and the time to finish
+      learnt from real drops; a `market` component with money, prices,
+      the wallet and the value basis, and what the cards held and still
+      to drop are worth.
 - [x] Data (2026-09-30): the wallet's currency and the drops' asset IDs
       over the CM connection, set prices from the market at a polite pace
       (one queue, 5 s apart; Steam's pause and the prices outlast a
@@ -146,9 +147,22 @@ done, and move it into a numbered section if it grows.
       with them: the composition root builds `MarketComponent`, with
       `prices.json` beside the config, which the README's "Your data"
       should then mention.
-- [ ] Review it adversarially, then try it on the real account. The first
-      real drops and prices answer the research's open questions 1 to 3
-      (§6); `STEAMCARDS_DEBUG` keeps what Steam announces of each drop.
+- [x] Review the domain and data adversarially (2026-09-30): three
+      reviewers, on fidelity to the spec, Steam's own behaviour and the
+      engineering. Fixed: each drop is checked against its game's counts,
+      a read's drops have their card page read, copies (foils too) are
+      numbered from the account's counts, the market's failures are told
+      from a market it couldn't ask, and another account's sign-in ends
+      the session.
+- [ ] Try it on the real account. The first real drops and prices answer
+      the research's open questions 1 to 3 (§6); `STEAMCARDS_DEBUG` keeps
+      what Steam announces of each drop, and the foil badge page's markup
+      is still modelled, not seen.
+- [ ] If the first drops show Steam's announcements leave asset IDs out
+      (research §6, question 1), build the inventory fallback (§2.3 A):
+      the community inventory read over CM at sign-on, then diffed as
+      drops come. Until then a drop Steam doesn't name goes by its card
+      page, or reads "couldn't tell which card".
 
 ## Later
 

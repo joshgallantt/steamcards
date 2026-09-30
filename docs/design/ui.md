@@ -31,6 +31,7 @@ It builds on three other documents, cited by name:
 | Estimates | ≈ 4d 21h to finish, 80% likely 3d 13h – 6d 15h; ≈ £16.79 on completion, excl. foils |
 | Farming now | Heavy Rain (app 960910): 4.0h, no badge, 3 of 4 drops, 2 of 5 cards in the set, 1 spare; on it since 16:53; next look in 4m |
 | Invented | Queued games' prices; the library's totals (183 of 421 drops across 63 games); Warframe, set aside once; the end-of-library summary |
+| The 17:23 card | Drawn while Steam is still being asked which card it was, so every screen shows that state. In practice it takes seconds: then it's named, or "couldn't tell which card" (§5.6) |
 
 ## 1. The idea
 
@@ -1124,11 +1125,14 @@ The account gains two facts: the wallet's currency, which every price is shown i
 
 ### The log
 
-The log is a view like the others and follows the newest event. It shows how a card is identified, and what happens when Steam is slow to say (research §2.3). The market's lines are written from its events' kinds, with each game's name from the library and times on the local clock: the market itself knows neither, and says "the next round is in 3h 58m" where the log says "at 21:21".
+The log is a view like the others and follows the newest event. It shows how a card is identified: here Steam is still being asked about the 17:23 card. When Steam can't say, the next lines say so, "! Couldn't ask Steam which card it was: Steam didn't answer in time", then "· Steam didn't say which card dropped for Heavy Rain: going by its card page" and the card, or "! Couldn't tell which card dropped for Heavy Rain" (§5.6). The market's lines are written from its events' kinds, with each game's name from the library and times on the local clock: the market itself knows neither, and says "the next round is in 3h 58m" where the log says "at 21:21".
 
 ```mockup 120x30 the log
  steamcards   ● farming for 8h 17m · since 09:14              Steam ● alice · appears offline · keeping awake   [?] help
-╭ Log ───────────────────────────────────────────────────────────────────────────── 214 events · following the newest ─╮
+╭ Log ───────────────────────────────────────────────────────────────────────────── 211 events · following the newest ─╮
+│  14:55:27  · Looked at Celeste's cards: 2 to go                                                                      │
+│  15:09:02  · Steam says new items arrived                                                                            │
+│  15:09:04  ✓ Madeline dropped for Celeste — 1 to go                                                                  │
 │  15:24:19  · Looked at Celeste's cards: 1 to go                                                                      │
 │  15:41:02  · Steam says new items arrived                                                                            │
 │  15:41:04  ✓ Badeline dropped for Celeste, £0.06                                                                     │
@@ -1145,23 +1149,23 @@ The log is a view like the others and follows the newest event. It shows how a c
 │  16:53:11  ▶ Farming Heavy Rain — 3 cards to drop                                                                    │
 │  17:05:02  · Steam says new items arrived                                                                            │
 │  17:05:04  ✓ Madison dropped for Heavy Rain (a 2nd copy), £0.05 — 2 to go                                            │
-│  17:20:19  · Looked at Heavy Rain's cards: 1 to go                                                                   │
+│  17:20:19  · Looked at Heavy Rain's cards: 2 to go                                                                   │
 │  17:23:40  · Steam says new items arrived                                                                            │
 │  17:23:42  ✓ A card dropped for Heavy Rain — 1 to go                                                                 │
 │  17:23:42  · Asking Steam which card it was                                                                          │
-│  17:23:44  ! Steam hasn't described it yet: asking again in 2 seconds                                                │
-│  17:23:46  ! Still not described: looking through the inventory instead                                              │
-│  17:24:01  ! The inventory didn't answer: trying again at 17:35                                                      │
 │  17:28:42  · Looked at Heavy Rain's cards: 1 to go                                                                   │
 │  17:29:14  · Prices: all 57 games looked up; the next round is at 21:21                                              │
-╰─────────────────────────────────────────────────────────── 189 earlier ↑   [↑↓] scroll   [End] follow   [esc] close ─╯
+╰─────────────────────────────────────────────────────────── 186 earlier ↑   [↑↓] scroll   [End] follow   [esc] close ─╯
  17:23  ✓ A card dropped for Heavy Rain — 1 to go · finding out which card
  [↑↓] choose  [enter] details  │  [h] haul  [m] market  [g] games  [a] account  [l] log  [p] pause  [?] help  [q] quit
 ```
 
 ```mockup 80x24 the log (S)
  steamcards   ● farming for 8h 17m    Steam ● alice · appears offline   [?] help
-╭ Log ───────────────────────────────────── 214 events · following the newest ─╮
+╭ Log ───────────────────────────────────── 211 events · following the newest ─╮
+│  15:46:08  ✓ Every card has dropped for Celeste                              │
+│  15:46:10  ▶ Farming Gorogoa — 2 cards to drop                               │
+│  16:01:25  · Looked at Gorogoa's cards: 2 to go                              │
 │  16:15:02  · Steam says new items arrived                                    │
 │  16:15:04  ✓ The Boy dropped for Gorogoa, £0.04 — 1 to go                    │
 │  16:30:19  · Looked at Gorogoa's cards: 1 to go                              │
@@ -1172,35 +1176,32 @@ The log is a view like the others and follows the newest event. It shows how a c
 │  16:53:11  ▶ Farming Heavy Rain — 3 cards to drop                            │
 │  17:05:02  · Steam says new items arrived                                    │
 │  17:05:04  ✓ Madison dropped for Heavy Rain (a 2nd copy), £0.05 — 2 to go    │
-│  17:20:19  · Looked at Heavy Rain's cards: 1 to go                           │
+│  17:20:19  · Looked at Heavy Rain's cards: 2 to go                           │
 │  17:23:40  · Steam says new items arrived                                    │
 │  17:23:42  ✓ A card dropped for Heavy Rain — 1 to go                         │
 │  17:23:42  · Asking Steam which card it was                                  │
-│  17:23:44  ! Steam hasn't described it yet: asking again in 2 seconds        │
-│  17:23:46  ! Still not described: looking through the inventory instead      │
-│  17:24:01  ! The inventory didn't answer: trying again at 17:35              │
 │  17:28:42  · Looked at Heavy Rain's cards: 1 to go                           │
 │  17:29:14  · Prices: all 57 games looked up; the next round is at 21:21      │
-╰─────────────────── 195 earlier ↑   [↑↓] scroll   [End] follow   [esc] close ─╯
+╰─────────────────── 192 earlier ↑   [↑↓] scroll   [End] follow   [esc] close ─╯
  17:23  ✓ A card dropped for Heavy Rain — 1 to go · finding out which card
  [↑↓] choose  [enter] details  │  [h] haul  [p] pause  [?] help  [q] quit
 ```
 
 ```mockup 60x16 the log (XS)
  steamcards   ● farming 8h 17m    appears offline   [?] help
-╭ Log ───────────────── 214 events · following the newest ─╮
+╭ Log ───────────────── 211 events · following the newest ─╮
+│  16:53  ▶ Farming Heavy Rain — 3 cards to drop           │
+│  17:05  · Steam says new items arrived                   │
+│  17:05  ✓ Madison dropped for Heavy Rain (a 2nd copy),   │
+│           £0.05 — 2 to go                                │
+│  17:20  · Looked at Heavy Rain's cards: 2 to go          │
+│  17:23  · Steam says new items arrived                   │
 │  17:23  ✓ A card dropped for Heavy Rain — 1 to go        │
 │  17:23  · Asking Steam which card it was                 │
-│  17:23  ! Steam hasn't described it yet: asking again    │
-│           in 2 seconds                                   │
-│  17:23  ! Still not described: looking through the       │
-│           inventory instead                              │
-│  17:24  ! The inventory didn't answer: trying again at   │
-│           17:35                                          │
 │  17:28  · Looked at Heavy Rain's cards: 1 to go          │
 │  17:29  · Prices: all 57 games looked up; the next       │
 │           round is at 21:21                              │
-╰─────────────── 207 earlier ↑   [↑↓] scroll  [esc] close ─╯
+╰─────────────── 202 earlier ↑   [↑↓] scroll  [esc] close ─╯
  17:23  ✓ A card dropped for Heavy Rain — 1 to go
  [↑↓] choose  [enter] details  │  [?] help  [q] quit
 ```
@@ -1603,6 +1604,7 @@ Named ANSI colours only, from `theme.rs`. Everything coloured also carries a sym
 | Lookup failed | ? | BUSY |
 | Stale price | "£0.06 8h" | the whole cell DIM |
 | Identifying | "⠋ finding out which card" | spinner BUSY, words DIM |
+| Couldn't tell | "couldn't tell which card" | DIM |
 | Prices paused | ‖ prices paused by Steam until 17:41 | BUSY |
 | Now panel border (L) | by state | GOOD farming, BUSY waiting, paused or reading, BAD error or expired, DIM idle (today's `now_color`) |
 | The strip and the log | "17:23  ✓ A card dropped…" | time DIM; ✓ a drop and ▶ playing GOOD; ↻ moved on LINK; ‖ waiting and ! a warning BUSY; ✕ an error BAD; · the rest DIM (today's log glyphs) |
@@ -1628,7 +1630,8 @@ It reads in light and dark themes because it uses named colours only, reversed v
 | No cards yet this session | The haul says when the first usually drops, and that its price follows; the value reads "no cards yet this session" (mockup c). |
 | Pricing | "⠋ pricing your games: 14 of 62"; "…" on each unpriced card; partial sums say what's missing; the completion value waits. |
 | Before the second drop | "≈ 5d 9h to finish, assuming 30 min a drop", with no band. |
-| A card not identified yet | "⠋ finding out which card" in the haul, Now and the strip. The log says each fallback (research §2.3). If only the card page can tell (fallback C), the name shows without a market link, and quick-sell later says it can't be sold from here. |
+| A card not identified yet | "⠋ finding out which card" in the haul, Now and the strip, for the seconds Steam is asked and the card page read (§6.2). The log says each step: asking Steam, then, when Steam can't say, going by the card page. If only the card page can tell (research §2.3, fallback C), the name shows without a market link, and quick-sell later says it can't be sold from here. |
+| A card that couldn't be told | "couldn't tell which card" in the haul, Now and the strip; the log says so too. It's still a drop, in the counts and the pips, and it counts as unpriced for good: the haul's note says "the 17:23 card couldn't be told", never "still being identified". Its copy isn't known. The research's inventory fallbacks (§2.3, A and B) aren't built: the first real drops say whether Steam's announcements leave gaps (research §6, question 1). |
 | Prices paused (a 429) | A banner in the value column, the strip and the market view; prices past 6 hours dim with their age; pending ones stay "…" (mockups h). |
 | A lookup failed | "?" on the card; it counts as unpriced; tried again after 24 hours. |
 | The market can't be asked | No sign-in, no network, or the site down: prices stay as they were, dim once 6 hours old, and nothing reads "?". The log says why, and when it asks again, a minute on, then longer each time, up to half an hour. |
@@ -1646,7 +1649,7 @@ It reads in light and dark themes because it uses named colours only, reversed v
 - **Countdowns** ("next look in 4m", "in 42s") change once a minute, or once a second under a minute.
 - **Clock-based figures** ("for 8h 17m", "8m ago", ≈ DONE IN) are worked out at each draw. **The forecast** is worked out again when a drop lands, when the order changes, and once a minute.
 - **Hours while building** tick up as the farmer counts them, every 0.1h.
-- **When a card drops**, its row appears at once, reading "⠋ finding out which card", and fills in with its name and price a few seconds later. A ◆ joins the track and the pips, and the strip says so. Nothing blinks.
+- **When a card drops**, its row appears at once, reading "⠋ finding out which card", and fills in with its name and price a few seconds later, or reads "couldn't tell which card" if nothing can say. A ◆ joins the track and the pips, and the strip says so. Nothing blinks.
 - Selection is by app ID, as today, so the cursor stays on its game when the queue re-sorts.
 
 ### 5.8 Flash messages
@@ -1723,7 +1726,7 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `Held { total: Money, priced: u32, unpriced: u32, not_marketable: u32, oldest: Option<Duration> }` | the value of cards held; `oldest` only once a price counted is over 6 hours old | "≥ £1.45 · 3 unpriced · oldest 8h" | new |
 | `Estimate { value: Money, excl_foils: bool, unpriced_games: u32, basis: Basis }` | a value that's an estimate, and the basis its cards to drop are on | "≈ £16.79 on completion, excl. foils", "after fees" | new |
 | `value_of(&Price, Basis, &Wallet) -> Option<Money>` | pure: a card's worth on a basis; another currency is `None` | every price shown | new |
-| `held_value(&[HeldCard], unidentified, &PriceBook, Basis, &Wallet, now) -> Held` | pure | the session's value, the haul | new |
+| `held_value(&[HeldCard], unidentified, &PriceBook, Basis, &Wallet, now) -> Held` | pure; `unidentified` is the drops whose card isn't known, being found out or never told, counted as unpriced | the session's value, the haul | new |
 | `expected_per_drop(&SetPrices, Basis, &Wallet) -> Option<Money>` | pure; per card first, then the mean (research §3.3) | ≈ A DROP | new |
 | `value_left(&SteamLibrary, order: &[u32], &PriceBook, Basis, &Wallet) -> Estimate` | pure: the games in the farm order, each game's drops left × its mean, rounded once for the game | ≈ LEFT, still to drop, section rules | new |
 | `on_completion(&Held, &Estimate) -> Estimate` | pure: this session's value plus what's still to drop (research §3.3) | ≈ on completion | new |

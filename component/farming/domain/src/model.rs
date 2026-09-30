@@ -71,10 +71,11 @@ pub struct FarmingStatus {
 pub struct FarmingSession {
     /// When farming first started.
     pub started_at: DateTime<Utc>,
-    /// Drops left across the library when the session first read it; `None`
-    /// until it has.
+    /// Drops left in the games it farms, as the farm order stood when the
+    /// session first read the library: skipped games and sale badges are
+    /// left out. `None` until it has.
     pub drops_left_at_start: Option<u32>,
-    /// Games with drops left then.
+    /// How many games it farms then.
     pub games_at_start: Option<u32>,
     /// Every card that dropped, in the order they were found. Each copy is
     /// a drop of its own.

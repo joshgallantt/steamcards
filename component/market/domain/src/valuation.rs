@@ -36,9 +36,10 @@ pub fn value_of(price: &Price, basis: Basis, wallet: &Wallet) -> Option<Money> {
 
 /// What `cards` are worth on `basis`, each copy at its own price: two drops
 /// of one card count twice. A card that isn't priced never counts as
-/// nothing: it's counted as unpriced, and so are `unidentified` drops, not
-/// known yet. A price over 6 hours old still counts, and the total says how
-/// old the oldest is.
+/// nothing: it's counted as unpriced, and so are `unidentified` drops, whose
+/// card isn't known, whether it's still being found out or nothing could
+/// tell. A price over 6 hours old still counts, and the total says how old
+/// the oldest is.
 pub fn held_value(
     cards: &[HeldCard],
     unidentified: u32,
