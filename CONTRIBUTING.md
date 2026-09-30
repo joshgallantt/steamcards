@@ -178,7 +178,8 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 ```
 ├── component/     Domain + Data + DI. One folder per business concept.
 │   ├── account/       The one Steam account: signing in with a QR code, and out.
-│   ├── library/       The games with trading cards, their drops, and their card sets.
+│   ├── game/          The games with trading cards, and their card drops.
+│   ├── card/          Each game's cards: its set, its foils, and the copies you hold.
 │   ├── preferences/   What you want farmed first.
 │   ├── farming/       What to play, playing it, and this session's drops.
 │   ├── market/        What cards are worth: prices and the wallet.
@@ -336,7 +337,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferences`
 
 ### What that buys
 
-- **Dependency inversion** (③): `LibraryRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `MarketRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `PlayRepository`, `AccountRepository`, `PreferencesRepository` and `MarketRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol and page markup change for Valve's reasons and live in `library/steam-api`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one function per use case, so the games pop-up holds the preference functions it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the acceptance tests drive the real `farm_cards` over an in-memory Steam, and the farmer can't tell the difference.
@@ -351,7 +352,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `account`, `library`, `preferences`, `farming`, `market` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `market` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |

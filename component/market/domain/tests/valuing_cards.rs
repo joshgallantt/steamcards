@@ -3,11 +3,9 @@
 //! 16 cards from 6 games, a foil among them, two of them second copies, and
 //! three that can't be counted yet.
 
+use card::test_support::card_asset;
 use chrono::{DateTime, TimeDelta, Utc};
-use library::{
-    SteamLibrary,
-    test_support::{card_asset, game},
-};
+use game::{SteamLibrary, test_support::game};
 use market::{
     Basis, HeldCard, Offers, Price, PriceBook, SetPrices, expected_per_drop, held_value,
     on_completion,

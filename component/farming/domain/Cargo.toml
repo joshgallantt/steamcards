@@ -16,7 +16,8 @@ workspace = true
 test-support = []
 
 [dependencies]
-library.workspace = true
+game.workspace = true
+card.workspace = true
 preferences.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

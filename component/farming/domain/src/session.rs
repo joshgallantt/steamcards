@@ -19,8 +19,9 @@ use std::{
     time::Duration,
 };
 
+use card::{CardAsset, CardSet, CardSets, GameCards};
 use chrono::{DateTime, Utc};
-use library::{Card, CardAsset, Game, SteamLibrary};
+use game::{Game, SteamLibrary};
 use preferences::Preferences;
 
 use crate::{
@@ -59,8 +60,11 @@ impl SessionKeeper {
 pub(crate) struct Kept {
     pub(crate) session: FarmingSession,
     /// The library as the farmer sees it: hours counted as they're played,
-    /// drops as they land, card sets as last looked at.
+    /// drops as they land.
     pub(crate) library: SteamLibrary,
+    /// The card sets of the games looked at: each as last read, with the
+    /// drops since counted in.
+    pub(crate) sets: CardSets,
     /// Whether the library has been read yet: until it has, there's nothing
     /// to tell drops by.
     read: bool,
@@ -87,10 +91,10 @@ pub(crate) struct Found {
     drops: Vec<usize>,
     /// The set as the farmer knew it before them, every earlier drop counted
     /// in; empty when it didn't know it so.
-    before: Vec<Card>,
+    before: CardSet,
     /// The set a look at the game found, with them in it. The badge pages
     /// show no sets, so a read has none until the game is looked at.
-    after: Option<Vec<Card>>,
+    after: Option<CardSet>,
 }
 
 impl Found {
@@ -122,7 +126,7 @@ pub(crate) struct Looked {
     /// The drops it found since the farmer last saw the game.
     pub(crate) found: Option<Found>,
     /// The set it read: `None` when its page showed none, or was behind.
-    set: Option<Vec<Card>>,
+    set: Option<CardSet>,
 }
 
 impl Kept {
@@ -133,6 +137,7 @@ impl Kept {
                 ..Default::default()
             },
             library: SteamLibrary::default(),
+            sets: CardSets::default(),
             read: false,
             counted: HashMap::new(),
             set_aside: Vec::new(),
@@ -178,7 +183,8 @@ impl Kept {
     /// Takes in a fresh look at one game, and records the drops it shows. A
     /// page showing more drops to come than the farmer has already seen is
     /// behind, cards never undropping: it's left out, its counts and all.
-    pub(crate) fn update(&mut self, fresh: Game, now: DateTime<Utc>) -> Looked {
+    pub(crate) fn update(&mut self, looked: GameCards, now: DateTime<Utc>) -> Looked {
+        let GameCards { game: fresh, set } = looked;
         let behind = self
             .library
             .game(fresh.app_id)
@@ -193,11 +199,12 @@ impl Kept {
                 set: None,
             };
         }
-        let set = (!fresh.cards.is_empty()).then(|| fresh.cards.clone());
+        let set = (!set.is_empty()).then_some(set);
         let game = self.merged(fresh);
         let found = self.record(&game, set.clone(), now);
-        if set.is_some() {
+        if let Some(set) = &set {
             self.uncounted.remove(&game.app_id);
+            self.sets.update(game.app_id, set.clone());
         }
         self.library.update(game.clone());
         Looked { game, found, set }
@@ -207,36 +214,28 @@ impl Kept {
         if let Some(&hours) = self.counted.get(&fresh.app_id) {
             fresh.hours = fresh.hours.max(hours);
         }
-        if let Some(known) = self.library.game(fresh.app_id) {
-            if fresh.cards.is_empty() {
-                fresh.cards = known.cards.clone();
-            }
-            // Cards never undrop: a page showing more to come than the
-            // farmer has already seen is behind, and would drop them twice.
-            if fresh.drops.remaining > known.drops.remaining {
-                fresh.drops = known.drops;
-            }
+        // Cards never undrop: a page showing more to come than the farmer has
+        // already seen is behind, and would drop them twice.
+        if let Some(known) = self.library.game(fresh.app_id)
+            && fresh.drops.remaining > known.drops.remaining
+        {
+            fresh.drops = known.drops;
         }
         fresh
     }
 
     /// Records a drop for each card `game`'s drops left went down by since
     /// the farmer last saw it, each still being found out.
-    fn record(
-        &mut self,
-        game: &Game,
-        after: Option<Vec<Card>>,
-        now: DateTime<Utc>,
-    ) -> Option<Found> {
+    fn record(&mut self, game: &Game, after: Option<CardSet>, now: DateTime<Utc>) -> Option<Found> {
         let known = self.library.game(game.app_id)?;
         let count = known.drops.remaining.saturating_sub(game.drops.remaining) as usize;
         if count == 0 {
             return None;
         }
         let before = if self.uncounted.contains(&game.app_id) {
-            Vec::new()
+            CardSet::default()
         } else {
-            known.cards.clone()
+            self.sets.set(game.app_id).cloned().unwrap_or_default()
         };
         let first = self.session.drops.len();
         self.session.drops.extend(iter::repeat_n(
@@ -394,7 +393,7 @@ impl Kept {
         // How far each card's count went up, when the set before is known.
         let mut up = f
             .after
-            .as_deref()
+            .as_ref()
             .filter(|_| !f.before.is_empty())
             .map(|after| risen(&f.before, after));
         let mut unused = Vec::new();
@@ -411,7 +410,7 @@ impl Kept {
                 Some(up) => take_one(up, &card.name),
                 // Without the set before, the page can only say a normal
                 // card is held at all.
-                None => card.foil || f.after.as_deref().is_none_or(|a| owned(a, &card.name) > 0),
+                None => card.foil || f.after.as_ref().is_none_or(|a| a.owned(&card.name) > 0),
             };
             if shown {
                 self.session.drops[at].card = DropCard::Identified(card.clone());
@@ -458,10 +457,10 @@ impl Kept {
     /// it, so the next look tells its own drops by it. A drop whose card
     /// isn't known leaves the set missing a card until it's read again.
     fn count_in(&mut self, app_id: u32, drops: &[usize]) {
-        let Some(mut game) = self.library.game(app_id).cloned() else {
+        let Some(mut set) = self.sets.set(app_id).cloned() else {
             return;
         };
-        if game.cards.is_empty() {
+        if set.is_empty() {
             return;
         }
         for &i in drops {
@@ -469,17 +468,11 @@ impl Kept {
             if card.is_foil() {
                 continue;
             }
-            match card
-                .name()
-                .and_then(|name| game.cards.iter_mut().find(|c| c.name == name))
-            {
-                Some(c) => c.owned += 1,
-                None => {
-                    self.uncounted.insert(app_id);
-                }
+            if !card.name().is_some_and(|name| set.count_in(name)) {
+                self.uncounted.insert(app_id);
             }
         }
-        self.library.update(game);
+        self.sets.update(app_id, set);
     }
 
     /// Names a drop only its card page could name by the item Steam
@@ -514,7 +507,7 @@ impl Kept {
     /// Numbers a game's foils among these drops by its foil badge's counts,
     /// after them: how many of that foil the account has, less the copies of
     /// it found after this one.
-    pub(crate) fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &[Card]) {
+    pub(crate) fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &CardSet) {
         let theirs: Vec<usize> = told
             .iter()
             .copied()
@@ -531,7 +524,8 @@ impl Kept {
                 .iter()
                 .filter(|&&j| self.session.drops[j].card.name() == Some(name.as_str()))
                 .count();
-            self.session.drops[i].copy = owned(foils, &name)
+            self.session.drops[i].copy = foils
+                .owned(&name)
                 .checked_sub(u32::try_from(later).unwrap_or(u32::MAX))
                 .filter(|&n| n > 0);
         }
@@ -571,25 +565,26 @@ fn copy(drops: &[Drop], f: &Found, k: usize) -> Option<u32> {
         u32::try_from(n).unwrap_or(u32::MAX)
     };
     if !f.before.is_empty() {
-        let held = f.before.iter().find(|c| c.name == name)?.owned;
+        let held = f.before.cards().iter().find(|c| c.name == name)?.owned;
         return Some(held + copies(&f.drops[..k]) + 1);
     }
     let all_named = f.drops.iter().all(|&i| drops[i].card.name().is_some());
-    let after = f.after.as_deref().filter(|_| all_named)?;
-    let held = after.iter().find(|c| c.name == name)?.owned;
+    let after = f.after.as_ref().filter(|_| all_named)?;
+    let held = after.cards().iter().find(|c| c.name == name)?.owned;
     held.checked_sub(copies(&f.drops[k + 1..]))
         .filter(|&n| n > 0)
 }
 
 /// How far each card's count went up from `before` to `after`, in the set's
 /// order.
-fn risen<'a>(before: &[Card], after: &'a [Card]) -> Vec<(&'a str, u32)> {
+fn risen<'a>(before: &CardSet, after: &'a CardSet) -> Vec<(&'a str, u32)> {
     after
+        .cards()
         .iter()
         .map(|c| {
             (
                 c.name.as_str(),
-                c.owned.saturating_sub(owned(before, &c.name)),
+                c.owned.saturating_sub(before.owned(&c.name)),
             )
         })
         .collect()
@@ -611,14 +606,12 @@ fn take_one(up: &mut [(&str, u32)], name: &str) -> bool {
     }
 }
 
-/// How many of `name` the set has; none when it isn't in it.
-fn owned(set: &[Card], name: &str) -> u32 {
-    set.iter().find(|c| c.name == name).map_or(0, |c| c.owned)
-}
-
 #[cfg(test)]
 mod tests {
     use std::slice;
+
+    use card::Card;
+    use game::CardDrops;
 
     use super::*;
 
@@ -647,41 +640,53 @@ mod tests {
         }
     }
 
-    fn heavy_rain(madison: u32, scott: u32) -> Vec<Card> {
-        vec![
-            card("Ethan", 0),
+    /// Heavy Rain's set: how many of each card the account has.
+    fn heavy_rain_with(ethan: u32, madison: u32, norman: u32, scott: u32) -> CardSet {
+        CardSet::new(vec![
+            card("Ethan", ethan),
             card("Carter", 0),
             card("Madison", madison),
-            card("Norman", 0),
+            card("Norman", norman),
             card("Scott", scott),
-        ]
+        ])
     }
 
-    fn game(app_id: u32, remaining: u32, cards: Vec<Card>) -> Game {
+    fn heavy_rain(madison: u32, scott: u32) -> CardSet {
+        heavy_rain_with(0, madison, 0, scott)
+    }
+
+    fn game(app_id: u32, remaining: u32) -> Game {
         Game {
             app_id,
             name: format!("Game {app_id}"),
             hours: 5.0,
-            drops: library::CardDrops {
+            drops: CardDrops {
                 received: 4 - remaining,
                 remaining,
             },
             badge_level: 0,
-            cards,
+        }
+    }
+
+    /// A look at a game's card page: `remaining` to come, and its set.
+    fn page(app_id: u32, remaining: u32, set: CardSet) -> GameCards {
+        GameCards {
+            game: game(app_id, remaining),
+            set,
         }
     }
 
     /// A session that has read the library, and looked at Heavy Rain: `left`
     /// drops to come, and its set.
-    fn farming(left: u32, set: Vec<Card>) -> Kept {
+    fn farming(left: u32, set: CardSet) -> Kept {
         let mut kept = Kept::new(at());
         let prefs = Preferences::default();
         kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, left, Vec::new())]),
+            SteamLibrary::new(vec![game(HEAVY_RAIN, left)]),
             &prefs,
             at(),
         );
-        kept.update(game(HEAVY_RAIN, left, set), at());
+        kept.update(page(HEAVY_RAIN, left, set), at());
         kept
     }
 
@@ -700,8 +705,8 @@ mod tests {
     }
 
     /// A look at Heavy Rain: `left` to come, and its set now.
-    fn looks(kept: &mut Kept, left: u32, set: Vec<Card>) -> Option<Found> {
-        kept.update(game(HEAVY_RAIN, left, set), at()).found
+    fn looks(kept: &mut Kept, left: u32, set: CardSet) -> Option<Found> {
+        kept.update(page(HEAVY_RAIN, left, set), at()).found
     }
 
     #[test]
@@ -770,12 +775,7 @@ mod tests {
         // An item left over from before: Steam describes Scott, but the
         // page shows Ethan went up.
         let mut kept = farming(3, heavy_rain(1, 1));
-        let found = looks(&mut kept, 2, {
-            let mut set = heavy_rain(1, 1);
-            set[0].owned = 1;
-            set
-        })
-        .expect("a drop");
+        let found = looks(&mut kept, 2, heavy_rain_with(1, 1, 0, 1)).expect("a drop");
 
         let told = kept.identify(&[found], &[asset(31_004, HEAVY_RAIN, "Scott", false)]);
 
@@ -824,21 +824,17 @@ mod tests {
     fn a_read_is_told_by_a_look_at_the_game_after_it() {
         let mut kept = farming(3, heavy_rain(1, 1));
         let prefs = Preferences::default();
-        let mut found = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
-            &prefs,
-            at(),
-        );
+        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
         assert!(found[0].needs_look(), "the badges show no sets");
 
-        let looked = kept.update(game(HEAVY_RAIN, 2, heavy_rain(2, 1)), at());
+        let looked = kept.update(page(HEAVY_RAIN, 2, heavy_rain(2, 1)), at());
         found[0].join(looked);
         let told = kept.identify(&found, &[]);
 
         assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
         assert_eq!(
-            kept.library.game(HEAVY_RAIN).unwrap().cards,
-            heavy_rain(2, 1),
+            kept.sets.set(HEAVY_RAIN),
+            Some(&heavy_rain(2, 1)),
             "the set, as the look found it"
         );
     }
@@ -849,11 +845,7 @@ mod tests {
         // after it failed, and Steam gave only a count.
         let mut kept = farming(3, heavy_rain(1, 1));
         let prefs = Preferences::default();
-        let read = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
-            &prefs,
-            at(),
-        );
+        let read = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
         let told = kept.identify(&read, &[]);
         assert_eq!(named(&kept, &told), [(None, false, None)]);
 
@@ -867,12 +859,7 @@ mod tests {
         );
 
         // With the set read again, the next is told.
-        let found = looks(&mut kept, 0, {
-            let mut set = heavy_rain(2, 2);
-            set[3].owned = 1;
-            set
-        })
-        .expect("a drop");
+        let found = looks(&mut kept, 0, heavy_rain_with(0, 2, 1, 2)).expect("a drop");
         let told = kept.identify(&[found], &[]);
         assert_eq!(named(&kept, &told), [(some("Norman"), false, Some(1))]);
     }
@@ -881,17 +868,9 @@ mod tests {
     fn a_set_not_known_before_is_numbered_from_the_look_after() {
         let mut kept = Kept::new(at());
         let prefs = Preferences::default();
-        kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
-            &prefs,
-            at(),
-        );
-        let mut found = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
-            &prefs,
-            at(),
-        );
-        found[0].join(kept.update(game(HEAVY_RAIN, 2, heavy_rain(2, 1)), at()));
+        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
+        let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
+        found[0].join(kept.update(page(HEAVY_RAIN, 2, heavy_rain(2, 1)), at()));
         let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
 
         let told = kept.identify(&found, slice::from_ref(&madison));
@@ -912,16 +891,8 @@ mod tests {
         // Its set was never read, and the look after the read failed.
         let mut kept = Kept::new(at());
         let prefs = Preferences::default();
-        kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
-            &prefs,
-            at(),
-        );
-        let found = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
-            &prefs,
-            at(),
-        );
+        kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
+        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
         let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
 
         let told = kept.identify(&found, slice::from_ref(&madison));
@@ -942,7 +913,7 @@ mod tests {
         let told = kept.identify(&[found], &[thanatos(2), thanatos(3)]);
         assert_eq!(kept.foil_games(&told), [HEAVY_RAIN]);
 
-        kept.number_foils(HEAVY_RAIN, &told, &[card("Thanatos", 4)]);
+        kept.number_foils(HEAVY_RAIN, &told, &CardSet::new(vec![card("Thanatos", 4)]));
 
         assert_eq!(
             named(&kept, &told),
@@ -968,11 +939,7 @@ mod tests {
     fn a_drop_no_look_saw_is_counted_into_the_set() {
         let mut kept = farming(3, heavy_rain(1, 0));
         let prefs = Preferences::default();
-        let found = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
-            &prefs,
-            at(),
-        );
+        let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), &prefs, at());
         let told = kept.identify(&found, &[asset(9, HEAVY_RAIN, "Madison", false)]);
         assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
 
@@ -993,19 +960,15 @@ mod tests {
         kept.identify(&[found], &[]);
 
         let prefs = Preferences::default();
-        let behind = kept.take(
-            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
-            &prefs,
-            at(),
-        );
+        let behind = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), &prefs, at());
         let again = looks(&mut kept, 3, heavy_rain(1, 1));
         assert!(
             behind.is_empty() && again.is_none(),
             "nothing dropped twice"
         );
         assert_eq!(
-            kept.library.game(HEAVY_RAIN).unwrap().cards,
-            heavy_rain(2, 1),
+            kept.sets.set(HEAVY_RAIN),
+            Some(&heavy_rain(2, 1)),
             "nor its counts taken back"
         );
 
@@ -1035,12 +998,7 @@ mod tests {
 
         let scott = asset(30_002, HEAVY_RAIN, "Scott", false);
         let ethan = asset(30_003, HEAVY_RAIN, "Ethan", false);
-        let found = looks(&mut kept, 0, {
-            let mut set = heavy_rain(2, 2);
-            set[0].owned = 1;
-            set
-        })
-        .expect("a drop");
+        let found = looks(&mut kept, 0, heavy_rain_with(1, 2, 0, 2)).expect("a drop");
         let told = kept.identify(&[found], &[scott.clone(), ethan.clone()]);
 
         assert_eq!(

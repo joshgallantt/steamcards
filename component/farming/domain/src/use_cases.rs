@@ -9,8 +9,9 @@ use std::{
     time::Duration,
 };
 
+use card::{CardAsset, DescribeCards, LookAtCards, LookAtFoils};
 use chrono::Utc;
-use library::{CardAsset, DescribeCards, Game, LookAtFoils, LookAtGame, ReadLibrary, SteamLibrary};
+use game::{Game, ReadLibrary, SteamLibrary};
 use preferences::{GetPreferences, Preferences};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -40,7 +41,7 @@ pub type EndSession = Arc<dyn Fn() + Send + Sync>;
 
 pub fn farm_cards(
     read: ReadLibrary,
-    look: LookAtGame,
+    look: LookAtCards,
     look_at_foils: LookAtFoils,
     describe: DescribeCards,
     play: Arc<dyn PlayRepository>,
@@ -76,7 +77,7 @@ pub fn end_session(sessions: Arc<SessionKeeper>) -> EndSession {
 
 struct Farmer {
     read: ReadLibrary,
-    look: LookAtGame,
+    look: LookAtCards,
     look_at_foils: LookAtFoils,
     describe: DescribeCards,
     play: Arc<dyn PlayRepository>,
@@ -139,6 +140,7 @@ impl Run {
         let order = farm_order(&kept.library, prefs, &kept.set_aside);
         r.remember(|s| {
             s.library = kept.library.clone();
+            s.sets = kept.sets.clone();
             s.order = order;
             s.session = kept.session.clone();
             s.set_aside = kept.set_aside.clone();
@@ -147,16 +149,18 @@ impl Run {
 
     /// Tells the screens what the session holds now.
     fn tell(&self, r: &Reporter) {
-        let (library, session, set_aside) = {
+        let (library, sets, session, set_aside) = {
             let kept = self.kept();
             (
                 kept.library.clone(),
+                kept.sets.clone(),
                 kept.session.clone(),
                 kept.set_aside.clone(),
             )
         };
         r.amend(|s| {
             s.library = library;
+            s.sets = sets;
             s.session = session;
             s.set_aside = set_aside;
         });
@@ -280,7 +284,8 @@ impl Farmer {
         // A set not read yet is looked at first, as ASF looks at a game as it
         // starts on it: then a card that drops can be told by the set's
         // counts, and which copy it is.
-        let mut next_look = if game.cards.is_empty() {
+        let set_known = run.kept().sets.set(app_id).is_some_and(|s| !s.is_empty());
+        let mut next_look = if !set_known {
             Instant::now()
         } else {
             Instant::now() + look_every(&game)
@@ -508,6 +513,7 @@ impl Farmer {
             FarmingStatus {
                 status: Status::Idle,
                 library: kept.library.clone(),
+                sets: kept.sets.clone(),
                 order: Vec::new(),
                 next_look: Some(when(until)),
                 session: kept.session.clone(),
@@ -619,6 +625,7 @@ impl Farmer {
             FarmingStatus {
                 status: Status::Blocked,
                 library: kept.library.clone(),
+                sets: kept.sets.clone(),
                 order: farm_order(&kept.library, &prefs, &kept.set_aside),
                 blocked_by: by,
                 next_look: until.map(when),
@@ -832,6 +839,7 @@ impl Farmer {
             FarmingStatus {
                 status: Status::Farming,
                 library: kept.library.clone(),
+                sets: kept.sets.clone(),
                 order: farm_order(&kept.library, prefs, &kept.set_aside),
                 playing: playing.to_vec(),
                 mode: Some(mode),

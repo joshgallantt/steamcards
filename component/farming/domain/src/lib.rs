@@ -4,9 +4,10 @@
 //! every card that dropped and which it was, what was played, and how long
 //! the rest should take.
 //!
-//! It works through the [`library`] component's use cases (what can still
-//! drop, and which card an item is) and the [`preferences`] component's
-//! (what the user wants first), never their storage. Playing is the data
+//! It works through the [`game`] and [`card`] components' use cases (what
+//! can still drop, a game's set, and which card an item is) and the
+//! [`preferences`] component's (what the user wants first), never their
+//! storage. Playing is the data
 //! layer's business, behind [`PlayRepository`]. The numbers it runs on, and
 //! where each comes from, are in `rules.rs`.
 

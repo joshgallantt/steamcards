@@ -6,11 +6,12 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::{describe_cards, look_at_cards, look_at_foils};
 use farming::{
     DropCard, EndSession, EventKind, FarmCards, FarmingEvent, FarmingStatus, Finished, Mode,
     NewItem, SessionKeeper, Status, end_session, farm_cards, test_support::InMemorySteam,
 };
-use library::{describe_cards, look_at_foils, look_at_game, read_library};
+use game::read_library;
 use preferences::{Preferences, test_support::ChangingPreferences};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -42,7 +43,7 @@ impl Player {
         Self {
             farm: farm_cards(
                 read_library(steam.clone()),
-                look_at_game(steam.clone()),
+                look_at_cards(steam.clone()),
                 look_at_foils(steam.clone()),
                 describe_cards(steam.clone()),
                 steam.clone(),

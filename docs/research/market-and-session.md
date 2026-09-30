@@ -489,7 +489,7 @@ SEE relists by removing a listing, finding the item's new asset id by hash name,
 
 ### 4.6 What the domain should hold now
 
-steamcards already has `library::Game` and `Card { name, owned }` (`component/library/domain/src/model.rs:57-114`). It also has `farming::FarmingStatus`, `EventKind::Dropped` and `Signal::NewItems` (`component/farming/domain/src/model.rs`). Quick-sell can be added later without reshaping the model if these types exist first:
+steamcards already has `game::Game` and `card::Card { name, owned }` (`component/game/domain/src/model/game.rs`, `component/card/domain/src/model/card.rs`). It also has `farming::FarmingStatus`, `EventKind::Dropped` and `Signal::NewItems` (`component/farming/domain/src/model.rs`). Quick-sell can be added later without reshaping the model if these types exist first:
 
 | Type | Holds | Why now |
 | --- | --- | --- |

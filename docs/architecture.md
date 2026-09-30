@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `library`, `preferences`, `farming`, `market` | Domain |
-| Data | `account-data`, `library-data`, `preferences-data`, `farming-data`, `market-data` | Domain, Library |
-| DI | `account-di`, `library-di`, `preferences-di`, `farming-di`, `market-di` | Domain, Data, Library |
+| Domain | `money`, `account`, `game`, `card`, `preferences`, `farming`, `market` | Domain |
+| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `market-data` | Domain, Library |
+| DI | `account-di`, `game-di`, `card-di`, `preferences-di`, `farming-di`, `market-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `terminal-ui`, `headless` | Domain |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -28,8 +28,9 @@ Two things enforce this table:
    reads every manifest through `cargo metadata` and fails on any arrow the
    table doesn't allow. It also fails if a production dependency enables
    `test-support`, and if a domain crate uses a component its own table
-   doesn't name: `farming` may use `library` and `preferences`, `market`
-   `library` and `money`, so farming and the market never meet.
+   doesn't name: `card` may use `game`; `farming` `game`, `card` and
+   `preferences`; `market` `game`, `card` and `money`. So farming and the
+   market never meet.
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -39,16 +40,20 @@ Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
 The domain starts from its entities:
 
-- **`SteamLibrary`**, in `library`: the games on the account that have
+- **`SteamLibrary`**, in `game`: the games on the account that have
   trading cards. It holds each game once, and knows the drops received and
   still to come, and how many games have had every drop.
 - **`Game`**: one of those games, by app ID: its hours, its `CardDrops`
-  (received and still to come), its badge level and its card set. Drops and
-  the set are two measures, and neither stands in for the other: drops are
-  what farming works through, the set is what a badge needs.
-- **`Card`**: a card in a game's set, and how many the account has. The
-  same card can drop more than once, so that's a count, and copies beyond
-  one are spares.
+  (received and still to come) and its badge level. Its drops are what
+  farming works through.
+- **`Card`**, in `card`: a card in a game's set, and how many the account
+  has. The same card can drop more than once, so that's a count, and copies
+  beyond one are spares.
+- **`CardSet`**: a game's set, or its foils, with how many of each card the
+  account has: what a badge needs. It's a measure of its own beside the
+  game's drops, and neither stands in for the other: 3 of 4 drops can be 2
+  of 5 cards and a spare. **`CardSets`** holds the sets looked at, by game;
+  **`GameCards`** is one look at a game's card page, the game and its set.
 - **`CardAsset`**: one copy of a card the account holds, by its asset ID:
   the game whose set it's from, its name, its market hash name, and whether
   it's a foil, marketable and tradable. Each copy that drops is its own. It
@@ -102,7 +107,7 @@ by hand) and `rules.rs`. `money` is its models alone, a file each:
 `Currency`, with Valve's table of currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
-(`SteamLibrary::drops_left`, `Game::has_full_set`, `Preferences::wants`,
+(`SteamLibrary::drops_left`, `CardSet::is_full`, `Preferences::wants`,
 `Wallet::seller_gets`). They carry no serde derives: how a thing is stored is
 the data layer's concern.
 
@@ -127,8 +132,8 @@ constructor builds the real one over the repositories. Call sites read
 | | `RefreshAccount` (`refresh_account`) | Re-checks the saved sign-in in the background. |
 | | `LinkAccount` (`link_account`) | Signs in with a QR code; the codes arrive on a channel. Errs with `LinkError`. |
 | | `UnlinkAccount` (`unlink_account`) | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
-| library | `ReadLibrary` (`read_library`) | The whole library, games with drops left first. Errs with `LibraryError`. |
-| | `LookAtGame` (`look_at_game`) | One game afresh: its drops, hours and card set. |
+| game | `ReadLibrary` (`read_library`) | The whole library, games with drops left first. Errs with `GameError`. |
+| card | `LookAtCards` (`look_at_cards`) | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
 | | `LookAtFoils` (`look_at_foils`) | One game's foils afresh, from its foil badge: how many of each the account has. |
 | | `DescribeCards` (`describe_cards`) | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
 | preferences | `GetPreferences` (`get_preferences`) | The current preferences. |
@@ -155,18 +160,19 @@ later (see [the research](research/market-and-session.md), section 4).
 
 ### Use cases that call other use cases
 
-`farm_cards` needs the library and what the user wants. It takes
-`ReadLibrary`, `LookAtGame`, `LookAtFoils`, `DescribeCards` and
-`GetPreferences`, not their repositories: so `farming` depends on `library` and `preferences` as domain
-components, and never learns where either comes from. When a tier changes,
+`farm_cards` needs the library, the cards and what the user wants. It takes
+`ReadLibrary`, `LookAtCards`, `LookAtFoils`, `DescribeCards` and
+`GetPreferences`, not their repositories: so `farming` depends on `game`,
+`card` and `preferences` as domain components, and never learns where any of
+them comes from. When a tier changes,
 the farmer sees it within moments, through the same use case the screens
 call.
 
 `farm_cards` and `end_session` share a `SessionKeeper`, which the DI crate
 makes: it keeps the session from one run of the farmer to the next.
 
-`market` depends on `library` for its entities alone: it values `CardAsset`s,
-a game's set and the drops still to come, handed to it. It never depends on
+`market` depends on `game` and `card` for their entities alone: it values
+`CardAsset`s, a game's set and the drops still to come, handed to it. It never depends on
 `farming`, nor `farming` on it; whatever shows a session's cards joins the
 two.
 
@@ -175,14 +181,16 @@ two.
 | Contract | Declared in | Implemented by |
 | --- | --- | --- |
 | `AccountRepository` | `account` | `SteamAccountRepository` in `account-data` |
-| `LibraryRepository` | `library` | `SteamLibraryRepository` in `library-data` |
+| `GameRepository` | `game` | `SteamGameRepository` in `game-data` |
+| `CardRepository` | `card` | `SteamCardRepository` in `card-data` |
 | `PreferencesRepository` | `preferences` | `FilePreferencesRepository` in `preferences-data` |
 | `PlayRepository` | `farming` | `SteamPlayRepository` in `farming-data` |
 | `MarketRepository` | `market` | `SteamMarketRepository` in `market-data` |
 
 Use cases return errors in the user's vocabulary (`LinkError::Refused`,
 `UnlinkError::Unavailable`, `PreferencesError::Unavailable`,
-`LibraryError::Unavailable`, `MarketError::Paused`). Repository contracts
+`GameError::Unavailable`, `CardError::Unavailable`, `MarketError::Paused`).
+Repository contracts
 return `anyhow::Result` with a reason written for the user; the use case
 decides what it means. Farming's failures are the log lines the user reads,
 so it passes them on as text, and so does the price watcher. A market lookup
@@ -262,7 +270,7 @@ types are named, in three phases, each handed only the one before it:
 | Phase | Builds | From |
 | --- | --- | --- |
 | `DataAssembler` | `ConfigFile`, `PriceCache`, `steam_api::Session`, `KeepAwake` | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `LibraryComponent`, `PreferencesComponent`, `FarmingComponent`, `MarketComponent` | `DataAssembler` |
+| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `PreferencesComponent`, `FarmingComponent`, `MarketComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
 `MarketComponent` takes the `Session`, the `ConfigFile` and a `PriceCache`
@@ -321,7 +329,8 @@ graph TD
 
     subgraph DI["component/*/di"]
         ADI[account-di]
-        LDI[library-di]
+        GDI[game-di]
+        CDI[card-di]
         PDI[preferences-di]
         FDI[farming-di]
         MDI[market-di]
@@ -329,15 +338,18 @@ graph TD
 
     subgraph DATA["component/*/data"]
         AD[account-data]
-        LD[library-data]
+        GD[game-data]
+        CD[card-data]
         PD[preferences-data]
         FD[farming-data]
         MD[market-data]
     end
 
     subgraph DOMAIN["component/*/domain"]
+        MON[money]
         ACC[account]
-        LIB[library]
+        GAME[game]
+        CARD[card]
         PREF[preferences]
         FARM[farming]
         MKT[market]
@@ -350,24 +362,28 @@ graph TD
         KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & LDI & PDI & FDI & CF & SA & DL & KA
-    TUI --> ACC & LIB & PREF & FARM
+    APP --> TUI & HL & ADI & GDI & CDI & PDI & FDI & MDI & CF & SA & DL & KA
+    TUI --> ACC & GAME & CARD & PREF & FARM & MKT & MON
     HL --> ACC & FARM
     ADI --> AD
-    LDI --> LD
+    GDI --> GD
+    CDI --> CD
     PDI --> PD
     FDI --> FD
     MDI --> MD
     AD --> ACC & SA
-    LD --> LIB & SA
+    GD --> GAME & SA
+    CD --> CARD & GAME & SA
     PD --> PREF & CF
     FD --> FARM & SA & KA
-    MD --> MKT & SA & CF
-    FARM --> LIB & PREF
-    MKT --> LIB
+    MD --> MKT & MON & SA & CF
+    CARD --> GAME
+    FARM --> GAME & CARD & PREF
+    MKT --> GAME & CARD & MON
     SA --> CF & DL
     KA --> DL
 ```
 
-Every arrow is a line in a `Cargo.toml`. `market-di` isn't assembled by the
-app yet, so nothing points to it.
+Every arrow is a line in a `Cargo.toml`. Each DI crate also lists its
+domain crate, and `farming-di` the domain crates whose use cases it's
+handed: those arrows are left out, so the graph stays readable.

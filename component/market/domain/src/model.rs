@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt, time::Duration};
 
+use card::CardAsset;
 use chrono::{DateTime, Utc};
-use library::CardAsset;
 use money::{Currency, Money};
 
 use crate::rules::{FRESH_FOR, RETRY_FAILED, between, later};

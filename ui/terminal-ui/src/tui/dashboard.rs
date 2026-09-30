@@ -963,37 +963,37 @@ pub(super) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
     }
     out.push(field("Drops", drops));
 
-    if g.cards.is_empty() {
+    let Some(set) = cx.sets.set(g.app_id).filter(|s| !s.is_empty()) else {
         out.push(field(
             "Set",
             vec![dim("not read yet: its card page is read once it's farmed")],
         ));
         return out;
-    }
-    let spares = g.spares();
-    let mut set = vec![Span::raw(format!(
+    };
+    let spares = set.spares();
+    let mut collected = vec![Span::raw(format!(
         "{} of {} cards",
-        g.cards_collected(),
-        g.cards.len()
+        set.collected(),
+        set.len()
     ))];
     if spares > 0 {
-        set.push(dim(format!(
+        collected.push(dim(format!(
             " · {spares} spare{}",
             if spares == 1 { "" } else { "s" }
         )));
     }
-    out.push(field("Set", set));
+    out.push(field("Set", collected));
     out.push(Line::default());
 
     // The set: each card, how many you have, and what it's worth.
-    let name_w = g
-        .cards
+    let name_w = set
+        .cards()
         .iter()
         .map(|c| c.name.chars().count())
         .max()
         .unwrap_or(0)
         .min(w.saturating_sub(2 + 5 + 9));
-    for c in &g.cards {
+    for c in set.cards() {
         let count = match c.owned {
             0 => dim(fit_right("—", 5)),
             n => Span::raw(fit_right(&format!("×{n}"), 5)),
@@ -1188,7 +1188,7 @@ fn render_footer(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use library::Game;
+    use game::Game;
 
     use super::*;
 
@@ -1236,7 +1236,7 @@ mod tests {
 
     #[test]
     fn a_game_reads_as_its_state() {
-        use library::test_support::game;
+        use game::test_support::game;
         let entry = |remaining: u32, playing: Option<Mode>| QueueEntry {
             game: game(1, 5.0, 1, remaining),
             tier: Tier::Indifferent,
@@ -1255,12 +1255,11 @@ mod tests {
             app_id: 1,
             name: "Done".into(),
             hours: 5.0,
-            drops: library::CardDrops {
+            drops: game::CardDrops {
                 received: 3,
                 remaining: 0,
             },
             badge_level: 0,
-            cards: Vec::new(),
         };
         assert_eq!(value_to_come(&g, &market::PriceBook::default(), None), None);
     }

@@ -1,0 +1,26 @@
+[package]
+name = "card-data"
+description = "The user's cards as the card pages and the inventory show them, written to fit the card domain's CardRepository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+card.workspace = true
+game.workspace = true
+steam-api.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+config-file.workspace = true
+debug-log.workspace = true
+steam-api = { workspace = true, features = ["test-support"] }
+tokio.workspace = true
+wiremock.workspace = true

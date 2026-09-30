@@ -1,4 +1,4 @@
-use library::{CardDrops, Game};
+use game::{CardDrops, Game};
 use preferences::{
     GetPreferences, PreferencesError, SetAppearOnline, SetGameTier, SetOnlyPriority, Tier,
 };
@@ -123,7 +123,7 @@ fn row(app_id: u32, games: &[Game], rank: Option<usize>) -> GameRow {
 mod tests {
     use std::sync::Arc;
 
-    use library::test_support::game;
+    use game::test_support::game;
     use preferences::{
         Preferences, get_preferences, set_appear_online, set_game_tier, set_only_priority,
         test_support::InMemoryPreferencesRepository,

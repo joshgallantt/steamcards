@@ -8,7 +8,8 @@ use std::{
 };
 
 use async_trait::async_trait;
-use library::{Card, CardAsset, CardDrops, Game, LibraryRepository, SteamLibrary};
+use card::{Card, CardAsset, CardRepository, CardSet, GameCards};
+use game::{CardDrops, Game, GameRepository, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 
 use crate::{FarmCards, NewItem, PlayRepository, Signal};
@@ -22,6 +23,9 @@ pub fn idle_farmer() -> FarmCards {
 #[derive(Debug, Clone)]
 struct Farmed {
     game: Game,
+    /// Its set, and how many of each card the account has: only its card
+    /// page shows it.
+    cards: Vec<Card>,
     /// Played time from one card to the next; `None` never drops.
     drop_every: Option<Duration>,
     /// Hours it needs before its cards drop at all.
@@ -126,8 +130,8 @@ impl InMemorySteam {
                         remaining: cards,
                     },
                     badge_level: 0,
-                    cards: Vec::new(),
                 },
+                cards: Vec::new(),
                 drop_every: every,
                 needs_hours: 3.0,
                 since_drop: Duration::ZERO,
@@ -148,7 +152,7 @@ impl InMemorySteam {
     /// has. Only its card page shows it; the badge pages don't.
     pub fn set(&self, app_id: u32, cards: &[(&str, u32)]) {
         if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
-            f.game.cards = cards
+            f.cards = cards
                 .iter()
                 .map(|&(name, owned)| Card {
                     name: name.to_owned(),
@@ -390,11 +394,7 @@ fn drop_card(s: &mut State, app_id: u32) {
         .next
         .pop_front()
         .unwrap_or_else(|| (format!("Card {}", f.game.drops.received), false));
-    let set = if foil {
-        &mut f.foils
-    } else {
-        &mut f.game.cards
-    };
+    let set = if foil { &mut f.foils } else { &mut f.cards };
     match set.iter_mut().find(|c| c.name == name) {
         Some(card) => card.owned += 1,
         // A foil counts on its badge's page whichever it is; a normal card
@@ -427,7 +427,7 @@ fn drop_card(s: &mut State, app_id: u32) {
 }
 
 #[async_trait]
-impl LibraryRepository for InMemorySteam {
+impl GameRepository for InMemorySteam {
     /// The badge pages: every game, without its set.
     async fn library(&self) -> anyhow::Result<SteamLibrary> {
         self.settle();
@@ -437,18 +437,15 @@ impl LibraryRepository for InMemorySteam {
             anyhow::bail!("steamcommunity.com didn't answer (503 Service Unavailable)");
         }
         Ok(SteamLibrary::new(
-            s.games
-                .values()
-                .map(|f| Game {
-                    cards: Vec::new(),
-                    ..f.game.clone()
-                })
-                .collect(),
+            s.games.values().map(|f| f.game.clone()).collect(),
         ))
     }
+}
 
+#[async_trait]
+impl CardRepository for InMemorySteam {
     /// A game's card page, its set and all.
-    async fn game(&self, app_id: u32) -> anyhow::Result<Game> {
+    async fn game_cards(&self, app_id: u32) -> anyhow::Result<GameCards> {
         self.settle();
         let s = self.state.lock().unwrap();
         if s.down {
@@ -456,12 +453,15 @@ impl LibraryRepository for InMemorySteam {
         }
         s.games
             .get(&app_id)
-            .map(|f| f.game.clone())
+            .map(|f| GameCards {
+                game: f.game.clone(),
+                set: CardSet::new(f.cards.clone()),
+            })
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
     }
 
     /// A game's foil badge page: its foils, and how many of each.
-    async fn foils(&self, app_id: u32) -> anyhow::Result<Vec<Card>> {
+    async fn foils(&self, app_id: u32) -> anyhow::Result<CardSet> {
         self.settle();
         let s = self.state.lock().unwrap();
         if s.down {
@@ -469,7 +469,7 @@ impl LibraryRepository for InMemorySteam {
         }
         s.games
             .get(&app_id)
-            .map(|f| f.foils.clone())
+            .map(|f| CardSet::new(f.foils.clone()))
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
     }
 

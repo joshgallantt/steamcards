@@ -12,9 +12,12 @@ members = [
     "component/account/domain",
     "component/account/data",
     "component/account/di",
-    "component/library/domain",
-    "component/library/data",
-    "component/library/di",
+    "component/game/domain",
+    "component/game/data",
+    "component/game/di",
+    "component/card/domain",
+    "component/card/data",
+    "component/card/di",
     "component/preferences/domain",
     "component/preferences/data",
     "component/preferences/di",
@@ -90,21 +93,24 @@ broken_intra_doc_links = "deny"
 # Domain
 money = { path = "component/money/domain" }
 account = { path = "component/account/domain" }
-library = { path = "component/library/domain" }
+game = { path = "component/game/domain" }
+card = { path = "component/card/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
 market = { path = "component/market/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
-library-data = { path = "component/library/data" }
+game-data = { path = "component/game/data" }
+card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
 market-data = { path = "component/market/data" }
 
 # DI
 account-di = { path = "component/account/di" }
-library-di = { path = "component/library/di" }
+game-di = { path = "component/game/di" }
+card-di = { path = "component/card/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
 market-di = { path = "component/market/di" }

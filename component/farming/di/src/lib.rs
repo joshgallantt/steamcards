@@ -1,15 +1,16 @@
 //! Where the farming domain meets its data layer: games played on the Steam
-//! session, with the computer kept awake meanwhile. Farming asks the library
-//! and preferences components through their use cases, never their storage;
+//! session, with the computer kept awake meanwhile. Farming asks the game,
+//! card and preferences components through their use cases, never their storage;
 //! the composition root hands them in. Farming and ending its session share
 //! one keeper of the session.
 
 use std::sync::Arc;
 
+use card::{DescribeCards, LookAtCards, LookAtFoils};
 use farming::{EndSession, FarmCards, PlayRepository, SessionKeeper, end_session, farm_cards};
 use farming_data::SteamPlayRepository;
+use game::ReadLibrary;
 use keep_awake::KeepAwake;
-use library::{DescribeCards, LookAtFoils, LookAtGame, ReadLibrary};
 use preferences::GetPreferences;
 use steam_api::Session;
 
@@ -23,7 +24,7 @@ impl FarmingComponent {
         session: Arc<Session>,
         awake: Arc<KeepAwake>,
         read_library: ReadLibrary,
-        look_at_game: LookAtGame,
+        look_at_cards: LookAtCards,
         look_at_foils: LookAtFoils,
         describe_cards: DescribeCards,
         get_preferences: GetPreferences,
@@ -31,7 +32,7 @@ impl FarmingComponent {
         Self::over(
             Arc::new(SteamPlayRepository::new(session, awake)),
             read_library,
-            look_at_game,
+            look_at_cards,
             look_at_foils,
             describe_cards,
             get_preferences,
@@ -41,7 +42,7 @@ impl FarmingComponent {
     pub fn over(
         play: Arc<dyn PlayRepository>,
         read_library: ReadLibrary,
-        look_at_game: LookAtGame,
+        look_at_cards: LookAtCards,
         look_at_foils: LookAtFoils,
         describe_cards: DescribeCards,
         get_preferences: GetPreferences,
@@ -50,7 +51,7 @@ impl FarmingComponent {
         Self {
             farm: farm_cards(
                 read_library,
-                look_at_game,
+                look_at_cards,
                 look_at_foils,
                 describe_cards,
                 play,

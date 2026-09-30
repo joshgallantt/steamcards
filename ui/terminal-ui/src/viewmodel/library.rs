@@ -1,14 +1,14 @@
 use std::time::{Duration, Instant};
 
 use futures::FutureExt;
-use library::{Game, LibraryError, ReadLibrary, SteamLibrary};
+use game::{Game, GameError, ReadLibrary, SteamLibrary};
 use tokio::task::JoinHandle;
 
 /// The Steam library, read in the background, so a screen showing it never
 /// waits on Steam.
 pub struct Library {
     read: ReadLibrary,
-    pending: Option<JoinHandle<Result<SteamLibrary, LibraryError>>>,
+    pending: Option<JoinHandle<Result<SteamLibrary, GameError>>>,
     library: Option<SteamLibrary>,
     fetched: Option<Instant>,
     /// Something the library depends on changed since the one at hand, or
@@ -104,12 +104,12 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use library::test_support::game;
+    use game::test_support::game;
 
     use super::*;
 
     /// Answers every read with `answer`, counting the reads.
-    fn answering(answer: Result<SteamLibrary, LibraryError>) -> (ReadLibrary, Arc<AtomicUsize>) {
+    fn answering(answer: Result<SteamLibrary, GameError>) -> (ReadLibrary, Arc<AtomicUsize>) {
         let asked = Arc::new(AtomicUsize::new(0));
         let count = asked.clone();
         let read: ReadLibrary = Arc::new(move || {
@@ -155,7 +155,7 @@ mod tests {
         l.refresh_if_older(Duration::from_secs(600));
         assert_eq!(asked.load(Ordering::Relaxed), 1);
 
-        let (read, asked) = answering(Err(LibraryError::Unavailable(
+        let (read, asked) = answering(Err(GameError::Unavailable(
             "steamcommunity.com didn't answer".into(),
         )));
         let mut l = Library::new(read);

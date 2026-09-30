@@ -1,7 +1,8 @@
 use std::{fmt, time::Duration};
 
+use card::{CardAsset, CardSets};
 use chrono::{DateTime, Utc};
-use library::{CardAsset, SteamLibrary};
+use game::SteamLibrary;
 
 /// What the farmer is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -43,6 +44,9 @@ pub struct FarmingStatus {
     /// The library as the farmer sees it: hours counted as they're played,
     /// drops as they land.
     pub library: SteamLibrary,
+    /// The card sets of the games looked at, with the copies that dropped
+    /// since counted in.
+    pub sets: CardSets,
     /// The games the farmer means to farm, by app ID, in the order it will.
     pub order: Vec<u32>,
     /// What's being played now.

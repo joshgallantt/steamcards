@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use farming::{DropCard, FarmingSession, forecast};
-use library::{Game, SteamLibrary};
+use game::{Game, SteamLibrary};
 use market::{
     Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
 };
@@ -256,9 +256,10 @@ pub fn prices_wanted(playing: &[u32], session: &FarmingSession, order: &[u32]) -
 
 #[cfg(test)]
 mod tests {
+    use card::CardAsset;
     use chrono::TimeZone;
     use farming::{Drop, Mode, Stretch};
-    use library::{Card, CardAsset, CardDrops};
+    use game::CardDrops;
     use market::{
         PriceQuote, PricedCard, QuoteSource, SetPrices,
         test_support::{listing, pounds},
@@ -281,14 +282,6 @@ mod tests {
                 remaining: 1,
             },
             badge_level: 0,
-            cards: ["Ethan", "Carter", "Madison", "Norman", "Scott"]
-                .iter()
-                .zip([0, 0, 2, 0, 1])
-                .map(|(name, owned)| Card {
-                    name: (*name).into(),
-                    owned,
-                })
-                .collect(),
         }
     }
 
@@ -302,7 +295,6 @@ mod tests {
                 remaining: 2,
             },
             badge_level: 0,
-            cards: Vec::new(),
         }
     }
 

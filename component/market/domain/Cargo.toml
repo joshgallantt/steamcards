@@ -16,7 +16,8 @@ workspace = true
 test-support = []
 
 [dependencies]
-library.workspace = true
+game.workspace = true
+card.workspace = true
 money.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
@@ -26,5 +27,6 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 market = { path = ".", features = ["test-support"] }
-library = { workspace = true, features = ["test-support"] }
+game = { workspace = true, features = ["test-support"] }
+card = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }

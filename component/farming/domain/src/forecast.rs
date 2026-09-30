@@ -26,7 +26,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use library::SteamLibrary;
+use game::SteamLibrary;
 
 use crate::{
     Drop, FarmingSession, Forecast, Mode, Stretch,
@@ -144,7 +144,7 @@ fn span(hours: f64) -> Duration {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
-    use library::{CardDrops, Game};
+    use game::{CardDrops, Game};
 
     use super::*;
     use crate::DropCard;
@@ -164,7 +164,6 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
-            cards: Vec::new(),
         }
     }
 

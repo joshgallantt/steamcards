@@ -54,13 +54,14 @@ fn allowed(from: Layer) -> &'static [Layer] {
 }
 
 /// Which components each domain crate may use: the arrows between components
-/// (docs/design/ui.md §6.6). Farming and the market never meet: whatever
-/// shows a session's cards joins the two.
+/// (docs/architecture.md, "The dependency rule"). Farming and the market
+/// never meet: whatever shows a session's cards joins the two.
 fn components(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
-        "money" | "account" | "library" | "preferences" => &[],
-        "farming" => &["library", "preferences"],
-        "market" => &["library", "money"],
+        "money" | "account" | "game" | "preferences" => &[],
+        "card" => &["game"],
+        "farming" => &["game", "card", "preferences"],
+        "market" => &["game", "card", "money"],
         _ => return None,
     })
 }
@@ -102,7 +103,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        24,
+        27,
         "a crate was added or removed; place it in a layer above"
     );
 

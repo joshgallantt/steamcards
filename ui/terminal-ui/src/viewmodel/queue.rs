@@ -3,7 +3,7 @@
 // fresh from the latest farming status and preferences on every frame.
 
 use farming::Mode;
-use library::{Game, SteamLibrary};
+use game::{Game, SteamLibrary};
 use preferences::{Preferences, Tier};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +120,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use library::test_support::game;
+    use game::test_support::game;
 
     use super::*;
 

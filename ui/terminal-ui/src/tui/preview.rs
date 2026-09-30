@@ -13,12 +13,13 @@ use account::{
     Account as SignedIn, LoginChallenge,
     test_support::{fixed_account, no_refresh, recording_unlink, refusing_link},
 };
+use card::{Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{
     Drop, DropCard, EventKind, FarmingSession, FarmingStatus, Mode, Status, Stretch,
     test_support::idle_farmer,
 };
-use library::{Card, CardAsset, CardDrops, Game, SteamLibrary, test_support::fixed_library};
+use game::{CardDrops, Game, SteamLibrary, test_support::fixed_library};
 use market::{
     PriceBook,
     test_support::{fixed_prices, pounds, set_prices},
@@ -61,7 +62,6 @@ fn game(app_id: u32, name: &str, hours: f64, received: u32, remaining: u32) -> G
             remaining,
         },
         badge_level: 0,
-        cards: Vec::new(),
     }
 }
 
@@ -70,16 +70,6 @@ fn game(app_id: u32, name: &str, hours: f64, received: u32, remaining: u32) -> G
 fn library() -> SteamLibrary {
     let mut portal = game(620, "Portal 2", 5.2, 1, 3);
     portal.badge_level = 1;
-    portal.cards = vec![
-        card("Atlas", 2),
-        card("P-Body", 1),
-        card("Wheatley", 0),
-        card("GLaDOS", 0),
-        card("Chell", 1),
-        card("Space Core", 0),
-        card("Cave Johnson", 0),
-        card("Turret", 0),
-    ];
     SteamLibrary::new(vec![
         portal,
         game(1_145_360, "Hades", 12.5, 3, 1),
@@ -90,6 +80,25 @@ fn library() -> SteamLibrary {
         game(220, "Half-Life 2", 30.0, 3, 0),
         game(105_600, "Terraria", 42.0, 4, 0),
     ])
+}
+
+/// The sets looked at: Portal 2's.
+fn sets() -> CardSets {
+    let mut sets = CardSets::default();
+    sets.update(
+        620,
+        CardSet::new(vec![
+            card("Atlas", 2),
+            card("P-Body", 1),
+            card("Wheatley", 0),
+            card("GLaDOS", 0),
+            card("Chell", 1),
+            card("Space Core", 0),
+            card("Cave Johnson", 0),
+            card("Turret", 0),
+        ]),
+    );
+    sets
 }
 
 fn card(name: &str, owned: u32) -> Card {
@@ -262,6 +271,7 @@ fn farming_portal() -> FarmingStatus {
     FarmingStatus {
         status: Status::Farming,
         library: library(),
+        sets: sets(),
         order: vec![620, 413_150, 1_145_360, 1_086_940, 292_030],
         playing: vec![620],
         mode: Some(Mode::Cards),
@@ -795,20 +805,26 @@ fn showcase_library() -> SteamLibrary {
         SHOWCASE
             .iter()
             .map(|&(app_id, name, hours, received, remaining, _)| {
-                let mut g = game(app_id, name, hours, received, remaining);
-                if app_id == 960_910 {
-                    g.cards = vec![
-                        card("Ethan", 0),
-                        card("Carter", 0),
-                        card("Madison", 2),
-                        card("Norman", 0),
-                        card("Scott", 1),
-                    ];
-                }
-                g
+                game(app_id, name, hours, received, remaining)
             })
             .collect(),
     )
+}
+
+/// The sets looked at: Heavy Rain's, being farmed.
+fn showcase_sets() -> CardSets {
+    let mut sets = CardSets::default();
+    sets.update(
+        960_910,
+        CardSet::new(vec![
+            card("Ethan", 0),
+            card("Carter", 0),
+            card("Madison", 2),
+            card("Norman", 0),
+            card("Scott", 1),
+        ]),
+    );
+    sets
 }
 
 fn showcase_prices() -> PriceBook {
@@ -970,6 +986,7 @@ fn showcase_app() -> App {
     a.status = Some(FarmingStatus {
         status: Status::Farming,
         library,
+        sets: showcase_sets(),
         order,
         playing: vec![960_910],
         mode: Some(Mode::Cards),

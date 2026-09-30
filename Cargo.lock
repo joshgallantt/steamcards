@@ -253,6 +253,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "card"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "card",
+ "game",
+ "tokio",
+]
+
+[[package]]
+name = "card-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "card",
+ "config-file",
+ "debug-log",
+ "game",
+ "steam-api",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
+name = "card-di"
+version = "0.1.0"
+dependencies = [
+ "card",
+ "card-data",
+ "steam-api",
+]
+
+[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -770,9 +805,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "card",
  "chrono",
  "farming",
- "library",
+ "game",
  "preferences",
  "tokio",
  "tokio-util",
@@ -797,10 +833,11 @@ dependencies = [
 name = "farming-di"
 version = "0.1.0"
 dependencies = [
+ "card",
  "farming",
  "farming-data",
+ "game",
  "keep-awake",
- "library",
  "preferences",
  "steam-api",
 ]
@@ -958,6 +995,39 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "game"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "game",
+ "tokio",
+]
+
+[[package]]
+name = "game-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "config-file",
+ "debug-log",
+ "game",
+ "steam-api",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
+name = "game-di"
+version = "0.1.0"
+dependencies = [
+ "game",
+ "game-data",
+ "steam-api",
 ]
 
 [[package]]
@@ -1510,39 +1580,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "library"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "library",
- "tokio",
-]
-
-[[package]]
-name = "library-data"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "config-file",
- "debug-log",
- "library",
- "steam-api",
- "tokio",
- "wiremock",
-]
-
-[[package]]
-name = "library-di"
-version = "0.1.0"
-dependencies = [
- "library",
- "library-data",
- "steam-api",
-]
-
-[[package]]
 name = "libredox"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1624,8 +1661,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "card",
  "chrono",
- "library",
+ "game",
  "market",
  "money",
  "tokio",
@@ -2888,14 +2926,15 @@ version = "0.1.0"
 dependencies = [
  "account-di",
  "anyhow",
+ "card-di",
  "clap",
  "config-file",
  "debug-log",
  "dirs",
  "farming-di",
+ "game-di",
  "headless",
  "keep-awake",
- "library-di",
  "market-di",
  "preferences-di",
  "serde_json",
@@ -3042,11 +3081,12 @@ version = "0.1.0"
 dependencies = [
  "account",
  "anyhow",
+ "card",
  "chrono",
  "crossterm",
  "farming",
  "futures",
- "library",
+ "game",
  "market",
  "money",
  "preferences",

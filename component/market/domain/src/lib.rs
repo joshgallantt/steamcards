@@ -3,8 +3,8 @@
 //! card's best offers, the wallet's currency and fees, the value basis the
 //! user picks, and Steam's pause on lookups.
 //!
-//! It values the [`library`] component's cards: the copies held, a game's
-//! set, the drops still to come. It knows nothing of farming: whoever shows
+//! It values the [`card`] component's cards, the copies held and a game's
+//! set, and the drops the [`game`] component's games still have to come. It knows nothing of farming: whoever shows
 //! a session's cards hands them over as [`HeldCard`]s. How Steam is asked is
 //! the data layer's business, behind [`MarketRepository`], and so is how
 //! fast: every lookup waits its turn in Steam's one market queue. The market

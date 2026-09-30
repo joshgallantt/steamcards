@@ -4,10 +4,11 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::{describe_cards, look_at_cards, look_at_foils};
 use farming::{
     EventKind, FarmingEvent, FarmingStatus, Mode, Status, farm_cards, test_support::InMemorySteam,
 };
-use library::{describe_cards, look_at_foils, look_at_game, read_library};
+use game::read_library;
 use preferences::{Preferences, test_support::ChangingPreferences};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -42,7 +43,7 @@ impl Player {
     fn starts_farming(&mut self) {
         let farm = farm_cards(
             read_library(self.steam.clone()),
-            look_at_game(self.steam.clone()),
+            look_at_cards(self.steam.clone()),
             look_at_foils(self.steam.clone()),
             describe_cards(self.steam.clone()),
             self.steam.clone(),

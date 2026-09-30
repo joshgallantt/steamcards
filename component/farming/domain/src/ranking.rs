@@ -1,7 +1,7 @@
 //! What to play, and how. Pure: the library, the preferences and what's been
 //! set aside go in; an order and a plan come out.
 
-use library::{Game, SteamLibrary};
+use game::{Game, SteamLibrary};
 use preferences::Preferences;
 
 use crate::{
@@ -118,7 +118,7 @@ pub(crate) fn why_nothing(library: &SteamLibrary, prefs: &Preferences) -> &'stat
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
-    use library::CardDrops;
+    use game::CardDrops;
 
     use super::*;
 
@@ -132,7 +132,6 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
-            cards: Vec::new(),
         }
     }
 

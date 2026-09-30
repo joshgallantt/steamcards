@@ -16,7 +16,8 @@ workspace = true
 [dependencies]
 account.workspace = true
 farming.workspace = true
-library.workspace = true
+game.workspace = true
+card.workspace = true
 market.workspace = true
 money.workspace = true
 preferences.workspace = true
@@ -33,7 +34,8 @@ webbrowser.workspace = true
 [dev-dependencies]
 account = { workspace = true, features = ["test-support"] }
 farming = { workspace = true, features = ["test-support"] }
-library = { workspace = true, features = ["test-support"] }
+game = { workspace = true, features = ["test-support"] }
+card = { workspace = true, features = ["test-support"] }
 market = { workspace = true, features = ["test-support"] }
 preferences = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

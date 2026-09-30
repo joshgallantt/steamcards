@@ -17,6 +17,7 @@ use std::{
 };
 
 use account::{Account as SignedIn, LoginChallenge};
+use card::CardSets;
 use chrono::{DateTime, FixedOffset, Local, Utc};
 use crossterm::{
     event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -25,7 +26,7 @@ use crossterm::{
 };
 use farming::{EventKind, FarmingEvent, FarmingSession, FarmingStatus, farm_order};
 use futures::StreamExt;
-use library::SteamLibrary;
+use game::SteamLibrary;
 use market::{MarketEvent, MarketEventKind, PriceBook, Wallet};
 use preferences::{Preferences, PreferencesError, Tier};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
@@ -131,6 +132,9 @@ struct Ctx<'a> {
     /// in farm order.
     library: &'a SteamLibrary,
     order: &'a [u32],
+    /// The card sets of the games looked at, with the copies that dropped
+    /// counted in.
+    sets: &'a CardSets,
     /// This session's cards.
     session: &'a FarmingSession,
     /// Every price known, and the wallet whose currency they're shown in.
@@ -889,6 +893,7 @@ impl App {
             None => farm_order(&library, &prefs, &[]),
         };
         let no_session = FarmingSession::default();
+        let no_sets = CardSets::default();
         let book = self.market.book();
         let wallet = self.market.wallet();
         let (queue_offset, log_scroll) = {
@@ -901,6 +906,7 @@ impl App {
                 zone: (self.clock.zone)(),
                 library: &library,
                 order: &order,
+                sets: self.status.as_ref().map_or(&no_sets, |s| &s.sets),
                 session: self.status.as_ref().map_or(&no_session, |s| &s.session),
                 book: &book,
                 wallet: wallet.as_ref(),

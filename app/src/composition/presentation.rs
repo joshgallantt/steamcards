@@ -39,7 +39,7 @@ impl PresentationAssembler {
                 d.preferences.set_only_priority.clone(),
                 d.preferences.set_appear_online.clone(),
             ),
-            Library::new(d.library.read.clone()),
+            Library::new(d.game.read.clone()),
             Onboarding::new(d.account.get.clone()),
             Market::new(
                 d.market.prices.clone(),

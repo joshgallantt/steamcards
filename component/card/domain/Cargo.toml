@@ -1,0 +1,26 @@
+[package]
+name = "card"
+description = "The trading cards of the user's games: each game's set and foils, how many of each card the account has, and the copies it holds."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Doubles for other crates' tests. Never depends on card-data.
+test-support = []
+
+[dependencies]
+game.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+card = { path = ".", features = ["test-support"] }
+game = { workspace = true, features = ["test-support"] }

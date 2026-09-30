@@ -4,7 +4,7 @@
 //! have a minimum, so the two differ (research §1.4).
 
 use chrono::{DateTime, Utc};
-use library::SteamLibrary;
+use game::SteamLibrary;
 use money::Money;
 
 use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, QuoteSource, SetPrices, Wallet};
@@ -162,7 +162,7 @@ mod tests {
     use std::time::Duration;
 
     use chrono::TimeDelta;
-    use library::{CardDrops, Game};
+    use game::{CardDrops, Game};
 
     use super::*;
     use money::Currency;
@@ -231,7 +231,6 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
-            cards: Vec::new(),
         }
     }
 
