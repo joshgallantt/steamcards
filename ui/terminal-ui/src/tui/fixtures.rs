@@ -23,7 +23,9 @@ use preferences::{
 
 use account::LoginChallenge;
 
-use super::{App, Clock, GamesView, LogView, Logged, LoginView, Overlay};
+use super::{
+    App, Clock, GamesView, HaulView, LogView, Logged, LoginView, MarketList, Overlay, Scroll,
+};
 use crate::viewmodel::{
     Account, Farming, Games, Library, LogEntry, LogKind, Login, Market, MarketNews, Onboarding,
     Run, fixtures as data, market_line,
@@ -399,13 +401,7 @@ pub(crate) fn for_mockup(title: &str) -> Option<App> {
         app.overlay = Some(overlay);
         app
     };
-    let log = || {
-        Overlay::Log(LogView {
-            offset: usize::MAX,
-            max: 0,
-            follow: true,
-        })
-    };
+    let log = || Overlay::Log(LogView::default());
     Some(match title {
         "dashboard, farming alone (L)"
         | "dashboard, farming alone, the user's window (L)"
@@ -426,17 +422,21 @@ pub(crate) fn for_mockup(title: &str) -> Option<App> {
         "sign-in expired" => sign_in_expired(),
         "connection lost, retrying" => reconnecting(),
         "prices paused by Steam, some stale" => prices_paused(),
-        "the market view, prices paused" => with(prices_paused(), Overlay::Market),
-        "game details" | "game details (XS)" => with(farming_alone(), Overlay::Detail),
-        "this session's haul" => with(farming_alone(), Overlay::Haul),
-        "help" => with(farming_alone(), Overlay::Help),
+        "the market view, prices paused" => {
+            with(prices_paused(), Overlay::Market(MarketList::default()))
+        }
+        "game details" | "game details (XS)" => {
+            with(farming_alone(), Overlay::Details(Scroll::default()))
+        }
+        "this session's haul" => with(farming_alone(), Overlay::Haul(HaulView::default())),
+        "help" => with(farming_alone(), Overlay::Help(Scroll::default())),
         "games and settings" => {
             let mut data = data::farming_alone();
             data.prefs.priority_games = vec![data::LIMBO, data::STRAY];
             let mut app = app(data);
             afternoon(&mut app);
             app.flash("Stray is priority #2: farmed first.");
-            with(app, Overlay::Games(GamesView { cursor: 1 }))
+            with(app, Overlay::Games(GamesView::at(1)))
         }
         "sign in with a QR code, scanned" => with(
             farming_alone(),

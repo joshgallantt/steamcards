@@ -70,7 +70,8 @@ impl Games {
     }
 
     /// Priority games in their order, then every other game with drops left
-    /// in `games`, so the user can see where each stands.
+    /// in `games`, so the user can see where each stands. Skipped games,
+    /// never farmed, aren't among them: the queue's Skipped section has them.
     pub fn rows(&self, games: &[Game]) -> Vec<GameRow> {
         let prefs = (self.get)();
         let mut out: Vec<GameRow> = prefs
@@ -81,7 +82,11 @@ impl Games {
         out.extend(
             games
                 .iter()
-                .filter(|g| g.has_drops_left() && prefs.rank(g.app_id).is_none())
+                .filter(|g| {
+                    g.has_drops_left()
+                        && prefs.rank(g.app_id).is_none()
+                        && prefs.tier(g.app_id) != Tier::Skip
+                })
                 .map(|g| row(g.app_id, games, None)),
         );
         out
@@ -165,6 +170,21 @@ mod tests {
             "finished games aren't offered; a priority the library lacks still shows"
         );
         assert_eq!(g.rows(&library())[1].name, "App 99");
+    }
+
+    #[test]
+    fn skipped_games_arent_offered() {
+        let repo = Arc::new(InMemoryPreferencesRepository::new(Preferences {
+            skipped_games: vec![20],
+            ..Default::default()
+        }));
+        let g = Games::new(
+            get_preferences(repo.clone()),
+            set_game_tier(repo.clone()),
+            set_only_priority(repo.clone()),
+            set_appear_online(repo),
+        );
+        assert_eq!(ids(&g.rows(&library())), [(10, None)]);
     }
 
     #[test]

@@ -875,7 +875,7 @@ Steam turned down a price lookup at 13:31 and each try since, so lookups wait, d
 │  MONSTER HUNTER RISE       £0.06–0.11  £0.57–1.65     £0.08   £0.32  stale 8h │ totals say ≥ and how many.           │
 │  Halls of Torment          £0.03–0.06  £0.41–1.05     £0.04   £0.20  stale 8h │                                      │
 │  Cult of the Lamb          £0.04–0.09  £0.49–1.35     £0.06   £0.36  stale 8h │ UNPRICED THIS SESSION · 3            │
-│  Days Gone                 £0.07–0.12  £0.61–1.80     £0.09   £0.54  stale 8h │ Madeline · Celeste    … on its way   │
+│  Days Gone                 £0.07–0.12  £0.61–1.80     £0.09   £0.54  stale 8h │ Madeline · Celeste     … on its way  │
 │  Little Nightmares II      £0.04–0.09  £0.49–1.35     £0.06   £0.42  stale 8h │ The Fruit · Gorogoa       no market  │
 │  Monster Train             £0.03–0.07  £0.45–1.20     £0.05   £0.35  stale 8h │ 17:23 · Heavy Rain    not known yet  │
 │  TCG Card Shop Simulator   £0.03–0.06  £0.41–1.05     £0.04   £0.08  stale 8h │                                      │
@@ -1054,7 +1054,7 @@ Today's games pop-up, with a settings column: only priority, appear offline, and
 
 ### m. Signing in, and the account, 120 × 30 each
 
-The QR sign-in doesn't change. It's shown scanned and waiting for approval; the code is a stand-in.
+The QR sign-in doesn't change. It's shown scanned and waiting for approval. The code is the one today's screen draws for a sign-in link like the data set's, `https://s.team/q/1/12539683334892375075`: half blocks, with a quiet zone of two modules all round.
 
 ```mockup 120x30 sign in with a QR code, scanned
  steamcards   ● farming for 8h 17m · since 09:14              Steam ● alice · appears offline · keeping awake   [?] help
@@ -1064,21 +1064,21 @@ The QR sign-in doesn't change. It's shown scanned and waiting for approval; the 
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-│    █▀▀▀▀▀█ ██▀██ ▀█   ▀▄ █▀▀▀▀▀█                                                                                     │
-│    █ ███ █ ▄▄▀ █▄▄▄▄▀█▄█ █ ███ █                                                                                     │
-│    █ ▀▀▀ █ ▀▀█▀█▀▀▀▀██▄  █ ▀▀▀ █                                                                                     │
-│    ▀▀▀▀▀▀▀ █▄ ▀▄▄▄▀▀█▀▀  ▀▀▀▀▀▀▀       Sign in with the Steam app                                                    │
-│    ▀▄ ▀▀█▀▄█▀▀ ▀▀▄ ▀  ▄ █▀▀▀ █▀                                                                                      │
-│    ▄▀███▀▀▄  ▀▄▄█ ▄█▄▀▀▄▄▀▀ ██▀▄       ✓  Scan     the code in the Steam app                                         │
-│    █  ▄█ █ ██ ▄▀▀ █▀▀▀███▄█ ███▀       2  Approve  the sign-in on your phone                                         │
-│    ▄ ▀▀▀▀▀██ ▄ ▀▄▀▀▀▀▀▄▀ ▀▀▀▀▀▀▀                                                                                     │
-│    ▀▀▀▀█▄▄ ▄ ██▄   ▄▀▄██▀▄▀ ▄█▀▀       The scanner is in the app's Steam Guard tab.                                  │
-│    █▀▀ █▄█  █▄▄▄▄▀▄▀██▀██▀▀▀ ▀         No password is typed in here.                                                 │
-│     ▀ ▀  ▀▀ ▀██▀▄▄█▄▀▄▀▀▀█▄██▄ ▀                                                                                     │
-│    █▀▀▀▀▀█ ▀▄▄ ▄██▀  ▄▄▄ ▀▄█▄▀▄▄       ⠋ Scanned — approve it in the app                                             │
-│    █ ███ █   ▄█ ▀▄▀█▄█▄███▀▄ ██▀                                                                                     │
-│    █ ▀▀▀ █  ██▄▄▀█▀ ▀  ██▄ █▄▀██                                                                                     │
-│    ▀▀▀▀▀▀▀ ▀▀ ▀▀▀     ▀ ▀ ▀ ▀▀▀▀                                                                                     │
+│                                                                                                                      │
+│    █▀▀▀▀▀█ ▀▀▀█▀█▄ █ █▀▀▀▀▀█                                                                                         │
+│    █ ███ █  ▀█ ▄██▄▄ █ ███ █                                                                                         │
+│    █ ▀▀▀ █  ▄  ▀██   █ ▀▀▀ █       Sign in with the Steam app                                                        │
+│    ▀▀▀▀▀▀▀ █▄▀▄█▄▀ ▀ ▀▀▀▀▀▀▀                                                                                         │
+│    ██▄█▀▄▀▄▄▀▄█▄▀ █  ▀ ▄▄▄▄▀       ✓  Scan     the code in the Steam app                                             │
+│    ▀█ ▄▄ ▀▄▀▀  ▄ ▀█▀▄ ▀ █▄▄█       2  Approve  the sign-in on your phone                                             │
+│    ▄██ █ ▀▄█▀█ ▄█ ▄▀▄▀ ▄  ▄▀                                                                                         │
+│    █▀▀▀█▀▀▄▀▄██▄▀▄▀ ▀█▄▀██▀█       The scanner is in the app's Steam Guard tab.                                      │
+│    ▀   ▀ ▀ ▄▀ ▀ █▄ █▀▀▀█ ██        No password is typed in here.                                                     │
+│    █▀▀▀▀▀█  ▄▀▀ █ ▄█ ▀ █  ▄▀                                                                                         │
+│    █ ███ █ █▄  ▄ █████▀▀  ▄█       ⠋ Scanned — approve it in the app                                                 │
+│    █ ▀▀▀ █ ▄█ █▀▀█▀ ▀▄▄█▀███                                                                                         │
+│    ▀▀▀▀▀▀▀ ▀ ▀▀  ▀ ▀ ▀  ▀  ▀                                                                                         │
+│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

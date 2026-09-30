@@ -14,7 +14,6 @@ use ratatui::layout::Rect;
 
 pub(crate) use header::state_word;
 pub(crate) use progress::glance;
-pub(crate) use right::haul_rows_m;
 
 use super::text::{Fits, Hint, Overflow, all_fit, first_fit, hints, key, pack_hints};
 
@@ -178,7 +177,6 @@ impl Regions {
 
 /// Where a pop-up can go: the right-hand column (below Now at L) when its
 /// content fits there, or the whole body.
-#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Place {
     Right,
@@ -186,7 +184,6 @@ pub(crate) enum Place {
 }
 
 /// The pop-ups, for where each goes at each size (§2.5).
-#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Popup {
     Details,
@@ -200,7 +197,6 @@ pub(crate) enum Popup {
 /// Where a pop-up goes: the right-hand column where the spec's table puts
 /// it there, and the size has one; otherwise the whole body. A pop-up
 /// covers whole panels, never part of one.
-#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn popup_area(popup: Popup, regions: &Regions) -> Rect {
     let place = match (popup, regions.class) {
         (Popup::Details | Popup::SignIn, SizeClass::L) => Place::Right,
@@ -217,7 +213,6 @@ pub(crate) fn popup_area(popup: Popup, regions: &Regions) -> Rect {
 /// the keys in the border when they all fit there or on its last lines when
 /// they don't, and how much more is below when the text is longer than its
 /// area.
-#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Placed {
     pub(crate) lines: Vec<ratatui::text::Line<'static>>,
@@ -225,11 +220,14 @@ pub(crate) struct Placed {
     pub(crate) keys: Option<ratatui::text::Line<'static>>,
     /// Lines below, out of sight: "15 more ↓ [PgDn]".
     pub(crate) below: usize,
+    /// How far down it's scrolled, kept within its lines, and how many lines
+    /// a page shows.
+    pub(crate) offset: usize,
+    pub(crate) page: usize,
 }
 
 /// Lays `lines` out in a pop-up over `area`, with its `keys`, scrolled
 /// `offset` lines down. Inside, text keeps 2 columns from each side.
-#[cfg_attr(not(test), expect(dead_code, reason = "placed by the pop-up stage"))]
 pub(crate) fn place(
     area: Rect,
     lines: &[ratatui::text::Line<'static>],
@@ -304,6 +302,8 @@ pub(crate) fn place(
         lines: shown,
         keys: keys_line,
         below,
+        offset,
+        page: avail,
     })
 }
 

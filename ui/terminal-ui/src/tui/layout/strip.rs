@@ -16,7 +16,9 @@ use super::{
 };
 use crate::viewmodel::{Activity, Alert, Detail, LogEntry, LogKind, Progress, Strip};
 
-fn glyph_style(kind: LogKind) -> ratatui::style::Style {
+/// A log line's glyph's colour: ✓ a drop and ▶ playing GOOD, ↻ moved on
+/// LINK, ‖ waiting and ! a warning BUSY, ✕ an error BAD, · the rest DIM.
+pub(crate) fn glyph_style(kind: LogKind) -> ratatui::style::Style {
     match kind {
         LogKind::Dropped | LogKind::Playing => theme::fg(theme::GOOD),
         LogKind::MovedOn => theme::fg(theme::LINK),

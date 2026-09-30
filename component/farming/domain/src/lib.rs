@@ -27,7 +27,7 @@ pub use model::{
     Drop, DropCard, EventKind, FarmingEvent, FarmingSession, FarmingStatus, Finished, Forecast,
     Mode, NewItem, SetAside, Signal, Status, Stretch,
 };
-pub use ranking::hours_to_go;
+pub use ranking::{farm_order, hours_to_go};
 pub use repository::PlayRepository;
 pub use session::SessionKeeper;
 pub use use_cases::{EndSession, FarmCards, end_session, farm_cards};

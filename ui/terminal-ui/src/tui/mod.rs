@@ -1,6 +1,7 @@
 // TUI — onboarding on first run, then a single dashboard that stays up the
-// whole time, with pop-ups for the account, signing in, games, the log and
-// help. Renders view-model state and forwards keys to view models; no
+// whole time, with pop-ups over it: a game's details, this session's cards,
+// the market, games & settings, the account, signing in, the log, help and
+// quitting. Renders view-model state and forwards keys to view models; no
 // business logic lives here.
 
 mod dashboard;
@@ -11,13 +12,12 @@ pub(crate) mod format;
 mod golden;
 mod layout;
 mod onboarding;
-mod overlays;
+mod popups;
 #[cfg(test)]
 mod preview;
 mod small;
 mod text;
 mod theme;
-mod widgets;
 
 use std::{
     io,
@@ -25,14 +25,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use account::{Account as SignedIn, LoginChallenge};
+use account::Account as SignedIn;
 use chrono::{DateTime, FixedOffset, Local, TimeDelta, Utc};
 use crossterm::{
     event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use farming::{FarmingEvent, FarmingStatus, Forecast, forecast};
+use farming::{FarmingEvent, FarmingSession, FarmingStatus, Forecast, farm_order, forecast};
 use futures::StreamExt;
 use library::SteamLibrary;
 use market::{Basis, MarketError, MarketEventKind, Money, PriceBook, Wallet};
@@ -44,6 +44,8 @@ use crate::viewmodel::{
     Login, LoginUpdate, Market, NeedsAccount, Onboarding, Progress, Queue, QueueEntry, Run,
     Section, Snapshot, Step, Strip, Values, card_page, market_line, open_in_browser,
 };
+use layout::Regions;
+use popups::{GamesView, HaulView, LogView, LoginView, MarketList, Overlay, Scroll};
 
 const MAX_LOG: usize = 1000;
 const FLASH_FOR: Duration = Duration::from_secs(4);
@@ -96,49 +98,10 @@ struct Logged {
     received: Instant,
 }
 
-enum Overlay {
-    Help,
-    Account {
-        /// Asking whether to sign out.
-        confirm: bool,
-    },
-    Login(LoginView),
-    Games(GamesView),
-    Log(LogView),
-    /// The chosen game's details.
-    Detail,
-    /// This session's cards.
-    Haul,
-    /// The market: where every price comes from.
-    Market,
-    ConfirmQuit,
-}
-
-struct LoginView {
-    challenge: Option<LoginChallenge>,
-    /// `Ok(account name)` or `Err(reason)` once the sign-in ends.
-    outcome: Option<Result<String, String>>,
-    finished: Option<Instant>,
-    /// Return to the account pop-up (rather than the dashboard) afterwards.
-    from_account: bool,
-}
-
-struct GamesView {
-    cursor: usize,
-}
-
 /// Where the user is within an onboarding step.
 #[derive(Default)]
 struct SetupView {
     cursor: usize,
-}
-
-struct LogView {
-    offset: usize,
-    /// Largest offset at the last draw (the view's bottom).
-    max: usize,
-    /// Stick to the newest entries as they arrive.
-    follow: bool,
 }
 
 /// The domain values a frame is built from, as they stand: owned, so a
@@ -152,28 +115,16 @@ struct Known {
     basis: Basis,
 }
 
-/// Everything a frame needs, computed once per draw.
+/// What a frame is drawn from: the App, the domain values it knows as they
+/// stand, the queue and Progress the dashboard draws, where each region
+/// goes, and the spinner's frame.
 struct Ctx<'a> {
     app: &'a App,
+    s: Snapshot<'a>,
     queue: &'a Queue,
-    account: Option<&'a SignedIn>,
-    prefs: &'a Preferences,
     progress: &'a Progress,
-    strip: Strip,
-}
-
-impl Ctx<'_> {
-    fn selected(&self) -> Option<&QueueEntry> {
-        self.app.selected.and_then(|id| self.queue.get(id))
-    }
-
-    fn spinner(&self) -> &'static str {
-        theme::SPINNER[self.app.tick % theme::SPINNER.len()]
-    }
-
-    fn signed_in(&self) -> bool {
-        self.account.is_some()
-    }
+    regions: Regions,
+    spinner: &'static str,
 }
 
 pub struct App {
@@ -211,7 +162,7 @@ pub struct App {
     paused_by_user: bool,
 
     overlay: Option<Overlay>,
-    /// Short-lived confirmation shown above the footer.
+    /// Short-lived confirmation shown on the strip.
     flash: Option<(String, Instant)>,
     /// The flash says a change didn't stick.
     flash_failed: bool,
@@ -359,11 +310,19 @@ impl App {
         }
     }
 
+    /// Cards dropped this session.
+    fn dropped(&self) -> u32 {
+        self.status.as_ref().map_or(0, |s| {
+            u32::try_from(s.session.drops.len()).unwrap_or(u32::MAX)
+        })
+    }
+
     /// Works the time to finish out again when a card has dropped, the farm
     /// order has changed, or a minute has passed, and only while farming
     /// runs: farming time is what it counts, so it holds still otherwise.
     fn update_forecast(&mut self) {
         let Some(status) = &self.status else {
+            self.size_up();
             return;
         };
         if status.library.is_empty() {
@@ -393,6 +352,31 @@ impl App {
             let known = self.known();
             self.estimated = Values::build(&self.snapshot(&known)).map(|v| v.completion.value);
         }
+    }
+
+    /// Before farming starts, the Start step sizes up the job: the time to
+    /// finish at 30 minutes a drop, the games taken in the order the farmer
+    /// will take them. It's worked out again when that order changes.
+    fn size_up(&mut self) {
+        if !self.onboarding.is_active() {
+            return;
+        }
+        let library = self.known_library();
+        if library.is_empty() {
+            return;
+        }
+        let order = farm_order(&library, &self.farming.preferences(), &[]);
+        let key = (0, order);
+        if self.forecast.is_some() && key == self.forecast_for {
+            return;
+        }
+        self.forecast = Some(forecast(
+            &FarmingSession::default(),
+            &library,
+            &key.1,
+            self.clock.now(),
+        ));
+        self.forecast_for = key;
     }
 
     /// Tells the market what to price, most urgent first: the game being
@@ -681,7 +665,7 @@ impl App {
             ChosenGame::market_hash_names(&self.snapshot(&known), app_id)
         };
         self.market.ask_offers(hashes, self.clock.now());
-        Some(Overlay::Detail)
+        Some(Overlay::Details(Scroll::default()))
     }
 
     fn open_card_page(&mut self) {
@@ -740,7 +724,7 @@ impl App {
 
     fn open_games(&mut self) -> Overlay {
         self.library.refresh_if_older(LIBRARY_FRESH);
-        Overlay::Games(GamesView { cursor: 0 })
+        Overlay::Games(GamesView::default())
     }
 
     /// Moves onboarding on a step; after the last, farming starts.
@@ -841,7 +825,7 @@ impl App {
     fn onboarding_key(&mut self, step: Step, k: KeyEvent) {
         match (step, k.code) {
             (_, KeyCode::Char('q')) => self.quit = true,
-            (_, KeyCode::Char('?')) => self.overlay = Some(Overlay::Help),
+            (_, KeyCode::Char('?')) => self.overlay = Some(Overlay::Help(Scroll::default())),
             (_, KeyCode::Right | KeyCode::Tab) => self.onboarding_next(),
             (_, KeyCode::Left | KeyCode::BackTab | KeyCode::Esc) => self.onboarding_back(),
             // Enter goes on, except where it acts on the row under the cursor.
@@ -891,21 +875,15 @@ impl App {
             KeyCode::Char('o') => self.open_card_page(),
             KeyCode::Char('c') => self.show_done = !self.show_done,
             KeyCode::Enter => self.overlay = self.open_details(),
-            KeyCode::Char('h') => self.overlay = Some(Overlay::Haul),
-            KeyCode::Char('m') => self.overlay = Some(Overlay::Market),
+            KeyCode::Char('h') => self.overlay = Some(Overlay::Haul(HaulView::default())),
+            KeyCode::Char('m') => self.overlay = Some(Overlay::Market(MarketList::default())),
             KeyCode::Char('b') => self.next_basis(),
             KeyCode::Char('t') => self.toggle_clock_times(),
             KeyCode::Char('a') => self.overlay = Some(Overlay::Account { confirm: false }),
             KeyCode::Char('g') => self.overlay = Some(self.open_games()),
-            KeyCode::Char('l') => {
-                self.overlay = Some(Overlay::Log(LogView {
-                    offset: usize::MAX,
-                    max: 0,
-                    follow: true,
-                }));
-            }
+            KeyCode::Char('l') => self.overlay = Some(Overlay::Log(LogView::default())),
             KeyCode::Char('p') => self.toggle_pause(),
-            KeyCode::Char('?') => self.overlay = Some(Overlay::Help),
+            KeyCode::Char('?') => self.overlay = Some(Overlay::Help(Scroll::default())),
             KeyCode::Char('q') => {
                 if self.farming.is_running() {
                     self.overlay = Some(Overlay::ConfirmQuit);
@@ -917,218 +895,53 @@ impl App {
         }
     }
 
-    /// Handles a key for the open pop-up; returns what should be open next.
-    fn overlay_key(&mut self, o: Overlay, k: KeyEvent) -> Option<Overlay> {
-        match o {
-            Overlay::Help => match k.code {
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?' | 'q') => None,
-                _ => Some(Overlay::Help),
-            },
-
-            Overlay::ConfirmQuit => match k.code {
-                KeyCode::Char('y' | 'q') | KeyCode::Enter => {
-                    self.quit = true;
-                    None
-                }
-                KeyCode::Char('n') | KeyCode::Esc => None,
-                _ => Some(Overlay::ConfirmQuit),
-            },
-
-            Overlay::Account { confirm: true } => {
-                // Only y signs out; anything else keeps the sign-in.
-                if k.code == KeyCode::Char('y') {
-                    self.sign_out();
-                }
-                // Signed out, onboarding has taken over.
-                (!self.onboarding.is_active()).then_some(Overlay::Account { confirm: false })
-            }
-
-            Overlay::Account { .. } => {
-                let signed_in = self.account.is_signed_in();
-                match k.code {
-                    KeyCode::Enter => Some(self.begin_login(true)),
-                    KeyCode::Char('d') if signed_in => Some(Overlay::Account { confirm: true }),
-                    KeyCode::Char('v') => {
-                        self.toggle_appear_online();
-                        Some(Overlay::Account { confirm: false })
-                    }
-                    KeyCode::Esc | KeyCode::Char('a' | 'q') => None,
-                    _ => Some(Overlay::Account { confirm: false }),
-                }
-            }
-
-            Overlay::Login(v) => self.login_key(v, k),
-
-            Overlay::Games(v) => self.games_key(v, k),
-
-            Overlay::Log(mut v) => {
-                let page = 10;
-                match k.code {
-                    KeyCode::Esc | KeyCode::Enter | KeyCode::Char('l' | 'q') => return None,
-                    KeyCode::Up => {
-                        v.offset = v.offset.min(v.max).saturating_sub(1);
-                        v.follow = false;
-                    }
-                    KeyCode::PageUp => {
-                        v.offset = v.offset.min(v.max).saturating_sub(page);
-                        v.follow = false;
-                    }
-                    KeyCode::Down | KeyCode::PageDown => {
-                        let step = if k.code == KeyCode::Down { 1 } else { page };
-                        v.offset = v.offset.min(v.max) + step;
-                        v.follow = v.offset >= v.max;
-                    }
-                    KeyCode::Home => {
-                        v.offset = 0;
-                        v.follow = false;
-                    }
-                    KeyCode::End => v.follow = true,
-                    _ => {}
-                }
-                Some(Overlay::Log(v))
-            }
-
-            Overlay::Detail => {
-                match k.code {
-                    KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => return None,
-                    KeyCode::Up => {
-                        self.move_selection(-1);
-                        return self.open_details();
-                    }
-                    KeyCode::Down => {
-                        self.move_selection(1);
-                        return self.open_details();
-                    }
-                    KeyCode::Char(c @ '1'..='9') => {
-                        self.set_tier(Tier::Priority(c as usize - '0' as usize))
-                    }
-                    KeyCode::Char('0') | KeyCode::Backspace | KeyCode::Delete => {
-                        self.set_tier(Tier::Indifferent)
-                    }
-                    KeyCode::Char('x') => self.set_tier(Tier::Skip),
-                    KeyCode::Char('o') => self.open_card_page(),
-                    _ => {}
-                }
-                Some(Overlay::Detail)
-            }
-
-            Overlay::Haul => match k.code {
-                KeyCode::Esc | KeyCode::Char('h' | 'q') => None,
-                KeyCode::Char('b') => {
-                    self.next_basis();
-                    Some(Overlay::Haul)
-                }
-                _ => Some(Overlay::Haul),
-            },
-
-            Overlay::Market => match k.code {
-                KeyCode::Esc | KeyCode::Char('m' | 'q') => None,
-                KeyCode::Char('b') => {
-                    self.next_basis();
-                    Some(Overlay::Market)
-                }
-                _ => Some(Overlay::Market),
-            },
-        }
-    }
-
-    fn login_key(&mut self, v: LoginView, k: KeyEvent) -> Option<Overlay> {
-        match (&v.outcome, k.code) {
-            (Some(Err(_)), KeyCode::Char('r')) => Some(self.begin_login(v.from_account)),
-            (Some(_), KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) => {
-                self.after_login(v.from_account)
-            }
-            (None, KeyCode::Esc) => {
-                self.flash("Stopped signing in.");
-                self.after_login(v.from_account)
-            }
-            _ => Some(Overlay::Login(v)),
-        }
-    }
-
-    fn games_key(&mut self, mut v: GamesView, k: KeyEvent) -> Option<Overlay> {
-        let rows = |app: &Self| app.games.rows(app.known_library().games());
-        // Keeps the cursor on a game that moved, e.g. to its new rank.
-        let follow = |app: &Self, app_id: u32| rows(app).iter().position(|x| x.app_id == app_id);
-        let all = rows(self);
-        let row = all.get(v.cursor.min(all.len().saturating_sub(1))).cloned();
-        // Space picks; enter, as in every pop-up, closes.
-        match k.code {
-            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('g' | 'q') => return None,
-            KeyCode::Char(' ') => {
-                if let Some(r) = row {
-                    self.toggle_game(r.app_id, &r.name);
-                    v.cursor = follow(self, r.app_id).unwrap_or(v.cursor);
-                }
-            }
-            KeyCode::Char(c @ '1'..='9') => {
-                if let Some(r) = row {
-                    match self
-                        .games
-                        .set_tier(r.app_id, Tier::Priority(c as usize - '0' as usize))
-                    {
-                        Ok(()) => v.cursor = follow(self, r.app_id).unwrap_or(0),
-                        Err(e) => self.didnt_stick(e),
-                    }
-                }
-            }
-            KeyCode::Char('0') | KeyCode::Backspace | KeyCode::Delete => {
-                if let Some(r) = row.filter(|r| r.rank.is_some()) {
-                    match self.games.set_tier(r.app_id, Tier::Indifferent) {
-                        Ok(()) => self.flash(format!("{} is no longer a priority game.", r.name)),
-                        Err(e) => self.didnt_stick(e),
-                    }
-                }
-            }
-            KeyCode::Char('o') => self.toggle_only_priority(),
-            KeyCode::Char('r') => self.library.refresh(),
-            KeyCode::Char('v') => self.toggle_appear_online(),
-            KeyCode::Char('b') => self.next_basis(),
-            code => v.cursor = moved(v.cursor, code, all.len()),
-        }
-        Some(Overlay::Games(v))
-    }
-
     // ── Drawing ──────────────────────────────────────────────────────────────
 
     fn draw(&mut self, f: &mut Frame<'_>) {
         let area = f.area();
         let known = self.known();
-        if layout::size_class(area.width, area.height) == layout::SizeClass::TooSmall {
-            small::render(
-                f,
-                &self.snapshot(&known),
-                theme::SPINNER[self.tick % theme::SPINNER.len()],
-            );
+        let spinner = theme::SPINNER[self.tick % theme::SPINNER.len()];
+        let Some(regions) = layout::regions(area.width, area.height) else {
+            small::render(f, &self.snapshot(&known), spinner);
             return;
-        }
-        let (queue_offset, log_scroll) = {
+        };
+        // The pop-up is out of the App while it's drawn, which notes how far
+        // it's scrolled.
+        let mut overlay = self.overlay.take();
+        let queue_offset = {
             let s = self.snapshot(&known);
             let queue = Queue::build(&s, self.selected);
             let progress = Progress::build(&s, self.estimated);
+            // The session's summary takes more rows at M (mockup e), and a
+            // pop-up covers the panels where they're drawn.
+            let regions = if progress.summary.is_some() {
+                regions.with_summary()
+            } else {
+                regions
+            };
             let cx = Ctx {
                 app: self,
+                s,
                 queue: &queue,
-                account: known.account.as_ref(),
-                prefs: &known.prefs,
                 progress: &progress,
-                strip: self.strip(&s),
+                regions,
+                spinner,
             };
+            let buf = f.buffer_mut();
             let queue_offset = match self.onboarding.step() {
                 Some(step) => {
-                    onboarding::render(f, area, &cx, step);
+                    onboarding::render(buf, &cx, step);
                     self.queue_offset
                 }
-                None => dashboard::render(f, &cx, &s),
+                None => dashboard::render(buf, &cx),
             };
-            let log_scroll = overlays::render(f, area, &cx, &s);
-            (queue_offset, log_scroll)
+            if let Some(o) = overlay.as_mut() {
+                popups::render(buf, &cx, o);
+            }
+            queue_offset
         };
+        self.overlay = overlay;
         self.queue_offset = queue_offset;
-        if let (Some((offset, max)), Some(Overlay::Log(v))) = (log_scroll, self.overlay.as_mut()) {
-            v.offset = offset;
-            v.max = max;
-        }
     }
 }
 

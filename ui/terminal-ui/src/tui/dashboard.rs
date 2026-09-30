@@ -7,7 +7,6 @@
 // of its own: what a region says at a size is decided in `layout`.
 
 use ratatui::{
-    Frame,
     buffer::Buffer,
     layout::Rect,
     style::Color,
@@ -17,7 +16,7 @@ use ratatui::{
 use super::{
     Ctx, format,
     layout::{
-        self, Regions, SizeClass, header, progress,
+        Regions, SizeClass, header, progress,
         queue::{self, Row, RuleSays, Times},
         right, strip,
     },
@@ -36,23 +35,13 @@ const CHOSEN_L: u16 = 16;
 /// The chosen game's panel at M while there's no game to show.
 const CHOSEN_EMPTY_M: u16 = 8;
 
-/// Draws the dashboard over the whole frame, and returns where the queue is
-/// scrolled to, for the next frame to start from.
-pub(super) fn render(f: &mut Frame<'_>, cx: &Ctx<'_>, s: &Snapshot<'_>) -> usize {
-    let area = f.area();
-    let p = cx.progress;
-    let Some(r) = layout::regions(area.width, area.height) else {
-        return cx.app.queue_offset;
-    };
-    let r = if p.summary.is_some() {
-        r.with_summary()
-    } else {
-        r
-    };
-    let buf = f.buffer_mut();
-    let spinner = cx.spinner();
+/// Draws the dashboard over the whole frame, in the regions the frame is
+/// laid out in, and returns where the queue is scrolled to, for the next
+/// frame to start from.
+pub(super) fn render(buf: &mut Buffer, cx: &Ctx<'_>) -> usize {
+    let (r, s, p, spinner) = (&cx.regions, &cx.s, cx.progress, cx.spinner);
     let now = Now::build(s);
-    let w = usize::from(area.width);
+    let w = usize::from(buf.area.width);
     put(
         buf,
         r.header.x,
@@ -63,20 +52,20 @@ pub(super) fn render(f: &mut Frame<'_>, cx: &Ctx<'_>, s: &Snapshot<'_>) -> usize
     // This session's cards, and the track Progress draws at M, are for the
     // sizes with a right-hand column.
     let haul = r.right.map(|_| Haul::build(s));
-    draw_progress(buf, &r, p, &now, haul.as_ref(), spinner);
-    let offset = draw_queue(buf, &r, cx, spinner);
+    draw_progress(buf, r, p, &now, haul.as_ref(), spinner);
+    let offset = draw_queue(buf, r, cx, spinner);
     if let Some(area) = r.now {
         draw_now(buf, area, p, &now, spinner);
     }
     if let (Some(area), Some(haul)) = (r.right, &haul) {
-        draw_right(buf, area, &r, cx, s, haul, spinner);
+        draw_right(buf, area, r, cx, s, haul, spinner);
     }
     put(
         buf,
         r.strip.x,
         r.strip.y,
         r.strip.width,
-        &strip::strip(&cx.strip, p, w).unwrap_or_default(),
+        &strip::strip(&cx.app.strip(s), p, w).unwrap_or_default(),
     );
     put(
         buf,

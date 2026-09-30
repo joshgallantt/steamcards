@@ -29,6 +29,18 @@ async fn previews() {
             screen.join("\n")
         );
         assert_eq!(screen.len(), usize::from(m.height), "{}", m.title);
+        if m.title.starts_with("onboarding, welcome") {
+            // Today's Welcome cuts its notice mid-sentence at 60 × 16; this
+            // one keeps it whole, and how to agree to it (§8.3).
+            let shown = screen.join(" ");
+            for words in [
+                "steamcards is unofficial: Valve doesn't make or",
+                "support it. Farming cards is at your own risk.",
+                "Press [enter] to agree and begin.",
+            ] {
+                assert!(shown.contains(words), "{words:?} isn't on screen");
+            }
+        }
     }
 }
 
