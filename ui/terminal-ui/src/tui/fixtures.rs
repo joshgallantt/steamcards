@@ -453,7 +453,11 @@ pub(crate) fn for_mockup(title: &str) -> Option<App> {
         "account" => with(farming_alone(), Overlay::Account { confirm: false }),
         "the log" | "the log (S)" | "the log (XS)" => with(farming_alone(), log()),
         "onboarding, ready to farm" => {
-            let mut app = farming_alone();
+            // Before farming starts: the library as the session found it,
+            // 62 games and 252 drops to farm.
+            let mut data = data::first_minutes();
+            data.run = Run::Stopped;
+            let mut app = app(data);
             app.onboarding.signed_out();
             app.onboarding_next();
             app.onboarding_next();
@@ -510,6 +514,23 @@ mod tests {
             let later = m.title.starts_with("LATER");
             assert_eq!(for_mockup(&m.title).is_none(), later, "{}", m.title);
         }
+    }
+
+    #[tokio::test]
+    async fn onboarding_sizes_up_the_job_before_farming_starts() {
+        let app = for_mockup("onboarding, ready to farm").unwrap();
+        assert_eq!(app.onboarding.step(), Some(crate::viewmodel::Step::Start));
+        assert!(!app.farming.is_running());
+        let library = app.known_library();
+        assert_eq!(
+            (library.drops_left(), library.with_drops_left().count()),
+            (254, 63)
+        );
+        let welcome = for_mockup("onboarding, welcome (XS)").unwrap();
+        assert_eq!(
+            welcome.onboarding.step(),
+            Some(crate::viewmodel::Step::Welcome)
+        );
     }
 
     #[tokio::test]
