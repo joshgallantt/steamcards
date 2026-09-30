@@ -58,6 +58,12 @@ impl Reporter {
         });
     }
 
+    /// Changes the last status without sending it: what the next status
+    /// keeps.
+    pub(crate) fn remember(&self, change: impl FnOnce(&mut FarmingStatus)) {
+        change(&mut self.last.lock().unwrap());
+    }
+
     /// The last status again, with what changed.
     pub(crate) fn amend(&self, change: impl FnOnce(&mut FarmingStatus)) {
         let mut last = self.last.lock().unwrap().clone();

@@ -1,7 +1,8 @@
 //! Farming cards: reading the library, playing what the plan says, looking at
 //! the cards as they drop, telling which card each was, and stepping aside
 //! while another device plays. What a session has seen outlasts a run of the
-//! farmer: the `SessionKeeper` keeps it until `EndSession`.
+//! farmer: the `SessionKeeper` keeps it until `EndSession`. A pause stops a
+//! run at once, whatever it's waiting for.
 
 use std::{
     sync::{Arc, Mutex, MutexGuard},
@@ -9,13 +10,13 @@ use std::{
 };
 
 use chrono::Utc;
-use library::{CardAsset, DescribeCards, Game, LookAtGame, ReadLibrary, SteamLibrary};
+use library::{CardAsset, DescribeCards, Game, LookAtFoils, LookAtGame, ReadLibrary, SteamLibrary};
 use preferences::{GetPreferences, Preferences};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Drop, DropCard, EventKind, FarmingEvent, FarmingStatus, Mode, PlayRepository, Signal, Status,
+    DropCard, EventKind, FarmingEvent, FarmingStatus, Mode, PlayRepository, Signal, Status,
     ranking::{Plan, can_drop, farm_order, hours_to_go, plan, why_nothing},
     reporter::Reporter,
     rules::{
@@ -33,12 +34,13 @@ pub type FarmCards =
 
 /// Ends the farming session: the next run of [`FarmCards`] starts a new one,
 /// with no drops, no hours counted and nothing set aside. Signing out ends
-/// it.
+/// it, and so does signing in as another account.
 pub type EndSession = Arc<dyn Fn() + Send + Sync>;
 
 pub fn farm_cards(
     read: ReadLibrary,
     look: LookAtGame,
+    look_at_foils: LookAtFoils,
     describe: DescribeCards,
     play: Arc<dyn PlayRepository>,
     prefs: GetPreferences,
@@ -47,6 +49,7 @@ pub fn farm_cards(
     let farmer = Arc::new(Farmer {
         read,
         look,
+        look_at_foils,
         describe,
         play,
         prefs,
@@ -59,6 +62,7 @@ pub fn farm_cards(
             let run = Run {
                 kept: farmer.sessions.current(Utc::now()),
             };
+            run.carry_on(&r, &(farmer.prefs)());
             farmer.run(&run, &r, &token).await;
             farmer.play.stop().await;
         })
@@ -72,6 +76,7 @@ pub fn end_session(sessions: Arc<SessionKeeper>) -> EndSession {
 struct Farmer {
     read: ReadLibrary,
     look: LookAtGame,
+    look_at_foils: LookAtFoils,
     describe: DescribeCards,
     play: Arc<dyn PlayRepository>,
     prefs: GetPreferences,
@@ -116,6 +121,19 @@ impl Run {
         self.kept.lock().unwrap()
     }
 
+    /// Starts the run's word to the screens from what the session holds, so
+    /// its first, while the badges are read, carries the session on.
+    fn carry_on(&self, r: &Reporter, prefs: &Preferences) {
+        let kept = self.kept();
+        let order = farm_order(&kept.library, prefs, &kept.set_aside);
+        r.remember(|s| {
+            s.library = kept.library.clone();
+            s.order = order;
+            s.session = kept.session.clone();
+            s.set_aside = kept.set_aside.clone();
+        });
+    }
+
     /// Tells the screens what the session holds now.
     fn tell(&self, r: &Reporter) {
         let (library, session, set_aside) = {
@@ -148,10 +166,18 @@ impl Farmer {
                 }
             }
             r.stage(Status::Checking, "reading your badges…");
-            match (self.read)().await {
+            let read = tokio::select! {
+                _ = token.cancelled() => return,
+                read = (self.read)() => read,
+            };
+            match read {
                 Ok(Ok(fresh)) => {
-                    let found = run.kept().take(fresh, Utc::now());
-                    self.dropped(found, &(self.prefs)(), run, r).await;
+                    let prefs = (self.prefs)();
+                    let found = run.kept().take(fresh, &prefs, Utc::now());
+                    self.dropped(found, &prefs, run, r, token).await;
+                    if token.is_cancelled() {
+                        return;
+                    }
                 }
                 failed => {
                     let why = match failed {
@@ -270,7 +296,9 @@ impl Farmer {
                     Signal::NewItems(items) => {
                         run.kept().keep_announced(items);
                         r.event(EventKind::Progress, "Steam says new items arrived".into());
-                        tokio::time::sleep(AFTER_NEW_ITEMS).await;
+                        if !pause(AFTER_NEW_ITEMS, token).await {
+                            return Outcome::Stopped;
+                        }
                     }
                 },
                 Some(Woke::Tick) => {
@@ -297,23 +325,32 @@ impl Farmer {
                 Some(Woke::Look) => {}
             }
 
-            match (self.look)(app_id).await {
+            let looked = tokio::select! {
+                _ = token.cancelled() => return Outcome::Stopped,
+                looked = (self.look)(app_id) => looked,
+            };
+            match looked {
                 Ok(Ok(fresh)) => {
-                    let (latest, found) = run.kept().update(fresh, Utc::now());
-                    game = latest;
-                    match found {
+                    let looked = run.kept().update(fresh, Utc::now());
+                    game = looked.game;
+                    match looked.found {
                         Some(found) => {
                             last_drop = Instant::now();
-                            self.dropped(vec![found], &prefs, run, r).await;
+                            self.dropped(vec![found], &prefs, run, r, token).await;
                         }
-                        None => r.event(
-                            EventKind::Progress,
-                            format!(
-                                "{}: {} still to drop",
-                                game.name,
-                                cards(game.drops.remaining)
-                            ),
-                        ),
+                        None => {
+                            r.event(
+                                EventKind::Progress,
+                                format!(
+                                    "{}: {} still to drop",
+                                    game.name,
+                                    cards(game.drops.remaining)
+                                ),
+                            );
+                            if run.kept().has_items_for(app_id) {
+                                self.described_late(app_id, run, r, token).await;
+                            }
+                        }
                     }
                     if !game.has_drops_left() {
                         r.info(format!("Every card has dropped for {}.", game.name));
@@ -411,7 +448,9 @@ impl Farmer {
                     Signal::NewItems(items) => {
                         run.kept().keep_announced(items);
                         r.event(EventKind::Progress, "Steam says new items arrived".into());
-                        tokio::time::sleep(AFTER_NEW_ITEMS).await;
+                        if !pause(AFTER_NEW_ITEMS, token).await {
+                            return Outcome::Stopped;
+                        }
                         return Outcome::Again;
                     }
                 },
@@ -548,8 +587,18 @@ impl Farmer {
     }
 
     /// Tells of the drops a look or read just found, at once, each still
-    /// being found out; then which card each was.
-    async fn dropped(&self, found: Vec<Found>, prefs: &Preferences, run: &Run, r: &Reporter) {
+    /// being found out; then which card each was, and which copy. A read
+    /// shows no sets, so each game it found drops for is looked at first:
+    /// its card page tells them, and keeps its set right for the next. A
+    /// pause meanwhile tells what's known by then, and stops.
+    async fn dropped(
+        &self,
+        mut found: Vec<Found>,
+        prefs: &Preferences,
+        run: &Run,
+        r: &Reporter,
+        token: &CancellationToken,
+    ) {
         if found.is_empty() {
             return;
         }
@@ -561,7 +610,7 @@ impl Farmer {
                 .filter_map(|f| {
                     kept.library
                         .game(f.app_id)
-                        .map(|g| dropped_message(g, f.count))
+                        .map(|g| dropped_message(g, f.count()))
                 })
                 .collect();
             let games: Vec<u32> = found.iter().map(|f| f.app_id).collect();
@@ -572,23 +621,106 @@ impl Farmer {
         }
         run.tell(r);
 
-        let described = self.describe(ask, r).await;
-        let lines = {
-            let mut kept = run.kept();
-            let named = kept.identify(&found, &described);
-            told(&named, &kept)
+        for f in found.iter_mut().filter(|f| f.needs_look()) {
+            let looked = tokio::select! {
+                _ = token.cancelled() => break,
+                looked = (self.look)(f.app_id) => looked,
+            };
+            let why = match looked {
+                Ok(Ok(fresh)) => {
+                    let looked = run.kept().update(fresh, Utc::now());
+                    if let Some(more) = &looked.found {
+                        r.event(
+                            EventKind::Dropped,
+                            dropped_message(&looked.game, more.count()),
+                        );
+                    }
+                    f.join(looked);
+                    continue;
+                }
+                Ok(Err(e)) => e.to_string(),
+                Err(e) => e.to_string(),
+            };
+            let game = run.kept().name(f.app_id);
+            r.event(
+                EventKind::Warning,
+                format!("Couldn't look at {game}'s cards: {why}"),
+            );
+        }
+
+        let asked = ask.iter().map(|i| i.asset_id).collect();
+        let described = match self.describe(asked, r, token).await {
+            Some(cards) => cards,
+            // Kept to ask about again: each may yet name a drop the card
+            // page named.
+            None => {
+                run.kept().keep_announced(ask);
+                Vec::new()
+            }
         };
+        let told = run.kept().identify(&found, &described);
+        let with_foils = run.kept().foil_games(&told);
+        for app_id in with_foils {
+            let foils = tokio::select! {
+                _ = token.cancelled() => break,
+                foils = (self.look_at_foils)(app_id) => foils,
+            };
+            let why = match foils {
+                Ok(Ok(foils)) => {
+                    run.kept().number_foils(app_id, &told, &foils);
+                    continue;
+                }
+                Ok(Err(e)) => e.to_string(),
+                Err(e) => e.to_string(),
+            };
+            let game = run.kept().name(app_id);
+            r.event(
+                EventKind::Warning,
+                format!("Couldn't look at {game}'s foils: {why}"),
+            );
+        }
+        let lines = told_lines(&told, &run.kept());
         for (kind, line) in lines {
             r.event(kind, line);
         }
         run.tell(r);
     }
 
+    /// Asks Steam about items it announced for a game after its drops were
+    /// told: a drop only its card page could name is then named by its own
+    /// item.
+    async fn described_late(
+        &self,
+        app_id: u32,
+        run: &Run,
+        r: &Reporter,
+        token: &CancellationToken,
+    ) {
+        let ask = run.kept().take_announced(&[app_id]);
+        let asked = ask.iter().map(|i| i.asset_id).collect();
+        match self.describe(asked, r, token).await {
+            Some(cards) => {
+                run.kept().identify(&[], &cards);
+                run.tell(r);
+            }
+            None => run.kept().keep_announced(ask),
+        }
+    }
+
     /// Asks Steam which cards these items are, if there are any to ask
-    /// about. What it can't say, the card page may.
-    async fn describe(&self, asset_ids: Vec<u64>, r: &Reporter) -> Vec<CardAsset> {
+    /// about. What it can't say, the card page may. `None` when Steam didn't
+    /// say, or farming stopped first.
+    async fn describe(
+        &self,
+        asset_ids: Vec<u64>,
+        r: &Reporter,
+        token: &CancellationToken,
+    ) -> Option<Vec<CardAsset>> {
         if asset_ids.is_empty() {
-            return Vec::new();
+            return Some(Vec::new());
+        }
+        if token.is_cancelled() {
+            return None;
         }
         r.event(
             EventKind::Progress,
@@ -599,8 +731,12 @@ impl Farmer {
             }
             .into(),
         );
-        let why = match (self.describe)(asset_ids).await {
-            Ok(Ok(cards)) => return cards,
+        let answer = tokio::select! {
+            _ = token.cancelled() => return None,
+            answer = (self.describe)(asset_ids) => answer,
+        };
+        let why = match answer {
+            Ok(Ok(cards)) => return Some(cards),
             Ok(Err(e)) => e.to_string(),
             Err(e) => e.to_string(),
         };
@@ -608,7 +744,7 @@ impl Farmer {
             EventKind::Warning,
             format!("Couldn't ask Steam which card it was: {why}"),
         );
-        Vec::new()
+        None
     }
 
     /// Waits until `until`, the next tick, or Steam says something; `None`
@@ -724,13 +860,13 @@ fn dropped_message(game: &Game, dropped: usize) -> String {
     }
 }
 
-/// What to say of drops just named: which card each was ("Madison dropped
-/// for Heavy Rain (a 2nd copy)"), or that it can't be told. A card only the
-/// card page could name says so first.
-fn told(named: &[Drop], kept: &Kept) -> Vec<(EventKind, String)> {
+/// What to say of drops just told: which card each was, and which copy
+/// ("Madison dropped for Heavy Rain (a 2nd copy)"), or that it can't be
+/// told. A card only the card page could name says so first.
+fn told_lines(told: &[usize], kept: &Kept) -> Vec<(EventKind, String)> {
     let mut lines = Vec::new();
     let mut by_page = Vec::new();
-    for drop in named {
+    for drop in told.iter().filter_map(|&i| kept.session.drops.get(i)) {
         let game = kept.name(drop.app_id);
         let Some(card) = drop.card.name() else {
             lines.push((
@@ -748,8 +884,9 @@ fn told(named: &[Drop], kept: &Kept) -> Vec<(EventKind, String)> {
         }
         let foil = if drop.card.is_foil() { " (foil)" } else { "" };
         let copy = match drop.copy {
-            Some(copy) if copy > 1 => format!(" (a {} copy)", ordinal(copy)),
-            _ => String::new(),
+            Some(1) => String::new(),
+            Some(copy) => format!(" (a {} copy)", ordinal(copy)),
+            None => " (which copy isn't known)".into(),
         };
         lines.push((
             EventKind::Identified,

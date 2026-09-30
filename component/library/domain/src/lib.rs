@@ -16,5 +16,6 @@ pub mod test_support;
 pub use model::{Card, CardAsset, CardDrops, Game, LibraryError, SteamLibrary};
 pub use repository::LibraryRepository;
 pub use use_cases::{
-    DescribeCards, LookAtGame, ReadLibrary, describe_cards, look_at_game, read_library,
+    DescribeCards, LookAtFoils, LookAtGame, ReadLibrary, describe_cards, look_at_foils,
+    look_at_game, read_library,
 };

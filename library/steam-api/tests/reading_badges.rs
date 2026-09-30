@@ -7,7 +7,7 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
     Session,
-    badges::{BadgeGame, read_badge_page, read_game_cards_page},
+    badges::{BadgeGame, read_badge_page, read_foil_cards_page, read_game_cards_page},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
 use wiremock::{
@@ -107,6 +107,27 @@ fn a_games_own_page_reads_the_same() {
     assert!(read_game_cards_page(1, "<html></html>").game.is_none());
 }
 
+#[test]
+fn a_games_foils_are_on_a_page_of_their_own() {
+    let foils: Vec<(String, u32)> = read_foil_cards_page(&page("gamecards-730-foil.html"))
+        .into_iter()
+        .map(|c| (c.name, c.owned))
+        .collect();
+    let foils: Vec<(&str, u32)> = foils.iter().map(|(n, o)| (n.as_str(), *o)).collect();
+    assert_eq!(
+        foils,
+        [
+            ("Anarchist", 2),
+            ("Balkan", 0),
+            ("FBI", 1),
+            ("Phoenix", 0),
+            ("SAS", 0)
+        ],
+        "each foil, named as the set names the card, and how many of it"
+    );
+    assert!(read_foil_cards_page("<html></html>").is_empty());
+}
+
 /// A session signed in as the stand-in's account, reading pages from
 /// `site`.
 async fn session(steam: &FakeSteam, site: &MockServer, name: &str) -> Session {
@@ -173,6 +194,25 @@ async fn every_page_is_read_and_unsure_games_checked() {
         1,
         "\"1 card drop remaining\""
     );
+}
+
+#[tokio::test]
+async fn a_games_foils_are_read_signed_in_from_its_foil_badge() {
+    let steam = FakeSteam::start().await;
+    let site = MockServer::start().await;
+    serve(
+        &site,
+        &format!("/profiles/{STEAM_ID}/gamecards/730"),
+        page("gamecards-730-foil.html"),
+        Some(("border", "1")),
+    )
+    .await;
+    let session = session(&steam, &site, "foils").await;
+
+    let foils = session.foil_cards(730).await.unwrap();
+
+    assert_eq!(foils.len(), 5);
+    assert_eq!((foils[0].name.as_str(), foils[0].owned), ("Anarchist", 2));
 }
 
 #[tokio::test]

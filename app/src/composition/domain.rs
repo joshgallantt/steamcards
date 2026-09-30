@@ -23,6 +23,7 @@ impl DomainAssembler {
             data.awake.clone(),
             library.read.clone(),
             library.look_at.clone(),
+            library.look_at_foils.clone(),
             library.describe.clone(),
             preferences.get.clone(),
         );

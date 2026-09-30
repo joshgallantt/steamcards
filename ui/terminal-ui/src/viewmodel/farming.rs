@@ -17,6 +17,9 @@ pub struct Farming {
     events: mpsc::Receiver<FarmingEvent>,
     running: Option<(CancellationToken, JoinHandle<()>)>,
     started: Option<Instant>,
+    /// The account this session of farming is for: who was signed in when
+    /// it began. `None` until farming first starts, and once it ends.
+    session_for: Option<String>,
 }
 
 impl Farming {
@@ -38,14 +41,19 @@ impl Farming {
             events,
             running: None,
             started: None,
+            session_for: None,
         }
     }
 
     /// Starts farming, when signed in and not farming already.
     pub fn start(&mut self) {
-        if self.running.is_some() || (self.account)().is_none() {
+        let Some(account) = (self.account)() else {
+            return;
+        };
+        if self.running.is_some() {
             return;
         }
+        self.session_for.get_or_insert(account.name);
         let token = CancellationToken::new();
         let task = (self.farm)(token.clone(), self.tx.clone());
         self.running = Some((token, task));
@@ -75,8 +83,22 @@ impl Farming {
     }
 
     /// Ends this session of farming: farming again starts a new one.
-    pub fn end_session(&self) {
+    pub fn end_session(&mut self) {
         (self.end_session)();
+        self.session_for = None;
+    }
+
+    /// Someone signed in. For the account this session is for, it goes on;
+    /// for another, it ends, since a session is one account's: that
+    /// account's farming starts afresh.
+    pub fn signed_in(&mut self) {
+        let Some(farmed_for) = &self.session_for else {
+            return;
+        };
+        let same = (self.account)().is_some_and(|a| !a.name.is_empty() && a.name == *farmed_for);
+        if !same {
+            self.end_session();
+        }
     }
 
     /// How long farming has been running since it was last started.
@@ -101,7 +123,10 @@ impl Farming {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     use account::{Account, test_support::fixed_account};
     use farming::test_support::idle_farmer;
@@ -131,6 +156,57 @@ mod tests {
         let mut f = farming(false);
         f.start();
         assert!(!f.is_running());
+    }
+
+    /// Farming, signed in as whoever `who` says, counting the sessions
+    /// ended.
+    fn farming_as(who: &Arc<Mutex<Option<Account>>>, ended: &Arc<AtomicUsize>) -> Farming {
+        let (who, ended) = (who.clone(), ended.clone());
+        Farming::new(
+            idle_farmer(),
+            Arc::new(move || {
+                ended.fetch_add(1, Ordering::Relaxed);
+            }),
+            Arc::new(move || who.lock().unwrap().clone()),
+            ChangingPreferences::default().get(),
+            set_game_tier(Arc::new(InMemoryPreferencesRepository::default())),
+        )
+    }
+
+    fn account(name: &str) -> Option<Account> {
+        Some(Account {
+            name: name.into(),
+            expired: false,
+        })
+    }
+
+    #[tokio::test]
+    async fn signing_in_as_another_account_ends_the_session() {
+        let who = Arc::new(Mutex::new(account("cardfarmer")));
+        let ended = Arc::new(AtomicUsize::new(0));
+        let mut f = farming_as(&who, &ended);
+        f.start();
+
+        // The same account again, its sign-in renewed: the session goes on.
+        f.signed_in();
+        assert_eq!(ended.load(Ordering::Relaxed), 0);
+
+        *who.lock().unwrap() = account("someone_else");
+        f.signed_in();
+        assert_eq!(
+            ended.load(Ordering::Relaxed),
+            1,
+            "another account's farming starts afresh"
+        );
+
+        f.pause();
+        f.start();
+        f.signed_in();
+        assert_eq!(
+            ended.load(Ordering::Relaxed),
+            1,
+            "and is then its own session"
+        );
     }
 
     #[tokio::test]

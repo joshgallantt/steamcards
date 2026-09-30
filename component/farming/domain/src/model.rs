@@ -109,8 +109,10 @@ pub struct Drop {
     /// The game it dropped for.
     pub app_id: u32,
     pub card: DropCard,
-    /// Which copy of that card (by name and border) the account then held:
-    /// 1 the first, 2 or more a spare. `None` when the set wasn't known.
+    /// Which copy of that card (by name and border) the account then held,
+    /// from its own counts: the set's for a normal card, its foil badge's
+    /// for a foil. 1 the first, 2 or more a spare. `None` while that isn't
+    /// known: the card isn't, or its counts couldn't be read.
     pub copy: Option<u32>,
 }
 
@@ -125,7 +127,8 @@ pub enum DropCard {
     /// item to go with it, so never one to sell. The page read is the
     /// normal set's, so these aren't foils.
     NameOnly { name: String, foil: bool },
-    /// Neither Steam nor the card page could tell.
+    /// Neither Steam nor the card page could tell: the page's counts went up
+    /// for no card, or for more than these drops.
     Unknown,
 }
 
@@ -151,6 +154,7 @@ impl DropCard {
 
 impl Drop {
     /// A copy beyond the first of its card: a badge level takes one of each.
+    /// Not while which copy it is isn't known.
     pub fn is_spare(&self) -> bool {
         self.copy.is_some_and(|copy| copy > 1)
     }

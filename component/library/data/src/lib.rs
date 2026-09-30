@@ -1,14 +1,18 @@
 //! The library domain's contract, satisfied by Steam: badge pages and card
-//! pages from steamcommunity.com, and the inventory's items over the CM
-//! connection, in; the library's entities out. Imports `library` because
-//! the contract is declared there; `library` imports nothing back.
+//! pages (foils' too) from steamcommunity.com, and the inventory's items over
+//! the CM connection, in; the library's entities out. Imports `library`
+//! because the contract is declared there; `library` imports nothing back.
 
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use library::{Card, CardAsset, CardDrops, Game, LibraryRepository, SteamLibrary};
-use steam_api::{Session, badges::BadgeGame, inventory::InventoryItem};
+use steam_api::{
+    Session,
+    badges::{BadgeGame, SetCard},
+    inventory::InventoryItem,
+};
 
 /// The account's badges, read signed in, and the items it holds.
 pub struct SteamLibraryRepository {
@@ -36,6 +40,11 @@ impl LibraryRepository for SteamLibraryRepository {
             .ok_or_else(|| anyhow!("its card page has no card drops to read"))
     }
 
+    async fn foils(&self, app_id: u32) -> anyhow::Result<Vec<Card>> {
+        let foils = self.session.foil_cards(app_id).await?;
+        Ok(foils.into_iter().map(to_card).collect())
+    }
+
     async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
         let items = self.session.describe_items(asset_ids).await?;
         Ok(items.into_iter().filter_map(to_card_asset).collect())
@@ -52,14 +61,14 @@ fn to_game(b: BadgeGame) -> Game {
             remaining: b.cards_left,
         },
         badge_level: b.badge_level,
-        cards: b
-            .cards
-            .into_iter()
-            .map(|c| Card {
-                name: c.name,
-                owned: c.owned,
-            })
-            .collect(),
+        cards: b.cards.into_iter().map(to_card).collect(),
+    }
+}
+
+fn to_card(c: SetCard) -> Card {
+    Card {
+        name: c.name,
+        owned: c.owned,
     }
 }
 

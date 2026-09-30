@@ -58,11 +58,12 @@ The domain starts from its entities:
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
   priority", and whether to appear online while farming.
 - **`FarmingSession`**, in `farming`: this session of farming, from the first
-  run of the farmer until the user signs out or steamcards quits, through
-  pauses. It holds every `Drop` (one per copy that dropped, and which card it
-  was once that's known), the `Stretch`es of what was played and how, the
-  games finished, and what the library had left at the start. From it,
-  `forecast()` learns how long the rest should take.
+  run of the farmer until the user signs out, another account signs in, or
+  steamcards quits, through pauses. It holds every `Drop` (one per copy that
+  dropped, which card it was once that's known, and which copy, from the
+  account's own counts), the `Stretch`es of what was played and how, the
+  games finished, and what the games it farms had left at the start. From
+  it, `forecast()` learns how long the rest should take.
 - **`Money`**, in `market`: an amount in hundredths of a `Currency`, Steam's
   `ECurrency` with Valve's own format for it. Amounts in different
   currencies are never added or converted.
@@ -125,13 +126,14 @@ constructor builds the real one over the repositories. Call sites read
 | | `UnlinkAccount` (`unlink_account`) | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
 | library | `ReadLibrary` (`read_library`) | The whole library, games with drops left first. Errs with `LibraryError`. |
 | | `LookAtGame` (`look_at_game`) | One game afresh: its drops, hours and card set. |
+| | `LookAtFoils` (`look_at_foils`) | One game's foils afresh, from its foil badge: how many of each the account has. |
 | | `DescribeCards` (`describe_cards`) | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
 | preferences | `GetPreferences` (`get_preferences`) | The current preferences. |
 | | `SetGameTier` (`set_game_tier`) | Moves a game between priority (at a rank), indifferent and skip. |
 | | `SetOnlyPriority` (`set_only_priority`) | Farm priority games only. |
 | | `SetAppearOnline` (`set_appear_online`) | Show as online while farming, or appear offline. |
 | farming | `FarmCards` (`farm_cards`) | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
-| | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it. |
+| | `EndSession` (`end_session`) | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | market | `GetPrices` (`get_prices`) | The price book now. |
 | | `WantPrices` (`want_prices`) | Which games to price, most urgent first. |
 | | `WatchPrices` (`watch_prices`) | Prices the wanted games' sets until cancelled, each again once 6 hours old; waits out Steam's pause; reports `MarketEvent`s. |
@@ -146,8 +148,8 @@ test, one that moves with tokio's paused time.
 ### Use cases that call other use cases
 
 `farm_cards` needs the library and what the user wants. It takes
-`ReadLibrary`, `LookAtGame`, `DescribeCards` and `GetPreferences`, not their
-repositories: so `farming` depends on `library` and `preferences` as domain
+`ReadLibrary`, `LookAtGame`, `LookAtFoils`, `DescribeCards` and
+`GetPreferences`, not their repositories: so `farming` depends on `library` and `preferences` as domain
 components, and never learns where either comes from. When a tier changes,
 the farmer sees it within moments, through the same use case the screens
 call.
@@ -204,7 +206,7 @@ also keeps the wallet Steam tells of as it signs on (CM message 5528).
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages, the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the badge and card pages (foils' too), the inventory's items described over the CM connection, the market's `search/render` and `orderbook` through the one market queue, and `Session`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only (`CredentialStore`, and the stored shape of preferences and of the market's settings and pause), and `PriceCache`, the market's prices in a file of their own beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 | `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |

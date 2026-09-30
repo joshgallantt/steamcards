@@ -1597,6 +1597,7 @@ Named ANSI colours only, from `theme.rs`. Everything coloured also carries a sym
 | A card's count | "×2", "×1", "—" | default; "—" DIM |
 | A foil | "★ Thanatos (foil)" | ★ ACCENT |
 | A spare | ", 2nd copy" | DIM |
+| A copy not known | ", copy ?": which copy isn't known, so it may be a spare | DIM |
 | Pending price | … | DIM |
 | No market, not marketable | "no market", "—" | DIM |
 | Lookup failed | ? | BUSY |
@@ -1669,6 +1670,7 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `Card::spares()` | `owned` beyond one | the set's spare count | new (derived) |
 | `CardAsset { asset_id, app_id, name, market_hash_name, foil, marketable, tradable }` | one copy of a card the account holds (research §4.6) | which card dropped; later, exactly what `sellitem` needs | new |
 | `ReadLibrary`, `LookAtGame` | read the library; look at one game afresh, its set included | the queue; the set when a game's details open | exists |
+| `LookAtFoils(app_id) -> Vec<Card>` | one game's foils afresh, from its foil badge's card page (`?border=1`, research §2.3 C): how many of each foil the account has | which copy of a foil a drop made | new |
 | `DescribeCards(asset_ids) -> Vec<CardAsset>` | describe new items with one CM call, `Econ.GetInventoryItemsWithDescriptions#1` (research §2.2) | identifying drops | new |
 
 `CardAsset` lives in `library`, beside `Card`: it's the account's own copy of a card. Both `farming` and `market` already depend on `library`, so neither needs the other.
@@ -1683,11 +1685,11 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `FarmingStatus.session: FarmingSession` | this session, reported with every status | Progress, the haul, pips, the forecast | new |
 | `FarmingStatus.set_aside: Vec<SetAside { app_id, times, since }>` | games put behind the others after 10 hours without a drop (today private to the farmer) | STATUS "set aside", the details | new |
 | `FarmingStatus.look_every: Option<Duration>` | the look interval in force | "looks every 5 min: it's the last card" | new |
-| `FarmingSession { started_at, drops_left_at_start, games_at_start, drops, stretches, finished, first_forecast }` | one session of farming (it replaces the TUI's `baseline` map); it holds no account, since signing out ends it | the header's time, session progress, the haul, Done's "✓ 16:48", the end-of-library check | new |
+| `FarmingSession { started_at, drops_left_at_start, games_at_start, drops, stretches, finished, first_forecast }` | one session of farming (it replaces the TUI's `baseline` map); it holds no account, since signing out or signing in as another account ends it. What it started from counts the games it farms, as the farm queue does: skipped games and sale badges are left out | the header's time, session progress, the haul, Done's "✓ 16:48", the end-of-library check | new |
 | `Stretch { app_ids, mode, from, to }` | what was played, how, and when | T and T_g for the forecast; the track; "on it 38m" | new |
 | `Drop { at, app_id, card: DropCard, copy: Option<u32> }` | one card that dropped: each copy is its own drop | the haul, pips, the track | new |
 | `DropCard::{Identifying, Identified(CardAsset), NameOnly { name, foil }, Unknown}` | what's known of it (`Drop.at` says since when); `NameOnly` is fallback C, never sellable; `Unknown` when nothing could tell | "⠋ finding out which card", the name, ★ | new |
-| `Drop.copy` | which copy of that card this made the account hold: 1 the first, 2 a spare | "2nd copy"; spares this session | new |
+| `Drop.copy` | which copy of that card this made the account hold, from the account's own counts: 1 the first, 2 a spare; `None` while that isn't known | "2nd copy"; spares this session | new |
 | `Forecast { eta, band: Option<(Duration, Duration)>, assumed, hours_term, rate, per_game: Vec<(u32, Duration)>, made_at }` | the time to finish (research §3.1) | Progress, ≈ DONE IN, "last card ≈ 17:55" | new |
 | `forecast(&FarmingSession, &SteamLibrary, order: &[u32], now) -> Forecast` | pure, beside `ranking.rs`: Gamma–Poisson with a 30-minute prior and an 80% band | the above | new |
 | `hours_to_go(&Game) -> f64` | the 3-hour rule, made public (`HOURS_BEFORE_DROPS` is `pub(crate)` today) | "ready", "needs 0.8h" | new |
@@ -1696,9 +1698,9 @@ The domain grows from its entities, in the user's words: the **library** and its
 | `FarmCards` | farms until cancelled, reporting events and status; each run carries on the session | everything | exists |
 | `EndSession` | ends the session: the next run of `FarmCards` starts a new one | signing out | new |
 
-**The session's life.** A session starts when farming first starts. It carries on through a pause and through signing in again: the farming component keeps it between runs of `FarmCards`, in a `SessionKeeper` it shares with `EndSession`, with what the farmer knows beside it (hours counted, games set aside). Signing out ends it (the screens call `EndSession`), as should signing in as another account; quitting steamcards ends it too (§9 asks whether it should outlive a restart).
+**The session's life.** A session starts when farming first starts. It carries on through a pause and through signing in again to the same account: the farming component keeps it between runs of `FarmCards`, in a `SessionKeeper` it shares with `EndSession`, with what the farmer knows beside it (hours counted, games set aside), and each run's first status carries it on. Signing out ends it, and so does signing in as another account (the screens call `EndSession` for both); quitting steamcards ends it too (§9 asks whether it should outlive a restart).
 
-**How a drop is identified** (research §2.2): Steam pushes `NewItems` with asset ids; the card page read 2 seconds later keeps drops left true, and a drop is recorded for each card they went down by; the farmer asks `DescribeCards` about the items announced for that game (or for no game in particular); each `Drop` goes from `Identifying` to `Identified`. Drops still unnamed are named by the card page's counts against the set read before (`NameOnly`), and any left are `Unknown`. `Drop.copy` is the card's `owned` count from the read before the drop, plus one, and one more for each earlier copy of it in the same look; so a look that finds two new cards makes two drops, each with its own copy number. The set counts normal cards only, so a foil's copy counts this session's foils of that name.
+**How a drop is identified** (research §2.2): Steam pushes `NewItems` with asset ids; the card page read 2 seconds later keeps drops left true, and a drop is recorded for each card they went down by. A drop a read of the badges finds (after a pause, or another device's play) has its game's card page read straight away, since the badges show no sets. The farmer asks `DescribeCards` about the items announced for that game (or for no game in particular), and the page's counts check what Steam says: a normal card it describes is a drop's only if its count went up, and a foil takes a drop the counts leave over; each `Drop` so named goes from `Identifying` to `Identified`. Drops still unnamed are named by the page's counts against the set read before (`NameOnly`), but only when each card that went up can be one of them: counts that went up more often than there are drops left to name, or a set before that missed a drop nothing told, name nothing. Any left are `Unknown`. An item no drop is may name, later, a drop the page named (the same card, now with its item); otherwise it isn't a drop, and is left out, so it never names a later one. `Drop.copy` is the card's `owned` count from the read before the drop, plus one, and one more for each earlier copy of it in the same look; so a look that finds two new cards makes two drops, each with its own copy number. Without the set before, it's the count after, less the copies after it in the same look. The set counts normal cards only, so a foil's copy is its count on the game's foil badge (`LookAtFoils`), read after it drops. While none of these can say, `copy` is `None`: the haul shows ", copy ?" (§5.4), so a spare never looks like a first copy.
 
 ### 6.3 market (a new component, with `domain`, `data` and `di` like the others)
 

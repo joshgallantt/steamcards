@@ -319,6 +319,8 @@ impl App {
                         format!(" as {name}")
                     };
                     self.push_log(EventKind::Info, format!("Signed in to Steam{who}"));
+                    // Another account's farming is a session of its own.
+                    self.farming.signed_in();
                     self.library.invalidate();
                     self.status = None;
                     self.baseline.clear();

@@ -2,7 +2,7 @@
 //! no test needs Steam.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -12,7 +12,7 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    CardAsset, CardDrops, DescribeCards, Game, LibraryError, LibraryRepository, LookAtGame,
+    Card, CardAsset, CardDrops, DescribeCards, Game, LibraryError, LibraryRepository, LookAtGame,
     ReadLibrary, SteamLibrary,
 };
 
@@ -89,6 +89,9 @@ pub struct InMemoryLibraryRepository {
     /// The copies of cards the account holds. Anything else it holds isn't
     /// a card, so it's never described.
     pub assets: Mutex<Vec<CardAsset>>,
+    /// Each game's foils, and how many of each the account has. A game of
+    /// the library that isn't here has none yet.
+    pub foils: Mutex<HashMap<u32, Vec<Card>>>,
     /// Everything fails, as if Steam were down.
     pub down: AtomicBool,
 }
@@ -98,6 +101,7 @@ impl InMemoryLibraryRepository {
         Self {
             library: Mutex::new(SteamLibrary::new(games)),
             assets: Mutex::default(),
+            foils: Mutex::default(),
             down: AtomicBool::new(false),
         }
     }
@@ -128,6 +132,22 @@ impl LibraryRepository for InMemoryLibraryRepository {
             .game(app_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("no game {app_id}"))
+    }
+
+    async fn foils(&self, app_id: u32) -> anyhow::Result<Vec<Card>> {
+        if self.down.load(Ordering::Relaxed) {
+            anyhow::bail!("steamcommunity.com didn't answer");
+        }
+        if self.library.lock().unwrap().game(app_id).is_none() {
+            anyhow::bail!("no game {app_id}");
+        }
+        Ok(self
+            .foils
+            .lock()
+            .unwrap()
+            .get(&app_id)
+            .cloned()
+            .unwrap_or_default())
     }
 
     async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {

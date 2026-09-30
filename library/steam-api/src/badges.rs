@@ -8,6 +8,8 @@
 
 use scraper::{ElementRef, Html, Selector};
 
+use crate::inventory::card_name;
+
 /// Free-to-play games whose badge row can say "no drops left" when there
 /// are: ASF checks their own card page instead (`UntrustedAppIDs`).
 const UNTRUSTED: [u32; 3] = [440, 570, 730];
@@ -107,6 +109,21 @@ pub fn read_game_cards_page(app_id: u32, html: &str) -> GameCardsPage {
         game,
         viewer: viewer(html),
     }
+}
+
+/// Reads `/gamecards/<app id>?border=1&l=english`: the card page of a
+/// game's foil badge, whose set is its foils, and how many of each the
+/// account has. It's laid out as the normal page is. Each foil is named as
+/// the set names the card, without any suffix the market would add.
+pub fn read_foil_cards_page(html: &str) -> Vec<SetCard> {
+    let doc = Html::parse_document(html);
+    set(doc.root_element())
+        .into_iter()
+        .map(|card| SetCard {
+            name: card_name(&card.name),
+            ..card
+        })
+        .collect()
 }
 
 /// One badge row: a game with trading cards, or `None` for a badge that

@@ -10,8 +10,8 @@ use farming::{
     DropCard, EndSession, EventKind, FarmCards, FarmingEvent, FarmingStatus, Finished, Mode,
     NewItem, SessionKeeper, Status, end_session, farm_cards, test_support::InMemorySteam,
 };
-use library::{describe_cards, look_at_game, read_library};
-use preferences::test_support::ChangingPreferences;
+use library::{describe_cards, look_at_foils, look_at_game, read_library};
+use preferences::{Preferences, test_support::ChangingPreferences};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -24,6 +24,7 @@ const HADES: u32 = 1_145_360;
 /// Someone farming, who can pause, carry on, and sign out.
 struct Player {
     steam: Arc<InMemorySteam>,
+    prefs: ChangingPreferences,
     farm: FarmCards,
     end_session: EndSession,
     token: CancellationToken,
@@ -35,19 +36,22 @@ struct Player {
 impl Player {
     fn new() -> Self {
         let steam = Arc::new(InMemorySteam::new());
+        let prefs = ChangingPreferences::default();
         let sessions = Arc::new(SessionKeeper::default());
         let (tx, events) = mpsc::channel(8192);
         Self {
             farm: farm_cards(
                 read_library(steam.clone()),
                 look_at_game(steam.clone()),
+                look_at_foils(steam.clone()),
                 describe_cards(steam.clone()),
                 steam.clone(),
-                ChangingPreferences::default().get(),
+                prefs.get(),
                 sessions.clone(),
             ),
             end_session: end_session(sessions),
             steam,
+            prefs,
             token: CancellationToken::new(),
             tx,
             events,
@@ -70,6 +74,14 @@ impl Player {
                 ("Scott", 1),
             ],
         );
+    }
+
+    /// Skips a game: it's never farmed.
+    fn skips(&self, app_id: u32) {
+        self.prefs.set(Preferences {
+            skipped_games: vec![app_id],
+            ..Default::default()
+        });
     }
 
     fn starts_farming(&mut self) {
@@ -308,13 +320,14 @@ async fn a_card_nothing_can_tell_is_unknown() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn foils_are_counted_by_this_sessions_foils() {
+async fn foils_are_counted_by_their_own_badge() {
     let mut player = Player::new();
     player.steam.add_game(HADES, 12.0, 3, Some(20 * MINUTE));
     player.steam.name(HADES, "Hades");
     player.steam.set(HADES, &[("Zagreus", 1), ("Thanatos", 3)]);
+    player.steam.holds_foils(HADES, &[("Thanatos", 1)]);
     player.steam.will_drop_foil(HADES, "Thanatos");
-    player.steam.will_drop_foil(HADES, "Thanatos");
+    player.steam.will_drop_foil(HADES, "Zagreus");
     player.starts_farming();
     player.reads(EventKind::Playing).await;
 
@@ -322,16 +335,18 @@ async fn foils_are_counted_by_this_sessions_foils() {
     player.steam.announce();
     assert_eq!(
         player.reads(EventKind::Identified).await,
-        "Thanatos (foil) dropped for Hades",
-        "the set's three normal ones don't count"
+        "Thanatos (foil) dropped for Hades (a 2nd copy)",
+        "a foil Thanatos was held already; the set's normal ones don't count"
     );
 
     player.waits(20 * MINUTE).await;
     player.steam.announce();
     assert_eq!(
         player.reads(EventKind::Identified).await,
-        "Thanatos (foil) dropped for Hades (a 2nd copy)"
+        "Zagreus (foil) dropped for Hades"
     );
+    let drops = player.status().await.session.drops;
+    assert!(drops[0].is_spare() && !drops[1].is_spare());
 }
 
 #[tokio::test(start_paused = true)]
@@ -374,6 +389,7 @@ async fn a_card_that_drops_while_building_hours_is_recorded() {
     let mut player = Player::new();
     player.steam.add_game(HADES, 1.0, 2, Some(20 * MINUTE));
     player.steam.name(HADES, "Hades");
+    player.steam.set(HADES, &[("Zagreus", 1), ("Nyx", 0)]);
     player.steam.drops_straight_away(HADES);
     player.steam.will_drop(HADES, &["Zagreus"]);
     player.starts_farming();
@@ -391,11 +407,11 @@ async fn a_card_that_drops_while_building_hours_is_recorded() {
     );
     assert_eq!(
         player.reads(EventKind::Identified).await,
-        "Zagreus dropped for Hades",
-        "its set was never read, so which copy isn't known"
+        "Zagreus dropped for Hades (a 2nd copy)",
+        "its set was never read, so its card page is, after it"
     );
     let session = player.status().await.session;
-    assert_eq!(session.drops[0].copy, None);
+    assert_eq!(session.drops[0].copy, Some(2));
     assert_eq!(session.stretches[0].mode, Mode::Hours);
     assert_eq!(session.stretches[0].app_ids, [HADES]);
     assert!(
@@ -438,6 +454,99 @@ async fn a_card_that_drops_while_another_device_plays_is_recorded_after() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_card_found_after_another_device_played_is_told_by_its_card_page() {
+    let mut player = Player::new();
+    player.has_heavy_rain(3, HOUR);
+    player.steam.will_drop(HEAVY_RAIN, &["Madison", "Scott"]);
+    player.starts_farming();
+    player.reads(EventKind::Progress).await;
+
+    // Another device plays it, and Madison drops meanwhile: Steam gives only
+    // a count.
+    player.steam.block(Some(HEAVY_RAIN));
+    player.sees(Status::Blocked).await;
+    player.steam.drops_now(HEAVY_RAIN);
+    player.steam.new_items();
+    player.waits(MINUTE).await;
+    player.steam.unblock();
+
+    assert_eq!(
+        player.reads(EventKind::Dropped).await,
+        "A card dropped for Heavy Rain — 2 to go"
+    );
+    assert_eq!(
+        player.reads(EventKind::Identified).await,
+        "Madison dropped for Heavy Rain (a 2nd copy)",
+        "its card page is looked at straight away"
+    );
+
+    // Scott drops next, and again Steam gives only a count.
+    player.steam.drops_now(HEAVY_RAIN);
+    player.steam.new_items();
+    assert_eq!(
+        player.reads(EventKind::Identified).await,
+        "Scott dropped for Heavy Rain (a 2nd copy)",
+        "not Madison again: Madison's copy was counted"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_item_steam_announces_late_names_its_own_card_and_no_later_one() {
+    let mut player = Player::new();
+    player.has_heavy_rain(4, 100 * HOUR);
+    player
+        .steam
+        .will_drop(HEAVY_RAIN, &["Madison", "Scott", "Ethan"]);
+    player.starts_farming();
+    player.reads(EventKind::Progress).await;
+    let item = |asset_id| NewItem {
+        asset_id,
+        app_id: Some(HEAVY_RAIN),
+        gained_at: None,
+    };
+
+    // Two cards drop, and Steam has announced only the first when the farmer
+    // looks.
+    player.steam.drops_now(HEAVY_RAIN);
+    player.steam.drops_now(HEAVY_RAIN);
+    player.steam.announce_items(vec![item(30_001)]);
+    assert_eq!(
+        player.reads(EventKind::Identified).await,
+        "Madison dropped for Heavy Rain (a 2nd copy)"
+    );
+    assert_eq!(
+        player.reads(EventKind::Identified).await,
+        "Scott dropped for Heavy Rain (a 2nd copy)"
+    );
+
+    // Steam announces the second after; then Ethan drops.
+    player.steam.announce_items(vec![item(30_002)]);
+    player.waits(MINUTE).await;
+    player.steam.drops_now(HEAVY_RAIN);
+    player.steam.announce_items(vec![item(30_003)]);
+
+    assert_eq!(
+        player.reads(EventKind::Identified).await,
+        "Ethan dropped for Heavy Rain",
+        "not a 3rd Scott"
+    );
+    let drops = player.status().await.session.drops;
+    let held = player.steam.held();
+    assert_eq!(
+        drops
+            .iter()
+            .map(|d| (d.card.clone(), d.copy))
+            .collect::<Vec<_>>(),
+        [
+            (DropCard::Identified(held[0].clone()), Some(2)),
+            (DropCard::Identified(held[1].clone()), Some(2)),
+            (DropCard::Identified(held[2].clone()), Some(1)),
+        ],
+        "Scott's item named the drop the card page had told, once it came"
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn the_session_counts_from_its_first_read_and_marks_each_game_finished() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 2, Some(20 * MINUTE));
@@ -468,6 +577,24 @@ async fn the_session_counts_from_its_first_read_and_marks_each_game_finished() {
         session.drops_left_at_start,
         Some(5),
         "still what it started from"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_session_counts_only_the_games_it_will_farm() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 2, Some(20 * MINUTE));
+    player.steam.add_game(730, 350.0, 2, None);
+    player.steam.add_game(2_861_720, 0.0, 3, None);
+    player.skips(730);
+    player.starts_farming();
+
+    let session = player.sees(Status::Farming).await.session;
+
+    assert_eq!(
+        (session.drops_left_at_start, session.games_at_start),
+        (Some(2), Some(1)),
+        "a skipped game, and a sale's badge, aren't farmed"
     );
 }
 
@@ -527,6 +654,59 @@ async fn the_session_carries_on_across_a_pause() {
         [(Mode::Cards, true), (Mode::Cards, false)],
         "the pause stopped one stretch, and farming again started another"
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn after_a_pause_the_first_word_is_the_session_going_on() {
+    let mut player = Player::new();
+    player.has_heavy_rain(3, 20 * MINUTE);
+    player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+    player.waits(20 * MINUTE + Duration::from_secs(5)).await;
+    player.steam.announce();
+    player.reads(EventKind::Identified).await;
+    let before = player.status().await;
+
+    player.pauses().await;
+    player.starts_farming();
+
+    let first = player.status().await;
+    assert_eq!(first.status, Status::Checking, "reading the badges");
+    assert_eq!(
+        (first.session.started_at, &first.session.drops),
+        (before.session.started_at, &before.session.drops),
+        "the same session, its drops and all"
+    );
+    assert_eq!(
+        first.library.game(HEAVY_RAIN).map(|g| g.drops),
+        before.library.game(HEAVY_RAIN).map(|g| g.drops)
+    );
+    assert_eq!(first.order, [HEAVY_RAIN]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_pause_while_a_card_is_told_stops_at_once() {
+    let mut player = Player::new();
+    player.has_heavy_rain(3, 20 * MINUTE);
+    player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
+    player.steam.describes_after(Duration::from_secs(15));
+    player.starts_farming();
+    player.reads(EventKind::Playing).await;
+    player.waits(20 * MINUTE + Duration::from_secs(5)).await;
+    player.steam.announce();
+    player.reads(EventKind::Dropped).await;
+
+    // Steam is asked which card it was, and takes its time.
+    let paused = Instant::now();
+    player.pauses().await;
+
+    assert!(
+        paused.elapsed() < Duration::from_secs(1),
+        "stopped {:?} after the pause",
+        paused.elapsed()
+    );
+    assert!(player.steam.playing().is_empty(), "and stopped playing");
 }
 
 #[tokio::test(start_paused = true)]

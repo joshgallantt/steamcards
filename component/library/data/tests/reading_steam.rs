@@ -130,6 +130,40 @@ async fn a_games_own_page_has_its_card_set() {
 }
 
 #[tokio::test]
+async fn a_games_foils_are_counted_on_a_page_of_their_own() {
+    let steam = FakeSteam::start().await;
+    let site = MockServer::start().await;
+    serving(
+        &site,
+        format!("/profiles/{STEAM_ID}/gamecards/730"),
+        fixture("gamecards-730-foil.html"),
+        Some(("border", "1")),
+    )
+    .await;
+    let repo = repository(&steam, &site, "foils").await;
+
+    let foils = repo.foils(730).await.unwrap();
+
+    assert_eq!(
+        foils[..3],
+        [
+            Card {
+                name: "Anarchist".into(),
+                owned: 2,
+            },
+            Card {
+                name: "Balkan".into(),
+                owned: 0,
+            },
+            Card {
+                name: "FBI".into(),
+                owned: 1,
+            },
+        ]
+    );
+}
+
+#[tokio::test]
 async fn new_items_are_described_as_the_cards_they_are() {
     let steam = FakeSteam::start().await;
     steam.hold(vec![

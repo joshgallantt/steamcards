@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use library::{
-    DescribeCards, LibraryRepository, LookAtGame, ReadLibrary, describe_cards, look_at_game,
-    read_library,
+    DescribeCards, LibraryRepository, LookAtFoils, LookAtGame, ReadLibrary, describe_cards,
+    look_at_foils, look_at_game, read_library,
 };
 use library_data::SteamLibraryRepository;
 use steam_api::Session;
@@ -14,6 +14,7 @@ use steam_api::Session;
 pub struct LibraryComponent {
     pub read: ReadLibrary,
     pub look_at: LookAtGame,
+    pub look_at_foils: LookAtFoils,
     pub describe: DescribeCards,
 }
 
@@ -26,6 +27,7 @@ impl LibraryComponent {
         Self {
             read: read_library(repo.clone()),
             look_at: look_at_game(repo.clone()),
+            look_at_foils: look_at_foils(repo.clone()),
             describe: describe_cards(repo),
         }
     }

@@ -31,6 +31,9 @@ struct Farmed {
     /// The cards that drop next, in order, and whether each is a foil. Once
     /// they've dropped, a card named after how many have.
     next: VecDeque<(String, bool)>,
+    /// Its foils, and how many of each the account has: only its foil
+    /// badge's page shows them.
+    foils: Vec<Card>,
 }
 
 struct State {
@@ -52,6 +55,8 @@ struct State {
     /// Every ask to describe items: the asset IDs asked about.
     describes: Vec<Vec<u64>>,
     cant_describe: bool,
+    /// How long Steam takes to say which cards items are.
+    describe_takes: Duration,
 }
 
 /// Steam, as far as farming sees it, in memory: a library whose badges answer
@@ -91,6 +96,7 @@ impl InMemorySteam {
                 unannounced: Vec::new(),
                 describes: Vec::new(),
                 cant_describe: false,
+                describe_takes: Duration::ZERO,
             }),
             signals_tx,
             signals: tokio::sync::Mutex::new(signals),
@@ -118,6 +124,7 @@ impl InMemorySteam {
                 needs_hours: 3.0,
                 since_drop: Duration::ZERO,
                 next: VecDeque::new(),
+                foils: Vec::new(),
             },
         );
     }
@@ -134,6 +141,19 @@ impl InMemorySteam {
     pub fn set(&self, app_id: u32, cards: &[(&str, u32)]) {
         if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
             f.game.cards = cards
+                .iter()
+                .map(|&(name, owned)| Card {
+                    name: name.to_owned(),
+                    owned,
+                })
+                .collect();
+        }
+    }
+
+    /// The foils of a game the account holds already: how many of each.
+    pub fn holds_foils(&self, app_id: u32, foils: &[(&str, u32)]) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&app_id) {
+            f.foils = foils
                 .iter()
                 .map(|&(name, owned)| Card {
                     name: name.to_owned(),
@@ -214,6 +234,12 @@ impl InMemorySteam {
     /// Asking which cards items are fails from now on.
     pub fn cant_describe(&self) {
         self.state.lock().unwrap().cant_describe = true;
+    }
+
+    /// Steam takes this long to say which cards items are, as when it's
+    /// slow to answer.
+    pub fn describes_after(&self, takes: Duration) {
+        self.state.lock().unwrap().describe_takes = takes;
     }
 
     /// Every ask to describe items: the asset IDs asked about.
@@ -330,8 +356,20 @@ fn drop_card(s: &mut State, app_id: u32) {
         .next
         .pop_front()
         .unwrap_or_else(|| (format!("Card {}", f.game.drops.received), false));
-    if !foil && let Some(card) = f.game.cards.iter_mut().find(|c| c.name == name) {
-        card.owned += 1;
+    let set = if foil {
+        &mut f.foils
+    } else {
+        &mut f.game.cards
+    };
+    match set.iter_mut().find(|c| c.name == name) {
+        Some(card) => card.owned += 1,
+        // A foil counts on its badge's page whichever it is; a normal card
+        // outside the set the test gave, nowhere.
+        None if foil => set.push(Card {
+            name: name.clone(),
+            owned: 1,
+        }),
+        None => {}
     }
     let market_name = if foil {
         format!("{name} (Foil)")
@@ -388,10 +426,28 @@ impl LibraryRepository for InMemorySteam {
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
     }
 
+    /// A game's foil badge page: its foils, and how many of each.
+    async fn foils(&self, app_id: u32) -> anyhow::Result<Vec<Card>> {
+        self.settle();
+        let s = self.state.lock().unwrap();
+        if s.down {
+            anyhow::bail!("steamcommunity.com didn't answer (503 Service Unavailable)");
+        }
+        s.games
+            .get(&app_id)
+            .map(|f| f.foils.clone())
+            .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
+    }
+
     /// The cards that dropped among these items, in the order asked.
     async fn describe(&self, asset_ids: &[u64]) -> anyhow::Result<Vec<CardAsset>> {
-        let mut s = self.state.lock().unwrap();
-        s.describes.push(asset_ids.to_vec());
+        let takes = {
+            let mut s = self.state.lock().unwrap();
+            s.describes.push(asset_ids.to_vec());
+            s.describe_takes
+        };
+        tokio::time::sleep(takes).await;
+        let s = self.state.lock().unwrap();
         if s.cant_describe {
             anyhow::bail!("Steam didn't answer in time");
         }

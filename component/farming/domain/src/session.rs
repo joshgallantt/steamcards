@@ -5,11 +5,15 @@
 //!
 //! Which card dropped is told as Steam's own site tells it (research:
 //! market-and-session.md, section 2): the items Steam announced, described
-//! by `DescribeCards`. Failing that, the game's card page: a count that went
-//! up since the last look names the card. Failing that, it isn't known.
+//! by `DescribeCards`. The game's card page, looked at as its drops are
+//! found, checks what Steam says: a card is a drop's only if the page's
+//! count of it went up. What Steam doesn't say, the page's counts can, when
+//! they can only be these drops'. Failing that, it isn't known. Which copy
+//! each is comes from the account's own counts: the set's, and a foil's
+//! from its foil badge.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     iter,
     sync::{Arc, Mutex},
     time::Duration,
@@ -69,20 +73,56 @@ pub(crate) struct Kept {
     /// Items Steam announced that nothing has asked about yet. Each waits
     /// for a drop of its game, or of any game when Steam didn't say which.
     announced: Vec<NewItem>,
+    /// Games whose set, as the farmer knows it, is missing a card that
+    /// dropped: one a read found that nothing could tell. Until the game's
+    /// card page is read again, its counts can't tell a drop, nor number it.
+    uncounted: HashSet<u32>,
 }
 
 /// Drops that one look at a game, or one read of the library, found.
 #[derive(Debug)]
 pub(crate) struct Found {
     pub(crate) app_id: u32,
-    /// Where the first is in the session's drops; the rest follow it.
-    first: usize,
-    pub(crate) count: usize,
-    /// The set as the farmer knew it before them: empty when it didn't.
+    /// Where they are in the session's drops.
+    drops: Vec<usize>,
+    /// The set as the farmer knew it before them, every earlier drop counted
+    /// in; empty when it didn't know it so.
     before: Vec<Card>,
-    /// The set the look found, with them in it. The badge pages don't show
-    /// sets, so a read has none.
+    /// The set a look at the game found, with them in it. The badge pages
+    /// show no sets, so a read has none until the game is looked at.
     after: Option<Vec<Card>>,
+}
+
+impl Found {
+    /// How many cards dropped.
+    pub(crate) fn count(&self) -> usize {
+        self.drops.len()
+    }
+
+    /// Found by a read: no set says which cards they were until the game is
+    /// looked at.
+    pub(crate) fn needs_look(&self) -> bool {
+        self.after.is_none()
+    }
+
+    /// Takes in a look at the game since: the set it read, and any drops it
+    /// found meanwhile, which are told with these.
+    pub(crate) fn join(&mut self, looked: Looked) {
+        self.after = looked.set;
+        if let Some(more) = looked.found {
+            self.drops.extend(more.drops);
+        }
+    }
+}
+
+/// A look at one game, taken in.
+pub(crate) struct Looked {
+    /// The game as the farmer now sees it.
+    pub(crate) game: Game,
+    /// The drops it found since the farmer last saw the game.
+    pub(crate) found: Option<Found>,
+    /// The set it read: `None` when its page showed none, or was behind.
+    set: Option<Vec<Card>>,
 }
 
 impl Kept {
@@ -97,13 +137,20 @@ impl Kept {
             counted: HashMap::new(),
             set_aside: Vec::new(),
             announced: Vec::new(),
+            uncounted: HashSet::new(),
         }
     }
 
     /// Takes in a fresh read of the library, keeping the hours counted here
     /// and the card sets already seen, and records the drops it shows. The
-    /// session's first read is what it starts from.
-    pub(crate) fn take(&mut self, fresh: SteamLibrary, now: DateTime<Utc>) -> Vec<Found> {
+    /// session's first read is what it starts from: the drops left in the
+    /// games it will farm, as the user's choices stand then.
+    pub(crate) fn take(
+        &mut self,
+        fresh: SteamLibrary,
+        prefs: &Preferences,
+        now: DateTime<Utc>,
+    ) -> Vec<Found> {
         let mut games = Vec::with_capacity(fresh.games().len());
         let mut found = Vec::new();
         for game in fresh.games() {
@@ -116,20 +163,44 @@ impl Kept {
         self.library = SteamLibrary::new(games);
         if !self.read {
             self.read = true;
-            self.session.drops_left_at_start = Some(self.library.drops_left());
-            self.session.games_at_start = Some(self.library.with_drops_left().count() as u32);
+            let order = farm_order(&self.library, prefs, &self.set_aside);
+            let left = order
+                .iter()
+                .filter_map(|&id| self.library.game(id))
+                .map(|g| g.drops.remaining)
+                .sum();
+            self.session.drops_left_at_start = Some(left);
+            self.session.games_at_start = u32::try_from(order.len()).ok();
         }
         found
     }
 
-    /// Takes in a fresh look at one game: the game as the farmer now sees
-    /// it, and the drops the look found.
-    pub(crate) fn update(&mut self, fresh: Game, now: DateTime<Utc>) -> (Game, Option<Found>) {
+    /// Takes in a fresh look at one game, and records the drops it shows. A
+    /// page showing more drops to come than the farmer has already seen is
+    /// behind, cards never undropping: it's left out, its counts and all.
+    pub(crate) fn update(&mut self, fresh: Game, now: DateTime<Utc>) -> Looked {
+        let behind = self
+            .library
+            .game(fresh.app_id)
+            .filter(|known| fresh.drops.remaining > known.drops.remaining)
+            .cloned();
+        if let Some(mut known) = behind {
+            known.hours = known.hours.max(fresh.hours);
+            self.library.update(known.clone());
+            return Looked {
+                game: known,
+                found: None,
+                set: None,
+            };
+        }
         let set = (!fresh.cards.is_empty()).then(|| fresh.cards.clone());
         let game = self.merged(fresh);
-        let found = self.record(&game, set, now);
+        let found = self.record(&game, set.clone(), now);
+        if set.is_some() {
+            self.uncounted.remove(&game.app_id);
+        }
         self.library.update(game.clone());
-        (game, found)
+        Looked { game, found, set }
     }
 
     fn merged(&self, mut fresh: Game) -> Game {
@@ -157,18 +228,17 @@ impl Kept {
         after: Option<Vec<Card>>,
         now: DateTime<Utc>,
     ) -> Option<Found> {
-        let before = self.library.game(game.app_id)?;
-        let count = before.drops.remaining.saturating_sub(game.drops.remaining);
+        let known = self.library.game(game.app_id)?;
+        let count = known.drops.remaining.saturating_sub(game.drops.remaining) as usize;
         if count == 0 {
             return None;
         }
-        let found = Found {
-            app_id: game.app_id,
-            first: self.session.drops.len(),
-            count: count as usize,
-            before: before.cards.clone(),
-            after,
+        let before = if self.uncounted.contains(&game.app_id) {
+            Vec::new()
+        } else {
+            known.cards.clone()
         };
+        let first = self.session.drops.len();
         self.session.drops.extend(iter::repeat_n(
             Drop {
                 at: now,
@@ -176,7 +246,7 @@ impl Kept {
                 card: DropCard::Identifying,
                 copy: None,
             },
-            found.count,
+            count,
         ));
         if !game.has_drops_left() {
             self.session.finished.push(Finished {
@@ -186,7 +256,12 @@ impl Kept {
         }
         // It drops after all.
         self.set_aside.retain(|s| s.app_id != game.app_id);
-        Some(found)
+        Some(Found {
+            app_id: game.app_id,
+            drops: (first..first + count).collect(),
+            before,
+            after,
+        })
     }
 
     /// Counts `played` towards each game's hours.
@@ -246,13 +321,17 @@ impl Kept {
     }
 
     /// Keeps the items Steam announced, each once, until a drop they may be.
+    /// One Steam says arrived before the session began isn't one of its
+    /// drops (research §2.2).
     pub(crate) fn keep_announced(&mut self, items: Vec<NewItem>) {
+        let began = self.session.started_at.timestamp();
         for item in items {
+            let earlier = item.gained_at.is_some_and(|at| at.timestamp() < began);
             let known = self.announced.iter().any(|i| i.asset_id == item.asset_id)
                 || self.session.drops.iter().any(
                     |d| matches!(&d.card, DropCard::Identified(a) if a.asset_id == item.asset_id),
                 );
-            if !known {
+            if !earlier && !known {
                 self.announced.push(item);
             }
         }
@@ -261,51 +340,201 @@ impl Kept {
     /// The items to ask Steam about for drops of these games, taken from
     /// those waiting: the ones Steam said came from one of them, and the
     /// ones it didn't say.
-    pub(crate) fn take_announced(&mut self, app_ids: &[u32]) -> Vec<u64> {
+    pub(crate) fn take_announced(&mut self, app_ids: &[u32]) -> Vec<NewItem> {
         let (ask, wait): (Vec<NewItem>, Vec<NewItem>) = self
             .announced
             .drain(..)
             .partition(|i| i.app_id.is_none_or(|a| app_ids.contains(&a)));
         self.announced = wait;
-        ask.iter().map(|i| i.asset_id).collect()
+        ask
     }
 
-    /// Tells which card each drop found was: each game's by the cards Steam
-    /// described for it, in the order announced; then by its card page's
-    /// counts; the rest aren't known. Numbers each named copy. Returns the
-    /// drops, named.
-    pub(crate) fn identify(&mut self, found: &[Found], described: &[CardAsset]) -> Vec<Drop> {
-        let mut named = Vec::new();
+    /// Whether items wait that may name a drop of this game that only its
+    /// card page could: worth asking Steam about now, without a new drop.
+    pub(crate) fn has_items_for(&self, app_id: u32) -> bool {
+        let named_by_page = self
+            .session
+            .drops
+            .iter()
+            .any(|d| d.app_id == app_id && matches!(d.card, DropCard::NameOnly { .. }));
+        named_by_page
+            && self
+                .announced
+                .iter()
+                .any(|i| i.app_id.is_none_or(|a| a == app_id))
+    }
+
+    /// Tells which card each drop found was, and which copy: by the cards
+    /// Steam described, where the game's card page shows them; then by the
+    /// page's counts, where they can only be these drops'. The rest aren't
+    /// known. A card Steam described that none of them is may be a drop the
+    /// page named before, which it then names; else it's no drop of this
+    /// session's, and is left out. Returns where the drops are, to tell of
+    /// them.
+    pub(crate) fn identify(&mut self, found: &[Found], described: &[CardAsset]) -> Vec<usize> {
+        let mut left: Vec<&CardAsset> = described.iter().collect();
+        let mut told = Vec::new();
         for f in found {
-            let (earlier, new) = self.session.drops.split_at_mut(f.first);
-            let new = &mut new[..f.count];
-            let cards: Vec<&CardAsset> =
-                described.iter().filter(|a| a.app_id == f.app_id).collect();
-            name(new, &cards, &f.before, f.after.as_deref(), earlier);
-            named.extend_from_slice(new);
+            let (own, others): (Vec<&CardAsset>, Vec<&CardAsset>) =
+                left.into_iter().partition(|a| a.app_id == f.app_id);
+            let unused = self.name_drops(f, &own);
+            left = others.into_iter().chain(unused).collect();
             if f.after.is_none() {
-                self.count_in(f.app_id, &named[named.len() - f.count..]);
+                self.count_in(f.app_id, &f.drops);
+            }
+            told.extend_from_slice(&f.drops);
+        }
+        self.name_earlier(&left, &told);
+        told
+    }
+
+    /// Names one game's new drops, and numbers them. Returns the cards Steam
+    /// described that none of them is.
+    fn name_drops<'a>(&mut self, f: &Found, described: &[&'a CardAsset]) -> Vec<&'a CardAsset> {
+        // How far each card's count went up, when the set before is known.
+        let mut up = f
+            .after
+            .as_deref()
+            .filter(|_| !f.before.is_empty())
+            .map(|after| risen(&f.before, after));
+        let mut unused = Vec::new();
+        for &card in described {
+            let unnamed = self.unnamed(f);
+            let Some(&at) = unnamed.first() else {
+                unused.push(card);
+                continue;
+            };
+            let shown = match &mut up {
+                // A normal card's count went up for it; a foil takes a drop
+                // the counts leave over.
+                Some(up) if card.foil => unnamed.len() > total(up),
+                Some(up) => take_one(up, &card.name),
+                // Without the set before, the page can only say a normal
+                // card is held at all.
+                None => card.foil || f.after.as_deref().is_none_or(|a| owned(a, &card.name) > 0),
+            };
+            if shown {
+                self.session.drops[at].card = DropCard::Identified(card.clone());
+            } else {
+                unused.push(card);
             }
         }
-        named
+        // The page's counts name the rest, when every card that went up can
+        // only be one of these drops: it went up no more often than they
+        // number. More, and it went up for something else too.
+        if let Some(up) = up {
+            let unnamed = self.unnamed(f);
+            if total(&up) <= unnamed.len() {
+                let names = up
+                    .iter()
+                    .flat_map(|&(name, n)| iter::repeat_n(name, n as usize));
+                for (i, name) in unnamed.into_iter().zip(names) {
+                    self.session.drops[i].card = DropCard::NameOnly {
+                        name: name.to_owned(),
+                        foil: false,
+                    };
+                }
+            }
+        }
+        for i in self.unnamed(f) {
+            self.session.drops[i].card = DropCard::Unknown;
+        }
+        for k in 0..f.drops.len() {
+            self.session.drops[f.drops[k]].copy = copy(&self.session.drops, f, k);
+        }
+        unused
+    }
+
+    /// Where `f`'s drops not named yet are.
+    fn unnamed(&self, f: &Found) -> Vec<usize> {
+        f.drops
+            .iter()
+            .copied()
+            .filter(|&i| self.session.drops[i].card == DropCard::Identifying)
+            .collect()
     }
 
     /// Counts drops no look has seen into the game's set as the farmer knows
-    /// it, so the next look tells its own drops by it, and numbers them.
-    fn count_in(&mut self, app_id: u32, drops: &[Drop]) {
+    /// it, so the next look tells its own drops by it. A drop whose card
+    /// isn't known leaves the set missing a card until it's read again.
+    fn count_in(&mut self, app_id: u32, drops: &[usize]) {
         let Some(mut game) = self.library.game(app_id).cloned() else {
             return;
         };
-        for d in drops.iter().filter(|d| !d.card.is_foil()) {
-            let card = d
-                .card
+        if game.cards.is_empty() {
+            return;
+        }
+        for &i in drops {
+            let card = &self.session.drops[i].card;
+            if card.is_foil() {
+                continue;
+            }
+            match card
                 .name()
-                .and_then(|name| game.cards.iter_mut().find(|c| c.name == name));
-            if let Some(card) = card {
-                card.owned += 1;
+                .and_then(|name| game.cards.iter_mut().find(|c| c.name == name))
+            {
+                Some(c) => c.owned += 1,
+                None => {
+                    self.uncounted.insert(app_id);
+                }
             }
         }
         self.library.update(game);
+    }
+
+    /// Names a drop only its card page could name by the item Steam
+    /// described for it since: the same card, now with its copy's item.
+    fn name_earlier(&mut self, cards: &[&CardAsset], told: &[usize]) {
+        for &card in cards {
+            let page_named = DropCard::NameOnly {
+                name: card.name.clone(),
+                foil: card.foil,
+            };
+            let earlier = self.session.drops.iter_mut().enumerate().find(|(i, d)| {
+                !told.contains(i) && d.app_id == card.app_id && d.card == page_named
+            });
+            if let Some((_, drop)) = earlier {
+                drop.card = DropCard::Identified(card.clone());
+            }
+        }
+    }
+
+    /// The games with foils among these drops: which copy each is, their
+    /// foil badges say.
+    pub(crate) fn foil_games(&self, told: &[usize]) -> Vec<u32> {
+        let mut games = Vec::new();
+        for drop in told.iter().filter_map(|&i| self.session.drops.get(i)) {
+            if drop.card.is_foil() && !games.contains(&drop.app_id) {
+                games.push(drop.app_id);
+            }
+        }
+        games
+    }
+
+    /// Numbers a game's foils among these drops by its foil badge's counts,
+    /// after them: how many of that foil the account has, less the copies of
+    /// it found after this one.
+    pub(crate) fn number_foils(&mut self, app_id: u32, told: &[usize], foils: &[Card]) {
+        let theirs: Vec<usize> = told
+            .iter()
+            .copied()
+            .filter(|&i| {
+                let d = &self.session.drops[i];
+                d.app_id == app_id && d.card.is_foil()
+            })
+            .collect();
+        for (k, &i) in theirs.iter().enumerate() {
+            let Some(name) = self.session.drops[i].card.name().map(str::to_owned) else {
+                continue;
+            };
+            let later = theirs[k + 1..]
+                .iter()
+                .filter(|&&j| self.session.drops[j].card.name() == Some(name.as_str()))
+                .count();
+            self.session.drops[i].copy = owned(foils, &name)
+                .checked_sub(u32::try_from(later).unwrap_or(u32::MAX))
+                .filter(|&n| n > 0);
+        }
     }
 
     /// Makes the session's first forecast, once it has two drops farming
@@ -322,78 +551,64 @@ impl Kept {
     }
 }
 
-/// Names one game's new drops, in order: first by the cards Steam described
-/// for it; then, when the set was known and looked at again, by its counts,
-/// `after` against `before` (a count that went up, less the copies already
-/// named, names a normal card); the rest aren't known. Then numbers each.
-fn name(
-    new: &mut [Drop],
-    described: &[&CardAsset],
-    before: &[Card],
-    after: Option<&[Card]>,
-    earlier: &[Drop],
-) {
-    for (drop, card) in new.iter_mut().zip(described) {
-        drop.card = DropCard::Identified((*card).clone());
+/// Which copy of its card the `k`th of `f`'s drops made the account hold.
+/// Of a normal card: how many the set had before, plus one, plus the copies
+/// of it before this one in the same look. Without the set before, how many
+/// the set has after, less the copies after this one, when every drop of
+/// the look was named, so none of them can be another. A foil's comes from
+/// its foil badge, after. `None` while it isn't known.
+fn copy(drops: &[Drop], f: &Found, k: usize) -> Option<u32> {
+    let card = &drops[f.drops[k]].card;
+    let name = card.name()?;
+    if card.is_foil() {
+        return None;
     }
-    if let Some(after) = after.filter(|_| !before.is_empty()) {
-        let mut more: Vec<(&str, u32)> = after
+    let copies = |of: &[usize]| {
+        let n = of
             .iter()
-            .map(|c| {
-                (
-                    c.name.as_str(),
-                    c.owned.saturating_sub(owned(before, &c.name)),
-                )
-            })
-            .collect();
-        for named in new.iter().filter(|d| !d.card.is_foil()) {
-            let went_up = named
-                .card
-                .name()
-                .and_then(|name| more.iter_mut().find(|(n, _)| *n == name));
-            if let Some((_, up)) = went_up {
-                *up = up.saturating_sub(1);
-            }
-        }
-        let mut by_page = more
-            .into_iter()
-            .flat_map(|(name, up)| iter::repeat_n(name, up as usize));
-        for drop in new.iter_mut().filter(|d| d.card == DropCard::Identifying) {
-            let Some(name) = by_page.next() else {
-                break;
-            };
-            drop.card = DropCard::NameOnly {
-                name: name.to_owned(),
-                foil: false,
-            };
-        }
+            .filter(|&&i| drops[i].card.name() == Some(name) && !drops[i].card.is_foil())
+            .count();
+        u32::try_from(n).unwrap_or(u32::MAX)
+    };
+    if !f.before.is_empty() {
+        let held = f.before.iter().find(|c| c.name == name)?.owned;
+        return Some(held + copies(&f.drops[..k]) + 1);
     }
-    for i in 0..new.len() {
-        if new[i].card == DropCard::Identifying {
-            new[i].card = DropCard::Unknown;
-        }
-        let (look, rest) = new.split_at_mut(i);
-        rest[0].copy = copy(&rest[0], before, look, earlier);
-    }
+    let all_named = f.drops.iter().all(|&i| drops[i].card.name().is_some());
+    let after = f.after.as_deref().filter(|_| all_named)?;
+    let held = after.iter().find(|c| c.name == name)?.owned;
+    held.checked_sub(copies(&f.drops[k + 1..]))
+        .filter(|&n| n > 0)
 }
 
-/// Which copy of its card `drop` made the account hold: of a normal card,
-/// how many the set had before, plus one, plus the copies named before it in
-/// the same look; of a foil, which the set doesn't count, how many this
-/// session has dropped, plus one. `None` when it isn't known.
-fn copy(drop: &Drop, before: &[Card], look: &[Drop], earlier: &[Drop]) -> Option<u32> {
-    let name = drop.card.name()?;
-    let foil = drop.card.is_foil();
-    let same = |d: &&Drop| {
-        d.app_id == drop.app_id && d.card.name() == Some(name) && d.card.is_foil() == foil
-    };
-    let in_look = look.iter().filter(same).count() as u32;
-    if foil {
-        let this_session = earlier.iter().filter(same).count() as u32;
-        return Some(this_session + in_look + 1);
+/// How far each card's count went up from `before` to `after`, in the set's
+/// order.
+fn risen<'a>(before: &[Card], after: &'a [Card]) -> Vec<(&'a str, u32)> {
+    after
+        .iter()
+        .map(|c| {
+            (
+                c.name.as_str(),
+                c.owned.saturating_sub(owned(before, &c.name)),
+            )
+        })
+        .collect()
+}
+
+/// How many went up, in all.
+fn total(up: &[(&str, u32)]) -> usize {
+    up.iter().map(|&(_, n)| n as usize).sum()
+}
+
+/// Takes one of `name`'s going up as a drop's: whether it went up.
+fn take_one(up: &mut [(&str, u32)], name: &str) -> bool {
+    match up.iter_mut().find(|(n, _)| *n == name) {
+        Some((_, n)) if *n > 0 => {
+            *n -= 1;
+            true
+        }
+        _ => false,
     }
-    let held = before.iter().find(|c| c.name == name)?.owned;
-    Some(held + in_look + 1)
 }
 
 /// How many of `name` the set has; none when it isn't in it.
@@ -403,7 +618,11 @@ fn owned(set: &[Card], name: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use super::*;
+
+    const HEAVY_RAIN: u32 = 960_910;
 
     fn at() -> DateTime<Utc> {
         DateTime::default()
@@ -428,18 +647,6 @@ mod tests {
         }
     }
 
-    fn identifying(app_id: u32, n: usize) -> Vec<Drop> {
-        vec![
-            Drop {
-                at: at(),
-                app_id,
-                card: DropCard::Identifying,
-                copy: None,
-            };
-            n
-        ]
-    }
-
     fn heavy_rain(madison: u32, scott: u32) -> Vec<Card> {
         vec![
             card("Ethan", 0),
@@ -448,223 +655,6 @@ mod tests {
             card("Norman", 0),
             card("Scott", scott),
         ]
-    }
-
-    fn named(drops: &[Drop]) -> Vec<(Option<&str>, bool, Option<u32>)> {
-        drops
-            .iter()
-            .map(|d| (d.card.name(), d.card.is_foil(), d.copy))
-            .collect()
-    }
-
-    #[test]
-    fn a_card_steam_describes_is_that_card() {
-        let mut new = identifying(960_910, 1);
-        let madison = asset(31_002, 960_910, "Madison", false);
-
-        name(
-            &mut new,
-            &[&madison],
-            &heavy_rain(1, 1),
-            Some(heavy_rain(2, 1).as_slice()),
-            &[],
-        );
-
-        assert_eq!(new[0].card, DropCard::Identified(madison));
-        assert_eq!(new[0].copy, Some(2), "a second copy: a spare");
-    }
-
-    #[test]
-    fn two_copies_in_one_look_are_numbered_in_turn() {
-        let mut new = identifying(960_910, 2);
-        let first = asset(31_002, 960_910, "Madison", false);
-        let second = asset(31_003, 960_910, "Madison", false);
-
-        name(
-            &mut new,
-            &[&first, &second],
-            &heavy_rain(1, 0),
-            Some(heavy_rain(3, 0).as_slice()),
-            &[],
-        );
-
-        assert_eq!(
-            named(&new),
-            [
-                (Some("Madison"), false, Some(2)),
-                (Some("Madison"), false, Some(3))
-            ]
-        );
-    }
-
-    #[test]
-    fn what_steam_doesnt_say_the_card_page_does() {
-        // Steam described Scott, and Madison's count went up too.
-        let mut new = identifying(960_910, 2);
-        let scott = asset(31_004, 960_910, "Scott", false);
-
-        name(
-            &mut new,
-            &[&scott],
-            &heavy_rain(1, 0),
-            Some(heavy_rain(2, 1).as_slice()),
-            &[],
-        );
-
-        assert_eq!(new[0].card, DropCard::Identified(scott));
-        assert_eq!(
-            new[1].card,
-            DropCard::NameOnly {
-                name: "Madison".into(),
-                foil: false
-            },
-            "not Scott again: its count went up for the copy Steam described"
-        );
-        assert_eq!(named(&new)[1].2, Some(2));
-    }
-
-    #[test]
-    fn a_card_nothing_tells_is_unknown() {
-        // A foil the card page can't see, and no item to go by.
-        let mut new = identifying(960_910, 1);
-        name(
-            &mut new,
-            &[],
-            &heavy_rain(1, 1),
-            Some(heavy_rain(1, 1).as_slice()),
-            &[],
-        );
-        assert_eq!(new[0].card, DropCard::Unknown);
-        assert_eq!(new[0].copy, None);
-
-        // A read of the badges shows no set.
-        let mut read = identifying(960_910, 1);
-        name(&mut read, &[], &heavy_rain(1, 1), None, &[]);
-        assert_eq!(read[0].card, DropCard::Unknown);
-    }
-
-    #[test]
-    fn a_set_not_known_before_names_and_numbers_nothing() {
-        let mut new = identifying(960_910, 1);
-        let madison = asset(31_002, 960_910, "Madison", false);
-        name(
-            &mut new,
-            &[&madison],
-            &[],
-            Some(heavy_rain(2, 1).as_slice()),
-            &[],
-        );
-        assert_eq!(
-            new[0].card,
-            DropCard::Identified(madison),
-            "Steam still says"
-        );
-        assert_eq!(new[0].copy, None, "but not which copy");
-
-        let mut unnamed = identifying(960_910, 1);
-        name(
-            &mut unnamed,
-            &[],
-            &[],
-            Some(heavy_rain(2, 1).as_slice()),
-            &[],
-        );
-        assert_eq!(unnamed[0].card, DropCard::Unknown);
-    }
-
-    #[test]
-    fn foils_are_numbered_by_this_sessions_foils() {
-        let thanatos = |id| asset(id, 1_145_360, "Thanatos", true);
-        let earlier = vec![Drop {
-            at: at(),
-            app_id: 1_145_360,
-            card: DropCard::Identified(thanatos(1)),
-            copy: Some(1),
-        }];
-        let mut new = identifying(1_145_360, 2);
-        let (second, third) = (thanatos(2), thanatos(3));
-
-        let set = [card("Thanatos", 4)];
-        name(&mut new, &[&second, &third], &set, Some(&set), &earlier);
-
-        assert_eq!(
-            named(&new),
-            [
-                (Some("Thanatos"), true, Some(2)),
-                (Some("Thanatos"), true, Some(3))
-            ],
-            "the set's four normal ones don't count"
-        );
-    }
-
-    #[test]
-    fn cards_described_for_another_game_name_nothing_here() {
-        let mut kept = Kept::new(at());
-        kept.take(SteamLibrary::new(vec![game(1, 2, heavy_rain(1, 0))]), at());
-        let (_, found) = kept.update(game(1, 1, heavy_rain(1, 1)), at());
-        let found = found.expect("a drop");
-
-        let named = kept.identify(&[found], &[asset(9, 2, "Madison", false)]);
-
-        assert_eq!(
-            named[0].card,
-            DropCard::NameOnly {
-                name: "Scott".into(),
-                foil: false
-            }
-        );
-        assert_eq!(named[0].copy, Some(1));
-    }
-
-    #[test]
-    fn a_drop_no_look_saw_is_counted_into_the_set() {
-        let mut kept = Kept::new(at());
-        kept.take(SteamLibrary::new(vec![game(1, 3, heavy_rain(1, 0))]), at());
-        let found = kept.take(SteamLibrary::new(vec![game(1, 2, Vec::new())]), at());
-        let named = kept.identify(&found, &[asset(9, 1, "Madison", false)]);
-        assert_eq!(named[0].copy, Some(2));
-
-        let (_, found) = kept.update(game(1, 1, heavy_rain(3, 0)), at());
-        let named = kept.identify(&[found.expect("a drop")], &[]);
-
-        assert_eq!(
-            (named[0].card.name(), named[0].copy),
-            (Some("Madison"), Some(3)),
-            "the set known before it had the copy the read found"
-        );
-    }
-
-    #[test]
-    fn a_page_that_is_behind_drops_nothing_twice() {
-        let mut kept = Kept::new(at());
-        kept.take(SteamLibrary::new(vec![game(1, 3, Vec::new())]), at());
-        kept.update(game(1, 2, Vec::new()), at());
-
-        let behind = kept.take(SteamLibrary::new(vec![game(1, 3, Vec::new())]), at());
-        let (_, again) = kept.update(game(1, 2, Vec::new()), at());
-
-        assert!(behind.is_empty() && again.is_none());
-        assert_eq!(kept.session.drops.len(), 1);
-    }
-
-    #[test]
-    fn items_wait_for_a_drop_of_their_game() {
-        let mut kept = Kept::new(at());
-        let item = |asset_id, app_id| NewItem {
-            asset_id,
-            app_id,
-            gained_at: None,
-        };
-        kept.keep_announced(vec![item(1, Some(10)), item(2, Some(20)), item(3, None)]);
-        kept.keep_announced(vec![item(1, Some(10))]);
-
-        assert_eq!(
-            kept.take_announced(&[10]),
-            [1, 3],
-            "its own, and those Steam didn't say"
-        );
-        assert_eq!(kept.take_announced(&[20]), [2]);
-        assert!(kept.take_announced(&[10, 20]).is_empty());
     }
 
     fn game(app_id: u32, remaining: u32, cards: Vec<Card>) -> Game {
@@ -679,5 +669,432 @@ mod tests {
             badge_level: 0,
             cards,
         }
+    }
+
+    /// A session that has read the library, and looked at Heavy Rain: `left`
+    /// drops to come, and its set.
+    fn farming(left: u32, set: Vec<Card>) -> Kept {
+        let mut kept = Kept::new(at());
+        let prefs = Preferences::default();
+        kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, left, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        kept.update(game(HEAVY_RAIN, left, set), at());
+        kept
+    }
+
+    /// What each drop is, and which copy.
+    fn named(kept: &Kept, told: &[usize]) -> Vec<(Option<String>, bool, Option<u32>)> {
+        told.iter()
+            .map(|&i| {
+                let d = &kept.session.drops[i];
+                (d.card.name().map(str::to_owned), d.card.is_foil(), d.copy)
+            })
+            .collect()
+    }
+
+    fn some(name: &str) -> Option<String> {
+        Some(name.to_owned())
+    }
+
+    /// A look at Heavy Rain: `left` to come, and its set now.
+    fn looks(kept: &mut Kept, left: u32, set: Vec<Card>) -> Option<Found> {
+        kept.update(game(HEAVY_RAIN, left, set), at()).found
+    }
+
+    #[test]
+    fn a_card_steam_describes_is_that_card() {
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+
+        let told = kept.identify(&[found], slice::from_ref(&madison));
+
+        assert_eq!(
+            kept.session.drops[told[0]].card,
+            DropCard::Identified(madison)
+        );
+        assert_eq!(
+            kept.session.drops[told[0]].copy,
+            Some(2),
+            "a second copy: a spare"
+        );
+    }
+
+    #[test]
+    fn two_copies_in_one_look_are_numbered_in_turn() {
+        let mut kept = farming(3, heavy_rain(1, 0));
+        let found = looks(&mut kept, 1, heavy_rain(3, 0)).expect("drops");
+        let first = asset(31_002, HEAVY_RAIN, "Madison", false);
+        let second = asset(31_003, HEAVY_RAIN, "Madison", false);
+
+        let told = kept.identify(&[found], &[first, second]);
+
+        assert_eq!(
+            named(&kept, &told),
+            [
+                (some("Madison"), false, Some(2)),
+                (some("Madison"), false, Some(3))
+            ]
+        );
+    }
+
+    #[test]
+    fn what_steam_doesnt_say_the_card_page_does() {
+        // Steam described Scott, and Madison's count went up too.
+        let mut kept = farming(3, heavy_rain(1, 0));
+        let found = looks(&mut kept, 1, heavy_rain(2, 1)).expect("drops");
+        let scott = asset(31_004, HEAVY_RAIN, "Scott", false);
+
+        let told = kept.identify(&[found], slice::from_ref(&scott));
+
+        assert_eq!(
+            kept.session.drops[told[0]].card,
+            DropCard::Identified(scott)
+        );
+        assert_eq!(
+            kept.session.drops[told[1]].card,
+            DropCard::NameOnly {
+                name: "Madison".into(),
+                foil: false
+            },
+            "not Scott again: its count went up for the copy Steam described"
+        );
+        assert_eq!(named(&kept, &told)[1].2, Some(2));
+    }
+
+    #[test]
+    fn a_card_steam_describes_whose_count_didnt_go_up_isnt_the_drop() {
+        // An item left over from before: Steam describes Scott, but the
+        // page shows Ethan went up.
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 2, {
+            let mut set = heavy_rain(1, 1);
+            set[0].owned = 1;
+            set
+        })
+        .expect("a drop");
+
+        let told = kept.identify(&[found], &[asset(31_004, HEAVY_RAIN, "Scott", false)]);
+
+        assert_eq!(
+            named(&kept, &told),
+            [(some("Ethan"), false, Some(1))],
+            "the page's count names it, and it's a first copy"
+        );
+    }
+
+    #[test]
+    fn a_foil_takes_a_drop_the_counts_leave_over() {
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let foil = asset(31_005, HEAVY_RAIN, "Madison", true);
+
+        let one_normal = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
+        let told = kept.identify(&[one_normal], slice::from_ref(&foil));
+        assert_eq!(
+            named(&kept, &told),
+            [(some("Madison"), false, Some(2))],
+            "Madison's count went up: the drop was a normal Madison"
+        );
+
+        let a_foil = looks(&mut kept, 1, heavy_rain(2, 1)).expect("a drop");
+        let told = kept.identify(&[a_foil], slice::from_ref(&foil));
+        assert_eq!(kept.session.drops[told[0]].card, DropCard::Identified(foil));
+        assert_eq!(
+            kept.session.drops[told[0]].copy, None,
+            "its foil badge says which copy"
+        );
+    }
+
+    #[test]
+    fn a_card_nothing_tells_is_unknown() {
+        // A foil the card page can't see, and no item to go by.
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 2, heavy_rain(1, 1)).expect("a drop");
+
+        let told = kept.identify(&[found], &[]);
+
+        assert_eq!(kept.session.drops[told[0]].card, DropCard::Unknown);
+        assert_eq!(kept.session.drops[told[0]].copy, None);
+    }
+
+    #[test]
+    fn a_read_is_told_by_a_look_at_the_game_after_it() {
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let prefs = Preferences::default();
+        let mut found = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        assert!(found[0].needs_look(), "the badges show no sets");
+
+        let looked = kept.update(game(HEAVY_RAIN, 2, heavy_rain(2, 1)), at());
+        found[0].join(looked);
+        let told = kept.identify(&found, &[]);
+
+        assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
+        assert_eq!(
+            kept.library.game(HEAVY_RAIN).unwrap().cards,
+            heavy_rain(2, 1),
+            "the set, as the look found it"
+        );
+    }
+
+    #[test]
+    fn counts_that_went_up_for_a_drop_nothing_told_name_no_later_one() {
+        // A read found Madison's drop, and nothing could tell it: the look
+        // after it failed, and Steam gave only a count.
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let prefs = Preferences::default();
+        let read = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let told = kept.identify(&read, &[]);
+        assert_eq!(named(&kept, &told), [(None, false, None)]);
+
+        // Then Scott drops: the page's counts went up for both.
+        let found = looks(&mut kept, 1, heavy_rain(2, 2)).expect("a drop");
+        let told = kept.identify(&[found], &[]);
+        assert_eq!(
+            named(&kept, &told),
+            [(None, false, None)],
+            "not Madison, nor a 2nd copy of anything: it can't be told"
+        );
+
+        // With the set read again, the next is told.
+        let found = looks(&mut kept, 0, {
+            let mut set = heavy_rain(2, 2);
+            set[3].owned = 1;
+            set
+        })
+        .expect("a drop");
+        let told = kept.identify(&[found], &[]);
+        assert_eq!(named(&kept, &told), [(some("Norman"), false, Some(1))]);
+    }
+
+    #[test]
+    fn a_set_not_known_before_is_numbered_from_the_look_after() {
+        let mut kept = Kept::new(at());
+        let prefs = Preferences::default();
+        kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let mut found = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        found[0].join(kept.update(game(HEAVY_RAIN, 2, heavy_rain(2, 1)), at()));
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+
+        let told = kept.identify(&found, slice::from_ref(&madison));
+
+        assert_eq!(
+            kept.session.drops[told[0]].card,
+            DropCard::Identified(madison)
+        );
+        assert_eq!(
+            kept.session.drops[told[0]].copy,
+            Some(2),
+            "the page after shows two Madisons: this made the second"
+        );
+    }
+
+    #[test]
+    fn without_a_set_nothing_says_which_copy() {
+        // Its set was never read, and the look after the read failed.
+        let mut kept = Kept::new(at());
+        let prefs = Preferences::default();
+        kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let found = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+
+        let told = kept.identify(&found, slice::from_ref(&madison));
+
+        assert_eq!(
+            kept.session.drops[told[0]].card,
+            DropCard::Identified(madison),
+            "Steam still says which card"
+        );
+        assert_eq!(kept.session.drops[told[0]].copy, None, "but not which copy");
+    }
+
+    #[test]
+    fn foils_are_numbered_by_their_badge() {
+        let thanatos = |id| asset(id, HEAVY_RAIN, "Thanatos", true);
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 1, heavy_rain(1, 1)).expect("drops");
+        let told = kept.identify(&[found], &[thanatos(2), thanatos(3)]);
+        assert_eq!(kept.foil_games(&told), [HEAVY_RAIN]);
+
+        kept.number_foils(HEAVY_RAIN, &told, &[card("Thanatos", 4)]);
+
+        assert_eq!(
+            named(&kept, &told),
+            [
+                (some("Thanatos"), true, Some(3)),
+                (some("Thanatos"), true, Some(4))
+            ],
+            "two held before: these made the 3rd and 4th"
+        );
+    }
+
+    #[test]
+    fn cards_described_for_another_game_name_nothing_here() {
+        let mut kept = farming(3, heavy_rain(1, 0));
+        let found = looks(&mut kept, 2, heavy_rain(1, 1)).expect("a drop");
+
+        let told = kept.identify(&[found], &[asset(9, 2, "Madison", false)]);
+
+        assert_eq!(named(&kept, &told), [(some("Scott"), false, Some(1))]);
+    }
+
+    #[test]
+    fn a_drop_no_look_saw_is_counted_into_the_set() {
+        let mut kept = farming(3, heavy_rain(1, 0));
+        let prefs = Preferences::default();
+        let found = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 2, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let told = kept.identify(&found, &[asset(9, HEAVY_RAIN, "Madison", false)]);
+        assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
+
+        let found = looks(&mut kept, 1, heavy_rain(3, 0)).expect("a drop");
+        let told = kept.identify(&[found], &[]);
+
+        assert_eq!(
+            named(&kept, &told),
+            [(some("Madison"), false, Some(3))],
+            "the set known before it had the copy the read found"
+        );
+    }
+
+    #[test]
+    fn a_page_that_is_behind_changes_nothing() {
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
+        kept.identify(&[found], &[]);
+
+        let prefs = Preferences::default();
+        let behind = kept.take(
+            SteamLibrary::new(vec![game(HEAVY_RAIN, 3, Vec::new())]),
+            &prefs,
+            at(),
+        );
+        let again = looks(&mut kept, 3, heavy_rain(1, 1));
+        assert!(
+            behind.is_empty() && again.is_none(),
+            "nothing dropped twice"
+        );
+        assert_eq!(
+            kept.library.game(HEAVY_RAIN).unwrap().cards,
+            heavy_rain(2, 1),
+            "nor its counts taken back"
+        );
+
+        let found = looks(&mut kept, 1, heavy_rain(2, 2)).expect("a drop");
+        let told = kept.identify(&[found], &[]);
+        assert_eq!(
+            named(&kept, &told),
+            [(some("Scott"), false, Some(2))],
+            "Scott, not Madison a second time"
+        );
+        assert_eq!(kept.session.drops.len(), 2);
+    }
+
+    #[test]
+    fn an_item_described_late_names_the_drop_the_page_named() {
+        let mut kept = farming(3, heavy_rain(1, 1));
+        let found = looks(&mut kept, 1, heavy_rain(2, 2)).expect("drops");
+        let madison = asset(30_001, HEAVY_RAIN, "Madison", false);
+        let first = kept.identify(&[found], slice::from_ref(&madison));
+        assert_eq!(
+            kept.session.drops[first[1]].card,
+            DropCard::NameOnly {
+                name: "Scott".into(),
+                foil: false
+            }
+        );
+
+        let scott = asset(30_002, HEAVY_RAIN, "Scott", false);
+        let ethan = asset(30_003, HEAVY_RAIN, "Ethan", false);
+        let found = looks(&mut kept, 0, {
+            let mut set = heavy_rain(2, 2);
+            set[0].owned = 1;
+            set
+        })
+        .expect("a drop");
+        let told = kept.identify(&[found], &[scott.clone(), ethan.clone()]);
+
+        assert_eq!(
+            kept.session.drops[told[0]].card,
+            DropCard::Identified(ethan)
+        );
+        assert_eq!(kept.session.drops[told[0]].copy, Some(1));
+        assert_eq!(
+            kept.session.drops[first[1]].card,
+            DropCard::Identified(scott),
+            "Scott's own item, for the drop the page named"
+        );
+        assert_eq!(kept.session.drops[first[1]].copy, Some(2), "still the 2nd");
+    }
+
+    #[test]
+    fn items_wait_for_a_drop_of_their_game() {
+        let mut kept = Kept::new(at());
+        let item = |asset_id, app_id| NewItem {
+            asset_id,
+            app_id,
+            gained_at: None,
+        };
+        kept.keep_announced(vec![item(1, Some(10)), item(2, Some(20)), item(3, None)]);
+        kept.keep_announced(vec![item(1, Some(10))]);
+
+        let ids = |items: Vec<NewItem>| items.iter().map(|i| i.asset_id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(kept.take_announced(&[10])),
+            [1, 3],
+            "its own, and those Steam didn't say"
+        );
+        assert_eq!(ids(kept.take_announced(&[20])), [2]);
+        assert!(kept.take_announced(&[10, 20]).is_empty());
+    }
+
+    #[test]
+    fn an_item_from_before_the_session_is_none_of_its_drops() {
+        let started = DateTime::from_timestamp(1_790_700_000, 0).unwrap();
+        let mut kept = Kept::new(started);
+        let item = |asset_id, gained: i64| NewItem {
+            asset_id,
+            app_id: Some(10),
+            gained_at: DateTime::from_timestamp(gained, 0),
+        };
+
+        kept.keep_announced(vec![item(1, 1_790_600_000), item(2, 1_790_700_000)]);
+
+        assert_eq!(
+            kept.take_announced(&[10])
+                .iter()
+                .map(|i| i.asset_id)
+                .collect::<Vec<_>>(),
+            [2]
+        );
     }
 }

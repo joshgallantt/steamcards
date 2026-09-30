@@ -21,7 +21,10 @@ use rand::Rng;
 use crate::{
     Endpoints,
     auth::{self, Approved},
-    badges::{BadgeGame, Seen, read_badge_page, read_game_cards_page, seen_by},
+    badges::{
+        BadgeGame, Seen, SetCard, read_badge_page, read_foil_cards_page, read_game_cards_page,
+        seen_by,
+    },
     cm::{Connection, LogOn, Refused, WalletInfo},
     community::{Community, WebLogin},
     directory,
@@ -282,6 +285,14 @@ impl Session {
         let path = |id: u64| format!("/profiles/{id}/gamecards/{app_id}?l=english");
         let (html, _) = self.page_as_owner(path).await?;
         Ok(read_game_cards_page(app_id, &html).game)
+    }
+
+    /// One game's foils, from its foil badge's card page: each foil card of
+    /// its set, and how many the account has.
+    pub async fn foil_cards(&self, app_id: u32) -> anyhow::Result<Vec<SetCard>> {
+        let path = |id: u64| format!("/profiles/{id}/gamecards/{app_id}?border=1&l=english");
+        let (html, _) = self.page_as_owner(path).await?;
+        Ok(read_foil_cards_page(&html))
     }
 
     /// The account's community items with these asset IDs, as Steam
