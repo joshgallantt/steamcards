@@ -636,6 +636,30 @@ async fn another_session_taking_over_stops_farming() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn another_session_taking_over_as_the_badges_are_read_stops_farming() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.steam.replace();
+    player.starts_farming();
+
+    assert_eq!(
+        player.reads(went_wrong).await,
+        WentWrong {
+            trouble: Trouble::Replaced,
+            again_in: None
+        },
+        "said as it is, not as badges that couldn't be read"
+    );
+    player.farmer.take().unwrap().await.unwrap();
+    assert_eq!(
+        player.steam.reads(),
+        1,
+        "not read again: signing on to would knock the other one off"
+    );
+    assert!(player.steam.played().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_new_first_choice_takes_over_within_moments() {
     let mut player = Player::new();
     player.steam.add_game(1, 5.0, 5, Some(HOUR));

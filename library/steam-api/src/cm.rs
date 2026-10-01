@@ -194,6 +194,8 @@ struct State {
     /// The answer, once it came.
     new_at_sign_on: Mutex<Option<Announcement>>,
     wallet: Mutex<Option<WalletInfo>>,
+    /// Why Steam signed the session off, once it has.
+    logged_off: Mutex<Option<EResult>>,
     events: broadcast::Sender<Event>,
     next_job: AtomicU64,
     log: DebugLog,
@@ -234,6 +236,7 @@ impl Connection {
             answer_within: Mutex::new(SIGN_ON_ANSWER_WITHIN),
             new_at_sign_on: Mutex::default(),
             wallet: Mutex::default(),
+            logged_off: Mutex::default(),
             events,
             next_job: AtomicU64::new(1),
             log: log.clone(),
@@ -478,6 +481,12 @@ impl Connection {
         !self.is_closed() && self.state.signed_on.lock().unwrap().is_some()
     }
 
+    /// Why Steam signed the session off, if it has: kept after the
+    /// connection closes.
+    pub(crate) fn logged_off(&self) -> Option<EResult> {
+        *self.state.logged_off.lock().unwrap()
+    }
+
     pub fn is_closed(&self) -> bool {
         self.stop.is_cancelled()
     }
@@ -675,6 +684,7 @@ impl State {
                     .map_or(EResult::FAIL, |m| EResult::of(m.eresult));
                 self.log.line(&format!("signed off by Steam: {eresult}"));
                 *self.signed_on.lock().unwrap() = None;
+                *self.logged_off.lock().unwrap() = Some(eresult);
                 let _ = self.events.send(Event::LoggedOff(eresult));
             }
             // The rest of what Steam tells a client (friends, licences, …)

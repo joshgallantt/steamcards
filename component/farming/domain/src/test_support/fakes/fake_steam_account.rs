@@ -49,6 +49,9 @@ struct State {
     stops: usize,
     reads: usize,
     down: bool,
+    /// Another session took this one's place: what's asked of Steam fails,
+    /// until a session signs on here again.
+    replaced: bool,
     /// Every copy of a card that has dropped, as Steam describes it.
     held: Vec<CardAsset>,
     /// Those Steam hasn't announced yet.
@@ -97,6 +100,7 @@ impl FakeSteamAccount {
                 stops: 0,
                 reads: 0,
                 down: false,
+                replaced: false,
                 held: Vec::new(),
                 unannounced: Vec::new(),
                 describes: Vec::new(),
@@ -280,9 +284,11 @@ impl FakeSteamAccount {
         self.state.lock().unwrap().held.clone()
     }
 
-    /// Another session signs on in this one's place.
+    /// Another session signs on in this one's place: Steam signs this one
+    /// off, and says why.
     pub fn replace(&self) {
         self.sign_off(Signal::Replaced);
+        self.state.lock().unwrap().replaced = true;
     }
 
     /// The connection to Steam goes.
@@ -449,6 +455,9 @@ impl SteamLibraryRepository for FakeSteamAccount {
         self.settle();
         let mut s = self.state.lock().unwrap();
         s.reads += 1;
+        if s.replaced {
+            anyhow::bail!("the connection to Steam closed");
+        }
         if s.down {
             anyhow::bail!("steamcommunity.com didn't answer (503 Service Unavailable)");
         }
@@ -513,6 +522,7 @@ fn sign_on(s: &mut State) {
     if !s.signed_on {
         s.signed_on = true;
         s.sign_ons += 1;
+        s.replaced = false;
     }
 }
 
@@ -547,6 +557,10 @@ impl FarmingRepository for FakeSteamAccount {
     fn blocked(&self) -> Option<Option<AppId>> {
         let s = self.state.lock().unwrap();
         s.blocked.filter(|_| s.signed_on)
+    }
+
+    fn replaced(&self) -> bool {
+        self.state.lock().unwrap().replaced
     }
 
     async fn next_signal(&self) -> Signal {

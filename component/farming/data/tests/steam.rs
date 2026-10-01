@@ -258,6 +258,10 @@ async fn another_session_taking_over_is_its_own_signal() {
     steam.sign_off(EResult::LOGON_SESSION_REPLACED);
 
     assert_eq!(signal(&repo).await, Signal::Replaced);
+    assert!(
+        repo.replaced(),
+        "and says so after, for whatever failed meanwhile"
+    );
 }
 
 #[tokio::test]

@@ -184,6 +184,12 @@ impl Farmer {
                     }
                 }
                 failed => {
+                    // Another session took this one's place as the badges
+                    // were read: farming stops, as it does when that happens
+                    // while it plays, rather than knock that one off.
+                    if self.play.replaced() {
+                        return replaced(r);
+                    }
                     let why = match failed {
                         Ok(Err(e)) => e.to_string(),
                         Err(e) => e.to_string(),

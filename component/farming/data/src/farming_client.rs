@@ -32,6 +32,9 @@ pub trait FarmingClient: Send + Sync {
     /// `None` when none is.
     fn blocked(&self) -> Option<Option<AppId>>;
 
+    /// Whether Steam signed the last session off for another in its place.
+    fn replaced(&self) -> bool;
+
     /// What Steam says next.
     async fn next_signal(&self) -> Signal;
 }
@@ -210,6 +213,10 @@ impl FarmingClient for SteamFarmingClient {
             .blocked()
             .filter(|b| b.blocked)
             .map(|b| b.app_id.map(AppId))
+    }
+
+    fn replaced(&self) -> bool {
+        self.steam.replaced()
     }
 
     async fn next_signal(&self) -> Signal {

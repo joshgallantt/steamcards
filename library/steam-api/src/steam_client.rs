@@ -17,7 +17,7 @@ use config_file::{CredentialStore, Credentials};
 use debug_log::DebugLog;
 
 use crate::{
-    Endpoints,
+    EResult, Endpoints,
     auth::{self, Approved},
     badges::{BadgeGame, SetCard, read_foil_cards_page, read_game_cards_page},
     cm::{self, Connection, LogOn, NoAnswer, Refused, WalletInfo},
@@ -252,6 +252,16 @@ impl SteamClient {
             self.keep_wallet(&gone);
         }
         Ok(conn)
+    }
+
+    /// Whether Steam signed the last session off for another signed on in
+    /// its place, with this sign-in: until a session signs on again here.
+    pub fn replaced(&self) -> bool {
+        self.live
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|c| c.logged_off() == Some(EResult::LOGON_SESSION_REPLACED))
     }
 
     /// The signed-on connection if there's one, without signing on.

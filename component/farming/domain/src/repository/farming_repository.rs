@@ -26,6 +26,11 @@ pub trait FarmingRepository: Send + Sync {
     /// said.
     fn blocked(&self) -> Option<Option<AppId>>;
 
+    /// Whether Steam signed the last session off for another one signed on
+    /// in its place, with this sign-in, until a session signs on here
+    /// again: whatever was asked of Steam meanwhile failed for that.
+    fn replaced(&self) -> bool;
+
     /// Waits for Steam to say something the farmer acts on.
     async fn next_signal(&self) -> Signal;
 }

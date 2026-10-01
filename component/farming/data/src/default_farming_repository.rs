@@ -35,6 +35,10 @@ impl FarmingRepository for DefaultFarmingRepository {
         self.client.blocked()
     }
 
+    fn replaced(&self) -> bool {
+        self.client.replaced()
+    }
+
     async fn next_signal(&self) -> Signal {
         self.client.next_signal().await
     }
