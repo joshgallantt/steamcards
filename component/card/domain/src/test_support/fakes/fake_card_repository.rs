@@ -1,6 +1,3 @@
-//! Doubles for other crates' tests. A double stands in for the contract, so
-//! no test needs Steam.
-
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -12,34 +9,12 @@ use std::{
 use async_trait::async_trait;
 use game::{AppId, Game, SteamLibrary};
 
-use crate::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
-
-/// A card of a set, with `owned` copies held.
-pub fn card(name: &str, owned: u32) -> Card {
-    Card {
-        name: name.to_owned(),
-        owned,
-    }
-}
-
-/// A copy of `name` from `app_id`'s set, held as `asset_id`: not a foil,
-/// marketable and tradable, with the market hash name Steam would give it.
-pub fn card_asset(asset_id: u64, app_id: u32, name: &str) -> CardAsset {
-    CardAsset {
-        asset_id: AssetId(asset_id),
-        app_id: AppId(app_id),
-        name: name.to_owned(),
-        market_hash_name: format!("{app_id}-{name}"),
-        foil: false,
-        marketable: true,
-        tradable: true,
-    }
-}
+use crate::{AssetId, CardAsset, CardRepository, CardSet, GameCards};
 
 /// Games' cards held in memory: each game's card page, its foils, and the
 /// copies of cards the account holds.
 #[derive(Default)]
-pub struct InMemoryCardRepository {
+pub struct FakeCardRepository {
     /// The games whose card pages can be looked at.
     pub library: Mutex<SteamLibrary>,
     /// Each game's set, as its card page shows it. A game of the library
@@ -55,7 +30,7 @@ pub struct InMemoryCardRepository {
     pub down: AtomicBool,
 }
 
-impl InMemoryCardRepository {
+impl FakeCardRepository {
     pub fn with(games: Vec<Game>) -> Self {
         Self {
             library: Mutex::new(SteamLibrary::new(games)),
@@ -83,7 +58,7 @@ impl InMemoryCardRepository {
 }
 
 #[async_trait]
-impl CardRepository for InMemoryCardRepository {
+impl CardRepository for FakeCardRepository {
     async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards> {
         let game = self.game(app_id)?;
         let set = self

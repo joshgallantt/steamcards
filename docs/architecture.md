@@ -122,10 +122,11 @@ component/<name>/domain/src/
 │   └── impl/
 │       ├── mod.rs
 │       └── default_<use case>.rs   the real one, over the repository: default_sign_in_use_case.rs
-└── test_support/                doubles, behind the `test-support` feature
-    ├── mod.rs                   in-memory repositories and builders
-    ├── stubs/                   a use case that answers as it's told, a file each
-    └── spies/                   a use case that keeps what it's asked, a file each
+└── test_support/                doubles, behind the `test-support` feature, a file each
+    ├── fakes/                   the repository, kept in memory: fake_game_repository.rs
+    ├── stubs/                   a use case that answers as it's told
+    ├── spies/                   a use case that keeps what it's asked
+    └── builders/                what a test needs, in a line: game.rs builds a Game
 ```
 
 A component that keeps nothing has no repository: `session` is kept in

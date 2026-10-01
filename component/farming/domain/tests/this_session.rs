@@ -12,7 +12,7 @@ use card::{
 };
 use farming::{
     DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
-    test_support::InMemorySteam,
+    test_support::FakeSteamAccount,
 };
 use game::{AppId, DefaultReadLibraryUseCase};
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
@@ -30,7 +30,7 @@ const HADES: u32 = 1_145_360;
 
 /// Someone farming, who can pause, carry on, and sign out.
 struct Player {
-    steam: Arc<InMemorySteam>,
+    steam: Arc<FakeSteamAccount>,
     prefs: Arc<StubGetPreferencesUseCase>,
     farm: Arc<dyn FarmCardsUseCase>,
     end_session: Arc<dyn EndSessionUseCase>,
@@ -42,7 +42,7 @@ struct Player {
 
 impl Player {
     fn new() -> Self {
-        let steam = Arc::new(InMemorySteam::new());
+        let steam = Arc::new(FakeSteamAccount::new());
         let prefs = Arc::new(StubGetPreferencesUseCase::default());
         let sessions = Arc::new(SessionKeeper::default());
         let (tx, events) = mpsc::channel(8192);

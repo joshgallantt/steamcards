@@ -127,13 +127,13 @@ mod tests {
     use game::{AppId, test_support::game};
     use preferences::{
         DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-        DefaultSetOnlyPriorityUseCase, Preferences, test_support::InMemoryPreferencesRepository,
+        DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
     };
 
     use super::*;
 
     fn games(priority: &[u32]) -> Games {
-        let repo = Arc::new(InMemoryPreferencesRepository::new(Preferences {
+        let repo = Arc::new(FakePreferencesRepository::new(Preferences {
             priority_games: priority.iter().copied().map(AppId).collect(),
             ..Default::default()
         }));

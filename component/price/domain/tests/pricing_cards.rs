@@ -15,7 +15,7 @@ use price::{
     GetPricesUseCase, GetWalletUseCase, HeldCard, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
     MarketPause, Price, PriceError, PriceEvent, PriceEventKind, RefreshPricesUseCase,
     SetBasisUseCase, SetGamesToPriceUseCase, held_value,
-    test_support::{self, InMemoryMarketRepository},
+    test_support::{self, FakePriceRepository},
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -29,7 +29,7 @@ const CELESTE: u32 = 504_230;
 
 /// Someone farming with prices on screen.
 struct Player {
-    market: Arc<InMemoryMarketRepository>,
+    market: Arc<FakePriceRepository>,
     clock: Clock,
     want: Arc<dyn SetGamesToPriceUseCase>,
     prices: Arc<dyn GetPricesUseCase>,
@@ -42,7 +42,7 @@ struct Player {
 impl Player {
     fn new() -> Self {
         let clock = test_support::clock_from(test_support::session_start());
-        let market = Arc::new(InMemoryMarketRepository::new(Arc::clone(&clock)));
+        let market = Arc::new(FakePriceRepository::new(Arc::clone(&clock)));
         market.lists(
             HEAVY_RAIN,
             &[
@@ -663,7 +663,7 @@ async fn offers_wait_while_steam_has_paused_lookups() {
 #[tokio::test]
 async fn money_is_shown_at_list_prices_until_the_user_picks_another_basis() {
     let clock = test_support::clock_from(test_support::session_start());
-    let market = Arc::new(InMemoryMarketRepository::new(clock));
+    let market = Arc::new(FakePriceRepository::new(clock));
     let settings = DefaultGetPriceSettingsUseCase::new(market.clone());
     let basis = DefaultSetBasisUseCase::new(market.clone());
     assert_eq!(settings.call().basis, Basis::List);
@@ -679,7 +679,7 @@ async fn money_is_shown_at_list_prices_until_the_user_picks_another_basis() {
 #[tokio::test]
 async fn the_wallet_is_whatever_steam_last_said() {
     let clock = test_support::clock_from(test_support::session_start());
-    let market = Arc::new(InMemoryMarketRepository::new(clock));
+    let market = Arc::new(FakePriceRepository::new(clock));
     let wallet = DefaultGetWalletUseCase::new(market.clone());
     market.wallet_is(None);
     assert_eq!(wallet.call(), None, "not signed on yet");

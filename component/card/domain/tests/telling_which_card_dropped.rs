@@ -7,12 +7,12 @@ use std::sync::{Arc, atomic::Ordering};
 
 use card::{
     AssetId, CardError, DefaultIdentifyCardsUseCase, IdentifyCardsUseCase,
-    test_support::InMemoryCardRepository,
+    test_support::FakeCardRepository,
 };
 
 #[tokio::test]
 async fn cards_that_cant_be_described_say_why() {
-    let repo = Arc::new(InMemoryCardRepository::default());
+    let repo = Arc::new(FakeCardRepository::default());
     repo.down.store(true, Ordering::Relaxed);
 
     let described = DefaultIdentifyCardsUseCase::new(repo)

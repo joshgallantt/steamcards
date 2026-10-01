@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use card::{DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase};
 use farming::{
     DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
-    test_support::InMemorySteam,
+    test_support::FakeSteamAccount,
 };
 use game::{AppId, DefaultReadLibraryUseCase};
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
@@ -20,7 +20,7 @@ const HOUR: Duration = Duration::from_secs(60 * 60);
 
 /// Someone with a Steam library, leaving the farmer running.
 struct Player {
-    steam: Arc<InMemorySteam>,
+    steam: Arc<FakeSteamAccount>,
     prefs: Arc<StubGetPreferencesUseCase>,
     token: CancellationToken,
     events: Option<mpsc::Receiver<FarmingEvent>>,
@@ -30,7 +30,7 @@ struct Player {
 impl Player {
     fn new() -> Self {
         Self {
-            steam: Arc::new(InMemorySteam::new()),
+            steam: Arc::new(FakeSteamAccount::new()),
             prefs: Arc::default(),
             token: CancellationToken::new(),
             events: None,

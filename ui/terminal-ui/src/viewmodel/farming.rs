@@ -135,7 +135,7 @@ mod tests {
     use farming::test_support::SpyFarmCardsUseCase;
     use preferences::{
         DefaultSetGameTierUseCase,
-        test_support::{InMemoryPreferencesRepository, StubGetPreferencesUseCase},
+        test_support::{FakePreferencesRepository, StubGetPreferencesUseCase},
     };
     use session::test_support::SpyEndSessionUseCase;
 
@@ -152,7 +152,7 @@ mod tests {
             Arc::new(StubGetAccountUseCase::new(account)),
             Arc::new(StubGetPreferencesUseCase::default()),
             Arc::new(DefaultSetGameTierUseCase::new(Arc::new(
-                InMemoryPreferencesRepository::default(),
+                FakePreferencesRepository::default(),
             ))),
         )
     }
@@ -173,7 +173,7 @@ mod tests {
             who.clone(),
             Arc::new(StubGetPreferencesUseCase::default()),
             Arc::new(DefaultSetGameTierUseCase::new(Arc::new(
-                InMemoryPreferencesRepository::default(),
+                FakePreferencesRepository::default(),
             ))),
         )
     }

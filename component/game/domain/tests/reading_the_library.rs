@@ -4,7 +4,7 @@ use std::sync::{Arc, atomic::Ordering};
 
 use game::{
     DefaultReadLibraryUseCase, GameError, ReadLibraryUseCase,
-    test_support::{InMemoryGameRepository, game},
+    test_support::{FakeGameRepository, game},
 };
 
 #[tokio::test]
@@ -17,7 +17,7 @@ async fn games_with_drops_left_come_first_most_played_first() {
     stardew.name = "Stardew Valley".into();
     let mut hades = game(1145360, 12.5, 3, 1);
     hades.name = "Hades".into();
-    let repo = Arc::new(InMemoryGameRepository::with(vec![
+    let repo = Arc::new(FakeGameRepository::with(vec![
         half_life, portal, stardew, hades,
     ]));
 
@@ -37,7 +37,7 @@ async fn games_with_drops_left_come_first_most_played_first() {
 
 #[tokio::test]
 async fn a_library_that_cant_be_read_says_why() {
-    let repo = Arc::new(InMemoryGameRepository::with(Vec::new()));
+    let repo = Arc::new(FakeGameRepository::with(Vec::new()));
     repo.down.store(true, Ordering::Relaxed);
 
     let read = DefaultReadLibraryUseCase::new(repo).call().await.unwrap();

@@ -7,7 +7,7 @@ use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
     DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, Preferences, PreferencesError,
     SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase, Tier,
-    test_support::InMemoryPreferencesRepository,
+    test_support::FakePreferencesRepository,
 };
 
 /// Someone arranging what gets farmed first.
@@ -20,14 +20,14 @@ struct Player {
 
 impl Player {
     fn new() -> Self {
-        Self::on(InMemoryPreferencesRepository::default())
+        Self::on(FakePreferencesRepository::default())
     }
 
     fn whose_disk_is_full() -> Self {
-        Self::on(InMemoryPreferencesRepository::default().failing())
+        Self::on(FakePreferencesRepository::default().failing())
     }
 
-    fn on(repo: InMemoryPreferencesRepository) -> Self {
+    fn on(repo: FakePreferencesRepository) -> Self {
         let repo = Arc::new(repo);
         Self {
             get: Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),

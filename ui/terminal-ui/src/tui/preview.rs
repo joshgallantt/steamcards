@@ -21,7 +21,7 @@ use farming::{EventKind, FarmingStatus, Status, test_support::SpyFarmCardsUseCas
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, Preferences, test_support::InMemoryPreferencesRepository,
+    DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
 };
 use price::{
     PriceBook,
@@ -235,7 +235,7 @@ fn prefs() -> Preferences {
 }
 
 fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
-    let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
+    let repo = Arc::new(FakePreferencesRepository::new(prefs));
     let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
     let accounts = Arc::new(StubGetAccountUseCase::new(account));
     let mut app = App::new(
@@ -958,7 +958,7 @@ fn showcase_app() -> App {
         priority_games: vec![AppId(960_910), AppId(48_000)],
         ..Default::default()
     };
-    let repo = Arc::new(InMemoryPreferencesRepository::new(prefs));
+    let repo = Arc::new(FakePreferencesRepository::new(prefs));
     let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
     let accounts = Arc::new(StubGetAccountUseCase::new(cardfarmer()));
     let mut a = App::new(
