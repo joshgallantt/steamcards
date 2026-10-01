@@ -834,7 +834,6 @@ dependencies = [
  "config-file",
  "debug-log",
  "farming",
- "keep-awake",
  "session",
  "steam-api",
  "steam-library",
@@ -848,7 +847,6 @@ dependencies = [
  "card",
  "farming",
  "farming-data",
- "keep-awake",
  "preferences",
  "session",
  "steam-api",
@@ -1537,13 +1535,6 @@ dependencies = [
  "hashbrown 0.16.1",
  "portable-atomic",
  "thiserror 2.0.21",
-]
-
-[[package]]
-name = "keep-awake"
-version = "0.1.0"
-dependencies = [
- "debug-log",
 ]
 
 [[package]]
@@ -2996,7 +2987,6 @@ dependencies = [
  "dirs",
  "farming-di",
  "headless",
- "keep-awake",
  "preferences-di",
  "price-di",
  "serde_json",

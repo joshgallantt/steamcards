@@ -9,7 +9,6 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use farming::{FarmingRepository, Signal};
 use farming_data::{DefaultFarmingRepository, SteamFarmingClient};
-use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
@@ -18,12 +17,9 @@ use steam_api::{
 };
 use steam_library::AppId;
 
-/// Farming as the app does it, with the computer's sleep left alone.
+/// Farming as the app does it.
 fn repository(session: Arc<SteamClient>) -> DefaultFarmingRepository {
-    DefaultFarmingRepository::new(
-        Arc::new(SteamFarmingClient::new(session)),
-        Arc::new(KeepAwake::off()),
-    )
+    DefaultFarmingRepository::new(Arc::new(SteamFarmingClient::new(session)))
 }
 
 fn session(steam: &FakeSteam, name: &str) -> Arc<SteamClient> {
@@ -353,26 +349,6 @@ async fn after_a_drop_the_new_connection_is_told_everything() {
     assert_eq!(steam.games_played(), [vec![620], vec![620]]);
     assert_eq!(steam.statuses(), [1, 1]);
     assert_eq!(steam.logons().len(), 2);
-}
-
-#[tokio::test]
-async fn the_computer_stays_awake_while_games_play() {
-    let steam = FakeSteam::start().await;
-    let awake = Arc::new(KeepAwake::running("sleep", &["60"]));
-    let repo = DefaultFarmingRepository::new(
-        Arc::new(SteamFarmingClient::new(session(&steam, "awake"))),
-        awake.clone(),
-    );
-
-    repo.play(&[AppId(620)], false).await.unwrap();
-    assert!(awake.is_held(), "held while playing");
-
-    repo.play(&[], false).await.unwrap();
-    assert!(!awake.is_held(), "let go with nothing to play");
-
-    repo.play(&[AppId(620)], false).await.unwrap();
-    repo.stop().await;
-    assert!(!awake.is_held(), "let go when farming stops");
 }
 
 #[tokio::test]

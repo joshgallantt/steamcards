@@ -28,7 +28,6 @@ impl DomainAssembler {
         let session = SessionComponent::new(data.sessions.clone());
         let farming = FarmingComponent::new(
             data.steam.clone(),
-            data.awake.clone(),
             steam_library.read_library.clone(),
             card.look_at_cards.clone(),
             card.look_at_foils.clone(),

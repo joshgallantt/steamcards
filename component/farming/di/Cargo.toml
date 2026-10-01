@@ -15,7 +15,6 @@ workspace = true
 session.workspace = true
 farming.workspace = true
 farming-data.workspace = true
-keep-awake.workspace = true
 steam-library.workspace = true
 card.workspace = true
 preferences.workspace = true

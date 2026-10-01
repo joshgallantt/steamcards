@@ -20,7 +20,6 @@
 - **Farms the way that works.** Cards drop for one game at a time once it has 3 hours on record, so games short of that are played together, up to 32, to build hours. The rules are cross-checked against ArchiSteamFarm, Steam Game Idler and the other farmers: see [the research](docs/research/steam-card-farming.md).
 - **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.
-- **Keeps your computer awake** while it plays (with `caffeinate` on macOS, `systemd-inhibit` on Linux), and lets it sleep when there's nothing to farm. The screen can still turn off. A closed laptop lid still sleeps unless it's plugged into a display.
 - **macOS and Linux.**
 
 ## Install

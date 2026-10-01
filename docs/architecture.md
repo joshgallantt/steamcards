@@ -15,7 +15,7 @@ is: the same layers, the same rules, and the same checks that keep them.
 | Domain | `money`, `account`, `steam-library`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
 | Data | `account-data`, `steam-library-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
 | DI | `account-di`, `steam-library-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
-| Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
+| Library | `config-file`, `debug-log`, `steam-api` | Library |
 | Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
 
@@ -237,7 +237,7 @@ cards joins the two.
 | `SteamLibraryRepository` | `steam-library` | `DefaultSteamLibraryRepository` in `steam-library-data`, through a `SteamLibraryClient` |
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
-| `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient`, keeping the computer awake while anything plays |
+| `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient` |
 | `PriceRepository` | `price` | `DefaultPriceRepository` in `price-data`, through a `SteamMarketClient` and a `FilePriceStore` |
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,
@@ -289,7 +289,6 @@ builds its repository itself.
 | `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, single requests to the site for the market (whose pages and queue `price-data` keeps), and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `JsonFile`, a file of its own for what can be lost, like the market's prices beside it. It writes first and keeps second, so a failed write changes nothing in memory. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
-| `keep-awake` | `KeepAwake`: holds the computer awake with the system's own tool (`caffeinate`, `systemd-inhibit`) while games play. `farming-data` holds it while anything is played. |
 
 ---
 
@@ -357,7 +356,7 @@ types are named, in three phases, each handed only the one before it:
 
 | Phase | Builds | From |
 | --- | --- | --- |
-| `DataAssembler` | `ConfigFile`, `steam_api::SteamClient`, `KeepAwake`, `SessionKeeper`, and where the prices are kept | `Settings` |
+| `DataAssembler` | `ConfigFile`, `steam_api::SteamClient`, `SessionKeeper`, and where the prices are kept | `Settings` |
 | `DomainAssembler` | `AccountComponent`, `SteamLibraryComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
@@ -457,10 +456,9 @@ graph TD
         SA[steam-api]
         CF[config-file]
         DL[debug-log]
-        KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & LDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
+    APP --> TUI & HL & ADI & LDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL
     TUI --> FW & ACC & LIB & CARD & SES & PREF & FARM & PRICE & MON
     HL --> FW & ACC & FARM
     FW --> FARM & LIB & CARD
@@ -475,7 +473,7 @@ graph TD
     LD --> LIB & SA
     CD --> CARD & LIB & SA
     PD --> PREF & LIB & CF
-    FD --> FARM & SES & LIB & CARD & SA & KA
+    FD --> FARM & SES & LIB & CARD & SA
     PRD --> PRICE & LIB & MON & SA & CF & DL
     CARD --> LIB
     PREF --> LIB
@@ -483,7 +481,6 @@ graph TD
     FARM --> LIB & CARD & SES & PREF
     PRICE --> LIB & CARD & MON
     SA --> CF & DL
-    KA --> DL
 ```
 
 Every arrow is a line in a `Cargo.toml`. Each DI crate also lists its

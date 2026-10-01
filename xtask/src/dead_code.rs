@@ -338,13 +338,13 @@ mod tests {
     #[test]
     fn a_doc_comment_naming_a_function_doesnt_use_it() {
         let files = workspace(&[(
-            "library/keep-awake/src/lib.rs",
+            "library/debug-log/src/lib.rs",
             "/// Calls `held` first.\npub fn held() {}\n",
         )]);
 
         assert_eq!(
             find(&files).1,
-            ["library/keep-awake/src/lib.rs: `held` is used nowhere"]
+            ["library/debug-log/src/lib.rs: `held` is used nowhere"]
         );
     }
 }

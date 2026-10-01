@@ -28,7 +28,6 @@ session.workspace = true
 session-di.workspace = true
 config-file.workspace = true
 debug-log.workspace = true
-keep-awake.workspace = true
 steam-api.workspace = true
 terminal-ui.workspace = true
 headless.workspace = true

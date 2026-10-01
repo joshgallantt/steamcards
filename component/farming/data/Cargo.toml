@@ -1,6 +1,6 @@
 [package]
 name = "farming-data"
-description = "Playing games on Steam's CM servers through a client of its own, keeping the computer awake meanwhile, and hearing of the new items Steam announces, written to fit the farming domain's FarmingRepository."
+description = "Playing games on Steam's CM servers through a client of its own, and hearing of the new items Steam announces, written to fit the farming domain's FarmingRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,7 +16,6 @@ card.workspace = true
 steam-library.workspace = true
 session.workspace = true
 farming.workspace = true
-keep-awake.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
@@ -26,5 +25,4 @@ tokio.workspace = true
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
-keep-awake = { workspace = true, features = ["test-support"] }
 steam-api = { workspace = true, features = ["test-support"] }

@@ -188,8 +188,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, the pages several components read.
 │   ├── config-file/   The one JSON file: the saved sign-in and preferences.
-│   ├── debug-log/     The opt-in debug log.
-│   └── keep-awake/    Keeping the computer awake while games play.
+│   └── debug-log/     The opt-in debug log.
 ├── ui/            Presentation. Depends on domain crates, and farming-words.
 │   ├── farming-words/ What the farmer says happened, in words, for both screens.
 │   ├── terminal-ui/   View models and the ratatui dashboard.
@@ -369,7 +368,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 | Domain | `money`, `account`, `steam-library`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
-| Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
+| Library | `config-file`, `debug-log`, `steam-api` | Library |
 | Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
 | Tooling | `xtask` | nothing in the workspace |

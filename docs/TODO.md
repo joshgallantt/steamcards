@@ -32,12 +32,12 @@ done, and move it into a numbered section if it grows.
       `library` component that farming works through.
 - [x] Keep the computer awake while games play: `caffeinate` on macOS,
       `systemd-inhibit` on Linux, let go when there's nothing to farm
-      (2026-09-29).
+      (2026-09-29). Taken out again (2026-10-01): the computer's own sleep
+      settings decide.
 - [x] First real run (2026-09-29): signed in with the Steam app, signed on
       with the saved sign-in, read the badges and started farming. A first
       run's debug log couldn't open before the config's
       folder existed; fixed.
-- [ ] Keeping awake as a setting, for anyone who'd rather it didn't.
 - [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
       steamctl): disputed, ASF calls it a glitch. Maybe later, opt-in, if
       measured.

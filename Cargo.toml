@@ -31,7 +31,6 @@ members = [
     "component/price/di",
     "library/config-file",
     "library/debug-log",
-    "library/keep-awake",
     "library/steam-api",
     "ui/farming-words",
     "ui/terminal-ui",
@@ -123,7 +122,6 @@ price-di = { path = "component/price/di" }
 # Library
 config-file = { path = "library/config-file" }
 debug-log = { path = "library/debug-log" }
-keep-awake = { path = "library/keep-awake" }
 steam-api = { path = "library/steam-api" }
 
 # Presentation
