@@ -1,6 +1,7 @@
 //! Pricing a game's set: looking it up afresh, normal cards then foils, and
 //! keeping what's found.
 
+use card::CardKind;
 use steam_library::AppId;
 
 use crate::{
@@ -24,9 +25,12 @@ pub(crate) enum Priced {
 /// can't be used, it keeps the prices it had, and is tried again a day
 /// later. When the market couldn't be asked, it's left as it was.
 pub(crate) async fn price_set(repo: &dyn PriceRepository, app_id: AppId, clock: &Clock) -> Priced {
-    let mut borders = [Vec::new(), Vec::new()];
-    for (foil, cards) in [false, true].into_iter().zip(&mut borders) {
-        match repo.look_up_set(app_id, foil).await {
+    let mut kinds = [Vec::new(), Vec::new()];
+    for (kind, cards) in [CardKind::Normal, CardKind::Foil]
+        .into_iter()
+        .zip(&mut kinds)
+    {
+        match repo.look_up_set(app_id, kind).await {
             Ok(Lookup::Found(found)) => *cards = found,
             Ok(Lookup::Paused(pause)) => return Priced::Paused(pause),
             Ok(Lookup::Unanswered(why)) => return Priced::Unanswered(why),
@@ -44,7 +48,7 @@ pub(crate) async fn price_set(repo: &dyn PriceRepository, app_id: AppId, clock: 
             }
         }
     }
-    let [normal, foil] = borders;
+    let [normal, foil] = kinds;
     repo.keep_set(SetPrices {
         app_id,
         normal,

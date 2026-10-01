@@ -161,6 +161,7 @@ pub fn on_completion(held: &Held, left: &Estimate) -> Estimate {
 mod tests {
     use std::time::Duration;
 
+    use card::CardKind;
     use chrono::TimeDelta;
     use steam_library::{AppId, CardDrops, Game};
 
@@ -371,8 +372,8 @@ mod tests {
         }
         book.sets.insert(AppId(20), fresh);
         let cards = [
-            HeldCard::named(AppId(10), "Card 0", false),
-            HeldCard::named(AppId(20), "Card 0", false),
+            HeldCard::named(AppId(10), "Card 0", CardKind::Normal),
+            HeldCard::named(AppId(20), "Card 0", CardKind::Normal),
         ];
 
         let at = |hours| noon() + TimeDelta::hours(hours);

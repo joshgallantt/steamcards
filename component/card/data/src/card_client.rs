@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use card::{AssetId, Card, CardAsset, CardSet, GameCards};
+use card::{AssetId, Card, CardAsset, CardKind, CardSet, GameCards};
 use steam_api::{
     SteamClient,
     badges::{BadgeGame, SetCard},
@@ -17,7 +17,7 @@ pub trait CardClient: Send + Sync {
     /// its set.
     async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards>;
 
-    /// A game's foils, from its foil badge's card page.
+    /// A game's set in foil, from its foil badge's card page.
     async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet>;
 
     /// Which cards these items are: each copy on its own, cards only.
@@ -48,7 +48,10 @@ impl CardClient for SteamCardClient {
 
     async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
         let foils = self.steam.foil_cards(app_id.0).await?;
-        Ok(CardSet::new(foils.into_iter().map(to_card).collect()))
+        Ok(CardSet::new(
+            CardKind::Foil,
+            foils.into_iter().map(to_card).collect(),
+        ))
     }
 
     async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
@@ -70,7 +73,7 @@ fn to_game_cards(b: BadgeGame) -> GameCards {
             },
             badge_level: b.badge_level,
         },
-        set: CardSet::new(b.cards.into_iter().map(to_card).collect()),
+        set: CardSet::new(CardKind::Normal, b.cards.into_iter().map(to_card).collect()),
     }
 }
 
@@ -92,7 +95,12 @@ fn to_card_asset(item: InventoryItem) -> Option<CardAsset> {
         app_id: AppId(item.app_id?),
         name: item.name,
         market_hash_name: item.market_hash_name,
-        foil: item.foil,
+        // Steam tags a copy with its border: cardborder_1 is a foil.
+        kind: if item.foil {
+            CardKind::Foil
+        } else {
+            CardKind::Normal
+        },
         marketable: item.marketable,
         tradable: item.tradable,
     })

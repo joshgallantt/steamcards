@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use card::CardKind;
 use farming::{FarmingEvent, Trouble};
 use steam_library::HOURS_BEFORE_DROPS;
 
@@ -74,10 +75,13 @@ pub fn event(event: &FarmingEvent) -> String {
         FarmingEvent::Identified {
             game,
             card,
-            foil,
+            kind,
             copy,
         } => {
-            let foil = if *foil { " (foil)" } else { "" };
+            let foil = match kind {
+                CardKind::Normal => "",
+                CardKind::Foil => " (foil)",
+            };
             let copy = match copy {
                 Some(1) => String::new(),
                 Some(copy) => format!(" (a {} copy)", ordinal(*copy)),
@@ -130,11 +134,11 @@ mod tests {
 
     const MINUTE: Duration = Duration::from_secs(60);
 
-    fn named(card: &str, foil: bool, copy: Option<u32>) -> String {
+    fn named(card: &str, kind: CardKind, copy: Option<u32>) -> String {
         event(&FarmingEvent::Identified {
             game: "Heavy Rain".into(),
             card: card.into(),
-            foil,
+            kind,
             copy,
         })
     }
@@ -219,19 +223,19 @@ mod tests {
     #[test]
     fn a_named_card_says_which_copy_it_is() {
         assert_eq!(
-            named("Madison", false, Some(2)),
+            named("Madison", CardKind::Normal, Some(2)),
             "Madison dropped for Heavy Rain (a 2nd copy)"
         );
         assert_eq!(
-            named("Ethan", false, Some(1)),
+            named("Ethan", CardKind::Normal, Some(1)),
             "Ethan dropped for Heavy Rain"
         );
         assert_eq!(
-            named("Scott", true, Some(3)),
+            named("Scott", CardKind::Foil, Some(3)),
             "Scott (foil) dropped for Heavy Rain (a 3rd copy)"
         );
         assert_eq!(
-            named("Norman", false, None),
+            named("Norman", CardKind::Normal, None),
             "Norman dropped for Heavy Rain (which copy isn't known)"
         );
     }

@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use card::CardKind;
 use chrono::{DateTime, Utc};
 use money::{Currency, Money};
 use price::{Lookup, MarketPause, Price, PriceQuote, PricedCard, QuoteSource, Wallet};
@@ -20,12 +21,12 @@ const WALLET_WAIT: Duration = Duration::from_millis(100);
 /// The market's say on what cards are worth, and the wallet's currency.
 #[async_trait]
 pub trait MarketClient: Send + Sync {
-    /// A game's cards as the market lists them now, normal cards or foils,
-    /// with their lowest listings, in the wallet's currency.
+    /// A game's cards of one kind as the market lists them now, normal
+    /// cards or foils, with their lowest listings, in the wallet's currency.
     async fn look_up_set(
         &self,
         app_id: AppId,
-        foil: bool,
+        kind: CardKind,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>>;
 
     /// A card's order book, by its market hash name: its lowest listing and
@@ -82,12 +83,12 @@ impl SteamMarketClient {
         Err("Steam hasn't said the wallet's currency yet".into())
     }
 
-    /// A game's cards as the market lists them now, normal cards or foils,
-    /// with their lowest listings: every page of `search/render`, signed in,
+    /// A game's cards of one kind as the market lists them now, with their
+    /// lowest listings: every page of `search/render`, signed in,
     /// each through the market's queue. A card is listed once, should a
     /// page repeat one. Without a sign-in to ask as, the market goes
     /// unasked.
-    async fn search(&self, app_id: u32, foil: bool) -> anyhow::Result<Lookup<Vec<Listed>>> {
+    async fn search(&self, app_id: u32, kind: CardKind) -> anyhow::Result<Lookup<Vec<Listed>>> {
         let who = match self.steam.web_login(false).await {
             Ok(who) => who,
             Err(e) => return Ok(Lookup::Unanswered(e.to_string())),
@@ -95,7 +96,7 @@ impl SteamMarketClient {
         let mut listed: Vec<Listed> = Vec::new();
         let mut start = 0;
         for _ in 0..MAX_SET_PAGES {
-            let path = search_path(app_id, foil, start);
+            let path = search_path(app_id, kind, start);
             let reply = match self
                 .queue
                 .send(true, || self.steam.get_once(&path, Some(&who), &[]))
@@ -168,13 +169,13 @@ impl MarketClient for SteamMarketClient {
     async fn look_up_set(
         &self,
         app_id: AppId,
-        foil: bool,
+        kind: CardKind,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
         let currency = match self.currency().await {
             Ok(currency) => currency,
             Err(why) => return Ok(Lookup::Unanswered(why)),
         };
-        let listed = match self.search(app_id.0, foil).await? {
+        let listed = match self.search(app_id.0, kind).await? {
             Lookup::Found(listed) => listed,
             Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
             Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
@@ -183,7 +184,7 @@ impl MarketClient for SteamMarketClient {
         Ok(Lookup::Found(
             listed
                 .into_iter()
-                .filter(|card| is_border(card, foil))
+                .filter(|card| is_kind(card, kind))
                 .map(|card| to_priced_card(card, currency, now))
                 .collect(),
         ))
@@ -221,14 +222,14 @@ impl MarketClient for SteamMarketClient {
     }
 }
 
-/// Whether a card the market listed is of the border asked for, as its
-/// type says: "Portal 2 Foil Trading Card" or "Portal 2 Trading Card". A
-/// type that says neither is taken to be.
-fn is_border(card: &Listed, foil: bool) -> bool {
+/// Whether a card the market listed is of the kind asked for, as its type
+/// says: "Portal 2 Foil Trading Card" or "Portal 2 Trading Card". A type
+/// that says neither is taken to be.
+fn is_kind(card: &Listed, kind: CardKind) -> bool {
     if card.item_type.ends_with("Foil Trading Card") {
-        foil
+        kind == CardKind::Foil
     } else if card.item_type.ends_with("Trading Card") {
-        !foil
+        kind == CardKind::Normal
     } else {
         true
     }
@@ -372,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listings_border_is_its_type() {
+    fn a_listings_kind_is_its_type() {
         let normal = listed("Chell", 6, "$0.06", 1);
         let foil = Listed {
             item_type: "Portal 2 Foil Trading Card".into(),
@@ -382,10 +383,10 @@ mod tests {
             item_type: "Carte à collectionner de Portal 2".into(),
             ..normal.clone()
         };
-        assert!(is_border(&normal, false) && !is_border(&normal, true));
-        assert!(is_border(&foil, true) && !is_border(&foil, false));
+        assert!(is_kind(&normal, CardKind::Normal) && !is_kind(&normal, CardKind::Foil));
+        assert!(is_kind(&foil, CardKind::Foil) && !is_kind(&foil, CardKind::Normal));
         assert!(
-            is_border(&other, true) && is_border(&other, false),
+            is_kind(&other, CardKind::Foil) && is_kind(&other, CardKind::Normal),
             "taken as asked"
         );
     }

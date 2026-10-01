@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use card::{AssetId, Card, CardAsset, CardRepository};
+use card::{AssetId, Card, CardAsset, CardKind, CardRepository};
 use card_data::{DefaultCardRepository, SteamCardClient};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
@@ -136,7 +136,7 @@ async fn new_items_are_described_as_the_cards_they_are() {
         app_id: AppId(960_910),
         name: "Madison".into(),
         market_hash_name: "960910-Madison".into(),
-        foil: false,
+        kind: CardKind::Normal,
         marketable: true,
         tradable: true,
     };
@@ -145,7 +145,7 @@ async fn new_items_are_described_as_the_cards_they_are() {
         app_id: AppId(960_910),
         name: "Scott".into(),
         market_hash_name: "960910-Scott (Foil)".into(),
-        foil: true,
+        kind: CardKind::Foil,
         marketable: true,
         tradable: true,
     };

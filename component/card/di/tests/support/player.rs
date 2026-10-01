@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use card::{AssetId, CardAsset, CardError, CardSet, GameCards};
+use card::{AssetId, CardAsset, CardError, CardKind, CardSet, GameCards};
 use card_di::CardComponent;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
@@ -51,19 +51,17 @@ impl Player {
         }
     }
 
-    /// The site shows Counter-Strike 2's card page, or its foil badge's.
-    pub(crate) async fn has_counter_strikes_card_page(&self, foil: bool) {
-        let (border, page) = if foil {
-            ("1", "gamecards-730-foil.html")
-        } else {
-            ("0", "gamecards-730.html")
-        };
+    /// The site shows Counter-Strike 2's card page for one kind of card:
+    /// its normal set's, or its foil badge's.
+    pub(crate) async fn has_counter_strikes_card_page(&self, kind: CardKind) {
         let mock =
             Mock::given(method("GET")).and(path(format!("/profiles/{STEAM_ID}/gamecards/730")));
-        let mock = if foil {
-            mock.and(query_param("border", border))
-        } else {
-            mock
+        let (mock, page) = match kind {
+            CardKind::Normal => (mock, "gamecards-730.html"),
+            CardKind::Foil => (
+                mock.and(query_param("border", "1")),
+                "gamecards-730-foil.html",
+            ),
         };
         mock.respond_with(ResponseTemplate::new(200).set_body_string(card_page(page)))
             .mount(&self.site)

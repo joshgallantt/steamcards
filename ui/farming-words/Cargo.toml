@@ -15,6 +15,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+card.workspace = true
 farming.workspace = true
 steam-library.workspace = true
 chrono.workspace = true

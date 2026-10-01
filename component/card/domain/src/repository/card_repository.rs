@@ -14,9 +14,9 @@ pub trait CardRepository: Send + Sync {
     /// and its card set.
     async fn game_cards(&self, app_id: AppId) -> anyhow::Result<GameCards>;
 
-    /// One game's foils looked at afresh: each foil card of its set, and how
-    /// many the account has. A game's set counts its normal cards only;
-    /// foils make a badge of their own, on a page of their own.
+    /// One game's set in foil looked at afresh: each card of it, and how
+    /// many foils of it the account has. Its card page counts the normal
+    /// set only; foils make a badge of their own, on a page of their own.
     async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet>;
 
     /// The trading cards among the account's items with these asset IDs,

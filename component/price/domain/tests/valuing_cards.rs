@@ -4,7 +4,7 @@
 //! 16 cards from 6 games, a foil among them, two of them second copies, and
 //! three that can't be counted yet.
 
-use card::test_support::card_asset;
+use card::{CardKind, test_support::card_asset};
 use chrono::{DateTime, TimeDelta, Utc};
 use money::{Currency, Money};
 use price::{
@@ -122,7 +122,7 @@ fn the_book() -> PriceBook {
 /// identified.
 fn the_haul() -> (Vec<HeldCard>, u32) {
     let mut thanatos = card_asset(14_02, HADES, "Thanatos");
-    thanatos.foil = true;
+    thanatos.kind = CardKind::Foil;
     thanatos.market_hash_name = "1145360-Thanatos (Foil)".into();
     let assets = [
         card_asset(9_44, HOLLOW_KNIGHT, "Hornet"),
@@ -201,7 +201,7 @@ fn a_card_that_isnt_priced_never_counts_as_nothing() {
 #[test]
 fn a_card_known_only_by_name_is_priced_from_its_set() {
     let book = the_book();
-    let by_name = HeldCard::named(AppId(HEAVY_RAIN), "Madison", false);
+    let by_name = HeldCard::named(AppId(HEAVY_RAIN), "Madison", CardKind::Normal);
 
     assert_eq!(
         held_value(
@@ -259,7 +259,7 @@ fn a_price_in_another_currency_is_shown_but_left_out_of_totals() {
             ..dollars
         },
     );
-    let the_boy = HeldCard::named(AppId(GOROGOA), "The Boy", false);
+    let the_boy = HeldCard::named(AppId(GOROGOA), "The Boy", CardKind::Normal);
 
     let Price::Known(quote) = book.price(&the_boy, Basis::List) else {
         panic!("it has a price");

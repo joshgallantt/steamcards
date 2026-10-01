@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+use card::CardKind;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use money::{Currency, Money};
@@ -172,7 +173,11 @@ async fn a_sets_cards_are_priced_in_the_wallets_currency() {
     let disk = Disk::new("currency");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Found(cards) = market.look_up_set(AppId(960_910), false).await.unwrap() else {
+    let Lookup::Found(cards) = market
+        .look_up_set(AppId(960_910), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("not paused");
     };
 
@@ -229,7 +234,10 @@ async fn until_steam_says_the_wallets_currency_prices_wait() {
     let disk = Disk::new("no-wallet-yet");
     let (market, _) = disk.market(&steam, &site);
 
-    let looked_up = market.look_up_set(AppId(620), true).await.unwrap();
+    let looked_up = market
+        .look_up_set(AppId(620), CardKind::Foil)
+        .await
+        .unwrap();
 
     assert_eq!(
         looked_up,
@@ -258,7 +266,11 @@ async fn an_account_without_a_wallet_has_its_prices_shown_as_they_come() {
     let disk = Disk::new("no-wallet");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Found(cards) = market.look_up_set(AppId(620), false).await.unwrap() else {
+    let Lookup::Found(cards) = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("found");
     };
 
@@ -323,7 +335,11 @@ async fn steams_pause_is_kept_across_a_restart() {
     let disk = Disk::new("pause");
     let (market, _) = disk.market(&steam, &site);
 
-    let Lookup::Paused(pause) = market.look_up_set(AppId(620), false).await.unwrap() else {
+    let Lookup::Paused(pause) = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("paused");
     };
     assert_eq!(pause.step, Duration::from_secs(20 * 60));

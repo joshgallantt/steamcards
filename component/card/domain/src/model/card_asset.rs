@@ -1,6 +1,6 @@
 use steam_library::AppId;
 
-use crate::AssetId;
+use crate::{AssetId, CardKind};
 
 /// One copy of a trading card the account holds: an item in its Steam
 /// inventory. Its identity is its asset ID. Each copy that drops is its own
@@ -19,9 +19,9 @@ pub struct CardAsset {
     /// The card's name on the Steam market, exactly as Steam gives it:
     /// "730-Anarchist (Trading Card)".
     pub market_hash_name: String,
-    /// A foil: a rarer copy, with a shiny border. Foils make a badge of
-    /// their own, so the set's counts leave them out.
-    pub foil: bool,
+    /// Normal, or a foil: a rarer copy with a shiny border, counted on a
+    /// badge of its own, so the normal set's counts leave it out.
+    pub kind: CardKind,
     /// Whether it can be sold on the Steam market.
     pub marketable: bool,
     /// Whether it can be traded.

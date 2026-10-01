@@ -1,4 +1,4 @@
-use card::CardAsset;
+use card::{CardAsset, CardKind};
 
 /// What's known of the card that dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,9 +8,9 @@ pub enum DropCard {
     /// The copy Steam described, by the item it announced.
     Identified(CardAsset),
     /// Named by the game's card page alone, whose count of it went up: no
-    /// item to go with it, so never one to sell. The page read is the
-    /// normal set's, so these aren't foils.
-    NameOnly { name: String, foil: bool },
+    /// item to go with it, so never one to sell. The page counts the normal
+    /// set, so it's a normal card.
+    NameOnly { name: String },
     /// Neither Steam nor the card page could tell: the page's counts went up
     /// for no card, or for more than these drops.
     Unknown,
@@ -21,17 +21,22 @@ impl DropCard {
     pub fn name(&self) -> Option<&str> {
         match self {
             DropCard::Identified(card) => Some(&card.name),
-            DropCard::NameOnly { name, .. } => Some(name),
+            DropCard::NameOnly { name } => Some(name),
+            DropCard::Identifying | DropCard::Unknown => None,
+        }
+    }
+
+    /// Which kind of card it is, once that's known.
+    pub fn kind(&self) -> Option<CardKind> {
+        match self {
+            DropCard::Identified(card) => Some(card.kind),
+            DropCard::NameOnly { .. } => Some(CardKind::Normal),
             DropCard::Identifying | DropCard::Unknown => None,
         }
     }
 
     /// Whether it's known to be a foil.
     pub fn is_foil(&self) -> bool {
-        match self {
-            DropCard::Identified(card) => card.foil,
-            DropCard::NameOnly { foil, .. } => *foil,
-            DropCard::Identifying | DropCard::Unknown => false,
-        }
+        self.kind() == Some(CardKind::Foil)
     }
 }

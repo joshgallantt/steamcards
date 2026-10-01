@@ -179,7 +179,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 ├── component/     Domain + Data + DI. One folder per business concept.
 │   ├── account/       The one Steam account: signing in with a QR code, and out.
 │   ├── steam-library/ Your Steam library: the games with trading cards, and their drops.
-│   ├── card/          Each game's cards: its set, its foils, and the copies you hold.
+│   ├── card/          Each game's cards, normal and foil: its sets, and the copies you hold.
 │   ├── preferences/   What you want farmed first.
 │   ├── session/       This session: every card that dropped, and how long the rest should take.
 │   ├── farming/       What to play, playing it, and stepping aside for another device.

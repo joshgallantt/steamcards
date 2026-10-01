@@ -32,13 +32,13 @@ impl PriceBook {
                     .market_hash_name
                     .as_deref()
                     .and_then(|hash| set.by_hash(hash))
-                    .or_else(|| set.card(&card.name, card.foil));
+                    .or_else(|| set.card(&card.name, card.kind));
                 listed.map_or_else(|| set.unlisted(), |c| c.price.clone())
             }
             Basis::Instant => {
                 // A card known only by its name has its hash name from its set.
                 let hash = card.market_hash_name.as_deref().or_else(|| {
-                    set?.card(&card.name, card.foil)
+                    set?.card(&card.name, card.kind)
                         .map(|c| c.market_hash_name.as_str())
                 });
                 hash.and_then(|h| self.offers.get(h))
@@ -50,6 +50,7 @@ impl PriceBook {
 
 #[cfg(test)]
 mod tests {
+    use card::CardKind;
     use chrono::{DateTime, Utc};
     use money::{Currency, Money};
 
@@ -92,9 +93,9 @@ mod tests {
         );
         let madison = HeldCard {
             market_hash_name: Some("960910-Madison".into()),
-            ..HeldCard::named(AppId(960_910), "Madison", false)
+            ..HeldCard::named(AppId(960_910), "Madison", CardKind::Normal)
         };
-        let by_name = HeldCard::named(AppId(960_910), "Madison", false);
+        let by_name = HeldCard::named(AppId(960_910), "Madison", CardKind::Normal);
         assert!(matches!(book.price(&madison, Basis::List), Price::Known(_)));
         assert_eq!(
             book.price(&madison, Basis::Net),
@@ -118,9 +119,9 @@ mod tests {
             "its hash from its set"
         );
 
-        let scott = HeldCard::named(AppId(960_910), "Scott", false);
+        let scott = HeldCard::named(AppId(960_910), "Scott", CardKind::Normal);
         assert_eq!(book.price(&scott, Basis::List), Price::NoMarket);
-        let hades = HeldCard::named(AppId(1_145_360), "Zagreus", false);
+        let hades = HeldCard::named(AppId(1_145_360), "Zagreus", CardKind::Normal);
         assert_eq!(book.price(&hades, Basis::List), Price::Pending);
         let unsellable = HeldCard {
             marketable: false,

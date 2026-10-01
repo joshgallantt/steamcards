@@ -6,6 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::CardKind;
 use chrono::{TimeDelta, Utc};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
@@ -142,7 +143,11 @@ async fn a_sets_cards_are_read_a_page_at_a_time_signed_in() {
         .await;
     let market = signed_in(&steam, &site, "pages");
 
-    let Lookup::Found(cards) = market.look_up_set(AppId(620), false).await.unwrap() else {
+    let Lookup::Found(cards) = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("found");
     };
 
@@ -170,7 +175,11 @@ async fn foils_are_asked_for_by_their_border() {
         .await;
     let market = signed_in(&steam, &site, "foils");
 
-    let Lookup::Found(foils) = market.look_up_set(AppId(620), true).await.unwrap() else {
+    let Lookup::Found(foils) = market
+        .look_up_set(AppId(620), CardKind::Foil)
+        .await
+        .unwrap()
+    else {
         panic!("found");
     };
 
@@ -189,7 +198,10 @@ async fn a_market_that_doesnt_list_the_cards_says_so() {
         .await;
     let market = signed_in(&steam, &site, "unlisted");
 
-    let e = market.look_up_set(AppId(620), false).await.unwrap_err();
+    let e = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap_err();
 
     assert_eq!(e.to_string(), "the market didn't list the cards");
 }
@@ -306,7 +318,11 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     let market = signed_in(&steam, &site, "paused");
     let requests = || async { site.received_requests().await.unwrap().len() };
 
-    let Lookup::Paused(first) = market.look_up_set(AppId(620), false).await.unwrap() else {
+    let Lookup::Paused(first) = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("paused");
     };
     assert_eq!(first.step, Duration::from_millis(400));
@@ -321,7 +337,11 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     );
 
     past(first).await;
-    let Lookup::Paused(again) = market.look_up_set(AppId(620), false).await.unwrap() else {
+    let Lookup::Paused(again) = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("paused");
     };
     assert_eq!(again.step, Duration::from_millis(800), "twice as long");
@@ -330,7 +350,10 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
 
     past(again).await;
     assert!(matches!(
-        market.look_up_set(AppId(620), false).await.unwrap(),
+        market
+            .look_up_set(AppId(620), CardKind::Normal)
+            .await
+            .unwrap(),
         Lookup::Found(_)
     ));
     assert_eq!(market.pause(), None, "over once a request gets through");
@@ -343,7 +366,10 @@ async fn without_a_sign_in_the_market_goes_unasked() {
     let site = MockServer::start().await;
     let market = signed_in(&steam, &site, "unasked");
 
-    let answer = market.look_up_set(AppId(620), false).await.unwrap();
+    let answer = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap();
 
     assert!(
         matches!(&answer, Lookup::Unanswered(why) if why.contains("TryAnotherCM")),
@@ -365,7 +391,7 @@ async fn a_pause_from_before_a_restart_is_kept() {
     market.resume(pause);
 
     assert!(matches!(
-        market.look_up_set(AppId(620), false).await.unwrap(),
+        market.look_up_set(AppId(620), CardKind::Normal).await.unwrap(),
         Lookup::Paused(p) if p.step == pause.step
     ));
     assert!(site.received_requests().await.unwrap().is_empty());
@@ -381,7 +407,10 @@ async fn a_server_error_is_asked_once_more_then_reported() {
         .await;
     let market = signed_in(&steam, &site, "server-error");
 
-    let answer = market.look_up_set(AppId(620), false).await.unwrap();
+    let answer = market
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap();
 
     assert_eq!(
         answer,

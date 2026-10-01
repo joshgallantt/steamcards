@@ -1,3 +1,4 @@
+use card::CardKind;
 use chrono::{DateTime, Utc};
 use steam_library::AppId;
 
@@ -7,7 +8,7 @@ use crate::{
 };
 
 /// A game's set of cards, priced: its normal cards and its foils, from one
-/// lookup at one time.
+/// lookup of each kind at one time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SetPrices {
     pub app_id: AppId,
@@ -34,11 +35,18 @@ impl SetPrices {
         }
     }
 
-    /// A card of the set by its name as the game's set lists it, normal or
-    /// foil.
-    pub fn card(&self, name: &str, foil: bool) -> Option<&PricedCard> {
-        let border = if foil { &self.foil } else { &self.normal };
-        border.iter().find(|c| c.name == name)
+    /// The set's cards of one kind, priced.
+    pub fn cards(&self, kind: CardKind) -> &[PricedCard] {
+        match kind {
+            CardKind::Normal => &self.normal,
+            CardKind::Foil => &self.foil,
+        }
+    }
+
+    /// A card of the set by its name as the game's set lists it, and its
+    /// kind.
+    pub fn card(&self, name: &str, kind: CardKind) -> Option<&PricedCard> {
+        self.cards(kind).iter().find(|c| c.name == name)
     }
 
     /// A card of the set by its market hash name.
@@ -49,9 +57,9 @@ impl SetPrices {
             .find(|c| c.market_hash_name == market_hash_name)
     }
 
-    /// What a card of the set sells for, by its name.
-    pub fn price(&self, name: &str, foil: bool) -> Price {
-        self.card(name, foil)
+    /// What a card of the set sells for, by its name and kind.
+    pub fn price(&self, name: &str, kind: CardKind) -> Price {
+        self.card(name, kind)
             .map_or_else(|| self.unlisted(), |c| c.price.clone())
     }
 
@@ -116,12 +124,19 @@ mod tests {
             retry_at: None,
         };
         assert_eq!(
-            portal.card("Intro", true).unwrap().market_hash_name,
+            portal
+                .card("Intro", CardKind::Foil)
+                .unwrap()
+                .market_hash_name,
             "620-Intro (Foil Trading Card)"
         );
         assert_eq!(portal.by_hash("620-Chell").unwrap().name, "Chell");
-        assert_eq!(portal.card("Chell", true), None);
-        assert_eq!(portal.price("Atlas", false), Price::NoMarket, "not listed");
+        assert_eq!(portal.card("Chell", CardKind::Foil), None);
+        assert_eq!(
+            portal.price("Atlas", CardKind::Normal),
+            Price::NoMarket,
+            "not listed"
+        );
         assert_eq!(portal.due_at(), noon() + TimeDelta::hours(6));
 
         let failed = SetPrices {
@@ -129,11 +144,11 @@ mod tests {
             ..portal
         };
         assert!(
-            matches!(failed.price("Chell", false), Price::Known(_)),
+            matches!(failed.price("Chell", CardKind::Normal), Price::Known(_)),
             "the prices from before"
         );
         assert_eq!(
-            failed.price("Atlas", false),
+            failed.price("Atlas", CardKind::Normal),
             Price::Failed {
                 retry_at: noon() + TimeDelta::hours(30)
             }

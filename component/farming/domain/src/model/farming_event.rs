@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use card::CardKind;
+
 use crate::Trouble;
 
 /// Something that happened while farming, with what's needed to tell it:
@@ -47,12 +49,12 @@ pub enum FarmingEvent {
     AskFailed { why: String },
     /// Steam didn't say which card dropped for a game: its card page tells.
     ByCardPage { game: String },
-    /// A card that dropped, named: and which copy of it this is, when
-    /// that's known.
+    /// A card that dropped, named, and of which kind: and which copy of it
+    /// this is, when that's known.
     Identified {
         game: String,
         card: String,
-        foil: bool,
+        kind: CardKind,
         copy: Option<u32>,
     },
     /// A card dropped that nothing could name.

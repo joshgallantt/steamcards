@@ -4,7 +4,7 @@
 
 mod support;
 
-use card::{AssetId, Card, CardAsset, CardError};
+use card::{AssetId, Card, CardAsset, CardError, CardKind};
 use steam_api::{EResult, test_support::HeldItem};
 use steam_library::AppId;
 use support::Player;
@@ -12,7 +12,7 @@ use support::Player;
 #[tokio::test]
 async fn a_games_cards_are_looked_at_on_its_own_page() {
     let player = Player::new("cards").await;
-    player.has_counter_strikes_card_page(false).await;
+    player.has_counter_strikes_card_page(CardKind::Normal).await;
 
     let cs = player.looks_at_cards(730).await.unwrap();
 
@@ -31,9 +31,10 @@ async fn a_games_cards_are_looked_at_on_its_own_page() {
 #[tokio::test]
 async fn a_games_foils_are_counted_on_a_page_of_their_own() {
     let player = Player::new("foils").await;
-    player.has_counter_strikes_card_page(true).await;
+    player.has_counter_strikes_card_page(CardKind::Foil).await;
 
     let foils = player.looks_at_foils(730).await.unwrap();
+    assert_eq!(foils.kind(), CardKind::Foil);
 
     let held: Vec<(&str, u32)> = foils
         .cards()
@@ -58,16 +59,16 @@ async fn new_items_are_told_apart_as_the_cards_they_are() {
         .await
         .unwrap();
 
-    let names: Vec<(AssetId, &str, bool)> = cards
+    let names: Vec<(AssetId, &str, CardKind)> = cards
         .iter()
-        .map(|c: &CardAsset| (c.asset_id, c.name.as_str(), c.foil))
+        .map(|c: &CardAsset| (c.asset_id, c.name.as_str(), c.kind))
         .collect();
     assert_eq!(
         names,
         [
-            (AssetId(31_001), "Madison", false),
-            (AssetId(31_002), "Madison", false),
-            (AssetId(31_003), "Scott", true),
+            (AssetId(31_001), "Madison", CardKind::Normal),
+            (AssetId(31_002), "Madison", CardKind::Normal),
+            (AssetId(31_003), "Scott", CardKind::Foil),
         ],
         "each copy on its own, and the emoticon left out"
     );

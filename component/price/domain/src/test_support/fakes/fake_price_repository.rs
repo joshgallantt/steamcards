@@ -8,6 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use card::CardKind;
 use chrono::{DateTime, TimeDelta, Utc};
 use steam_library::AppId;
 
@@ -17,9 +18,9 @@ use crate::{
     test_support::{SetLookup, listing, order_book, pounds, priced_card},
 };
 
-/// What a set lookup finds, by game and border: each card's name and list
+/// What a set lookup finds, by game and kind: each card's name and list
 /// price.
-type Listings = HashMap<(u32, bool), Vec<(String, i64)>>;
+type Listings = HashMap<(u32, CardKind), Vec<(String, i64)>>;
 
 /// The market in memory: the prices it lists, and the book, the wallet and
 /// the settings as a real one keeps them. Its lookups behave as Steam's
@@ -88,8 +89,8 @@ impl FakePriceRepository {
                 .collect()
         };
         let mut listed = self.listed.lock().unwrap();
-        listed.insert((app_id, false), own(normal));
-        listed.insert((app_id, true), own(foil));
+        listed.insert((app_id, CardKind::Normal), own(normal));
+        listed.insert((app_id, CardKind::Foil), own(foil));
     }
 
     /// A card's order book has these: a lowest listing and a best offer.
@@ -154,11 +155,11 @@ impl FakePriceRepository {
         self.set_lookups.lock().unwrap().clone()
     }
 
-    /// Just the games and borders of each set lookup.
-    pub fn looked_up(&self) -> Vec<(u32, bool)> {
+    /// Just the games and kinds of each set lookup.
+    pub fn looked_up(&self) -> Vec<(u32, CardKind)> {
         self.set_lookups()
             .into_iter()
-            .map(|l| (l.app_id, l.foil))
+            .map(|l| (l.app_id, l.kind))
             .collect()
     }
 
@@ -235,7 +236,7 @@ impl PriceRepository for FakePriceRepository {
     async fn look_up_set(
         &self,
         app_id: AppId,
-        foil: bool,
+        kind: CardKind,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
         let app_id = app_id.0;
         if let Some(why) = self.unreachable() {
@@ -247,7 +248,7 @@ impl PriceRepository for FakePriceRepository {
         let now = (self.clock)();
         self.set_lookups.lock().unwrap().push(SetLookup {
             app_id,
-            foil,
+            kind,
             at: now,
         });
         if self.failing.lock().unwrap().contains(&app_id) {
@@ -257,13 +258,13 @@ impl PriceRepository for FakePriceRepository {
             .listed
             .lock()
             .unwrap()
-            .get(&(app_id, foil))
+            .get(&(app_id, kind))
             .cloned()
             .unwrap_or_default();
         Ok(Lookup::Found(
             listed
                 .iter()
-                .map(|(name, ask)| priced_card(app_id, name, foil, listing(*ask, 50, now)))
+                .map(|(name, ask)| priced_card(app_id, name, kind, listing(*ask, 50, now)))
                 .collect(),
         ))
     }

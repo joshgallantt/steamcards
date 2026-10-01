@@ -1,19 +1,26 @@
-use crate::Card;
+use crate::{Card, CardKind};
 
-/// A game's set of trading cards, or its foils, and how many of each the
-/// account has, in the set's order. Empty while it isn't known: a set is
-/// read from the game's own card page.
+/// A game's set of trading cards of one kind, normal or foil, and how many
+/// of each the account has, in the set's order. Empty while it isn't known:
+/// the normal set is read from the game's card page, and its foils from
+/// their badge's own.
 ///
 /// It's a measure of its own beside the game's drops: the same card can drop
 /// twice, so 3 of 4 drops can be 2 of 5 cards and a spare.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CardSet {
+    kind: CardKind,
     cards: Vec<Card>,
 }
 
 impl CardSet {
-    pub fn new(cards: Vec<Card>) -> Self {
-        Self { cards }
+    pub fn new(kind: CardKind, cards: Vec<Card>) -> Self {
+        Self { kind, cards }
+    }
+
+    /// Which kind of card it's the set of: each makes a badge of its own.
+    pub fn kind(&self) -> CardKind {
+        self.kind
     }
 
     pub fn cards(&self) -> &[Card] {
@@ -83,11 +90,10 @@ mod tests {
         assert_eq!(portal.spares(), 0, "the set isn't known yet");
         assert_eq!(portal.missing().count(), 0, "nor what it's short of");
 
-        portal = CardSet::new(vec![
-            card("Atlas", 2),
-            card("P-Body", 0),
-            card("Wheatley", 1),
-        ]);
+        portal = CardSet::new(
+            CardKind::Normal,
+            vec![card("Atlas", 2), card("P-Body", 0), card("Wheatley", 1)],
+        );
         assert_eq!(portal.collected(), 2);
         assert!(portal.count_in("P-Body"));
         assert_eq!(portal.collected(), 3, "every card of the set");
@@ -97,13 +103,16 @@ mod tests {
     #[test]
     fn a_set_counts_its_spares_and_what_it_is_short_of() {
         // Heavy Rain: three drops so far, one of them a second Madison.
-        let heavy_rain = CardSet::new(vec![
-            card("Ethan", 0),
-            card("Carter", 0),
-            card("Madison", 2),
-            card("Norman", 0),
-            card("Scott", 1),
-        ]);
+        let heavy_rain = CardSet::new(
+            CardKind::Normal,
+            vec![
+                card("Ethan", 0),
+                card("Carter", 0),
+                card("Madison", 2),
+                card("Norman", 0),
+                card("Scott", 1),
+            ],
+        );
 
         assert_eq!(
             (heavy_rain.collected(), heavy_rain.len()),

@@ -7,6 +7,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use card::CardKind;
 use chrono::{DateTime, TimeDelta, Utc};
 use money::{Currency, Money};
 use price::{
@@ -130,17 +131,17 @@ impl Player {
     }
 
     /// What the screen shows for a card of a game's set.
-    fn sees(&self, app_id: u32, name: &str, foil: bool) -> Price {
+    fn sees(&self, app_id: u32, name: &str, kind: CardKind) -> Price {
         self.prices
             .call()
             .sets
             .get(&AppId(app_id))
-            .map_or(Price::Pending, |set| set.price(name, foil))
+            .map_or(Price::Pending, |set| set.price(name, kind))
     }
 
     /// Just the lowest listing, in pence.
-    fn listed_at(&self, app_id: u32, name: &str, foil: bool) -> Option<i64> {
-        match self.sees(app_id, name, foil) {
+    fn listed_at(&self, app_id: u32, name: &str, kind: CardKind) -> Option<i64> {
+        match self.sees(app_id, name, kind) {
             Price::Known(quote) => quote.ask.map(|ask| ask.minor),
             _ => None,
         }
@@ -185,25 +186,34 @@ async fn the_farming_game_is_priced_first_then_the_others_in_order() {
     assert_eq!(
         player.market.looked_up(),
         [
-            (HEAVY_RAIN, false),
-            (HEAVY_RAIN, true),
-            (HADES, false),
-            (HADES, true),
-            (CELESTE, false),
-            (CELESTE, true),
+            (HEAVY_RAIN, CardKind::Normal),
+            (HEAVY_RAIN, CardKind::Foil),
+            (HADES, CardKind::Normal),
+            (HADES, CardKind::Foil),
+            (CELESTE, CardKind::Normal),
+            (CELESTE, CardKind::Foil),
         ],
         "each game's normal cards, then its foils"
     );
-    assert_eq!(player.listed_at(HEAVY_RAIN, "Madison", false), Some(5));
-    assert_eq!(player.listed_at(HEAVY_RAIN, "Madison", true), Some(60));
-    assert_eq!(player.listed_at(HADES, "Thanatos", true), Some(62));
     assert_eq!(
-        player.sees(HEAVY_RAIN, "Scott", true),
+        player.listed_at(HEAVY_RAIN, "Madison", CardKind::Normal),
+        Some(5)
+    );
+    assert_eq!(
+        player.listed_at(HEAVY_RAIN, "Madison", CardKind::Foil),
+        Some(60)
+    );
+    assert_eq!(
+        player.listed_at(HADES, "Thanatos", CardKind::Foil),
+        Some(62)
+    );
+    assert_eq!(
+        player.sees(HEAVY_RAIN, "Scott", CardKind::Foil),
         Price::NoMarket,
         "nobody is selling a foil Scott"
     );
     assert_eq!(
-        player.sees(620, "Chell", false),
+        player.sees(620, "Chell", CardKind::Normal),
         Price::Pending,
         "not shown"
     );
@@ -242,7 +252,7 @@ async fn a_game_that_starts_to_matter_is_priced_within_moments() {
 
     assert_eq!(
         player.market.looked_up()[2..],
-        [(HADES, false), (HADES, true)]
+        [(HADES, CardKind::Normal), (HADES, CardKind::Foil)]
     );
     assert_eq!(
         player.market.looked_up().len(),
@@ -282,7 +292,7 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
         .unwrap();
     assert_eq!(
         player.market.looked_up()[2..],
-        [(HEAVY_RAIN, false), (HEAVY_RAIN, true)]
+        [(HEAVY_RAIN, CardKind::Normal), (HEAVY_RAIN, CardKind::Foil)]
     );
     let set = &player.prices.call().sets[&AppId(HEAVY_RAIN)];
     assert_eq!(set.fetched_at, player.now(), "the new prices are shown");
@@ -329,7 +339,7 @@ async fn lookups_wait_while_steam_has_paused_them() {
     let lookups = player.market.set_lookups();
     assert_eq!(lookups.len(), 4);
     assert_eq!(lookups[0].at, after(start, 30 * MINUTE));
-    assert_eq!(player.listed_at(HADES, "Nyx", false), Some(9));
+    assert_eq!(player.listed_at(HADES, "Nyx", CardKind::Normal), Some(9));
 }
 
 #[tokio::test(start_paused = true)]
@@ -422,7 +432,7 @@ async fn a_lookup_whose_answer_cant_be_used_is_tried_again_a_day_later() {
         "{all:?}"
     );
     assert_eq!(
-        player.sees(HADES, "Nyx", false),
+        player.sees(HADES, "Nyx", CardKind::Normal),
         Price::Failed {
             retry_at: after(start, 24 * HOUR)
         },
@@ -481,12 +491,12 @@ async fn a_market_that_cant_be_asked_is_asked_again_soon_and_nothing_is_failed()
         player.market.set_lookups()[0],
         test_support::SetLookup {
             app_id: CELESTE,
-            foil: false,
+            kind: CardKind::Normal,
             at: after(start, 7 * MINUTE),
         },
         "the same game first, once the market could be asked"
     );
-    assert_eq!(player.listed_at(HADES, "Nyx", false), Some(9));
+    assert_eq!(player.listed_at(HADES, "Nyx", CardKind::Normal), Some(9));
 }
 
 #[tokio::test(start_paused = true)]
@@ -511,7 +521,7 @@ async fn prices_from_before_stay_while_the_market_cant_be_asked() {
     assert_eq!(refreshed, Err(PriceError::Unanswered));
     assert_eq!(offers, Err(PriceError::Unanswered));
     assert_eq!(
-        player.listed_at(CELESTE, "Badeline", false),
+        player.listed_at(CELESTE, "Badeline", CardKind::Normal),
         Some(6),
         "stale, and still shown"
     );
@@ -540,13 +550,16 @@ async fn prices_from_before_a_failed_lookup_are_still_shown() {
         .reads(|e| matches!(e, PriceEvent::Failed { .. }))
         .await;
 
-    assert_eq!(player.listed_at(CELESTE, "Badeline", false), Some(6));
-    let Price::Known(badeline) = player.sees(CELESTE, "Badeline", false) else {
+    assert_eq!(
+        player.listed_at(CELESTE, "Badeline", CardKind::Normal),
+        Some(6)
+    );
+    let Price::Known(badeline) = player.sees(CELESTE, "Badeline", CardKind::Normal) else {
         unreachable!("listed above");
     };
     assert!(badeline.is_stale(player.now()), "dim, with its age");
     assert_eq!(
-        player.sees(CELESTE, "Madeline", false),
+        player.sees(CELESTE, "Madeline", CardKind::Normal),
         Price::Failed {
             retry_at: after(start, 24 * HOUR)
         }
@@ -578,7 +591,7 @@ async fn best_offers_are_looked_up_once_for_each_card_held() {
     assert_eq!(book.offers["1145360-Zagreus"].price, Price::NoMarket);
     let madison = HeldCard {
         market_hash_name: Some("960910-Madison".into()),
-        ..HeldCard::named(AppId(HEAVY_RAIN), "Madison", false)
+        ..HeldCard::named(AppId(HEAVY_RAIN), "Madison", CardKind::Normal)
     };
     let sold_now = held_value(
         &[madison],

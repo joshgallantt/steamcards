@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use card::{AssetId, Card, CardAsset, CardRepository, CardSet, GameCards};
+use card::{AssetId, Card, CardAsset, CardKind, CardRepository, CardSet, GameCards};
 use session::NewItem;
 use steam_library::{AppId, CardDrops, Game, SteamLibrary, SteamLibraryRepository};
 use tokio::{sync::mpsc, time::Instant};
@@ -25,10 +25,10 @@ struct Farmed {
     needs_hours: f64,
     /// Played time since the last card dropped.
     since_drop: Duration,
-    /// The cards that drop next, in order, and whether each is a foil. Once
-    /// they've dropped, a card named after how many have.
-    next: VecDeque<(String, bool)>,
-    /// Its foils, and how many of each the account has: only its foil
+    /// The cards that drop next, in order, and of which kind. Once they've
+    /// dropped, a normal card named after how many have.
+    next: VecDeque<(String, CardKind)>,
+    /// Its set in foil, and how many of each the account has: only its foil
     /// badge's page shows them.
     foils: Vec<Card>,
 }
@@ -171,15 +171,18 @@ impl FakeSteamAccount {
     /// The next cards to drop for a game, in order: normal ones.
     pub fn will_drop(&self, app_id: u32, names: &[&str]) {
         if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
-            f.next
-                .extend(names.iter().map(|name| ((*name).to_owned(), false)));
+            f.next.extend(
+                names
+                    .iter()
+                    .map(|name| ((*name).to_owned(), CardKind::Normal)),
+            );
         }
     }
 
     /// The next card to drop for a game is a foil.
     pub fn will_drop_foil(&self, app_id: u32, name: &str) {
         if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
-            f.next.push_back((name.to_owned(), true));
+            f.next.push_back((name.to_owned(), CardKind::Foil));
         }
     }
 
@@ -402,10 +405,11 @@ fn drop_card(s: &mut State, app_id: AppId) {
     }
     f.game.drops.remaining -= 1;
     f.game.drops.received += 1;
-    let (name, foil) = f
+    let (name, kind) = f
         .next
         .pop_front()
-        .unwrap_or_else(|| (format!("Card {}", f.game.drops.received), false));
+        .unwrap_or_else(|| (format!("Card {}", f.game.drops.received), CardKind::Normal));
+    let foil = kind == CardKind::Foil;
     let set = if foil { &mut f.foils } else { &mut f.cards };
     match set.iter_mut().find(|c| c.name == name) {
         Some(card) => card.owned += 1,
@@ -427,7 +431,7 @@ fn drop_card(s: &mut State, app_id: AppId) {
         app_id,
         market_hash_name: format!("{app_id}-{market_name}"),
         name,
-        foil,
+        kind,
         marketable: true,
         tradable: true,
     });
@@ -467,12 +471,12 @@ impl CardRepository for FakeSteamAccount {
             .get(&app_id)
             .map(|f| GameCards {
                 game: f.game.clone(),
-                set: CardSet::new(f.cards.clone()),
+                set: CardSet::new(CardKind::Normal, f.cards.clone()),
             })
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
     }
 
-    /// A game's foil badge page: its foils, and how many of each.
+    /// A game's foil badge page: its set in foil, and how many of each.
     async fn foils(&self, app_id: AppId) -> anyhow::Result<CardSet> {
         self.settle();
         let s = self.state.lock().unwrap();
@@ -481,7 +485,7 @@ impl CardRepository for FakeSteamAccount {
         }
         s.games
             .get(&app_id)
-            .map(|f| CardSet::new(f.foils.clone()))
+            .map(|f| CardSet::new(CardKind::Foil, f.foils.clone()))
             .ok_or_else(|| anyhow::anyhow!("its card page has no card drops to read"))
     }
 

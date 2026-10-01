@@ -12,6 +12,7 @@
 
 use std::time::Duration;
 
+use card::CardKind;
 use chrono::{DateTime, Utc};
 use farming::Status;
 use preferences::Tier;
@@ -829,15 +830,16 @@ fn session_row(
     ];
     let room = card_w.saturating_sub(1);
     match &c.card {
-        CardName::Named { name, foil, copy } => {
-            let star = if *foil { "★ " } else { "" };
+        CardName::Named { name, kind, copy } => {
+            let foil = *kind == CardKind::Foil;
+            let star = if foil { "★ " } else { "" };
             let spare = match copy {
                 Some(n) if *n >= 2 => format!(", {}", ordinal(*n)),
                 _ => String::new(),
             };
             let name_room = room.saturating_sub(star.chars().count() + spare.chars().count());
             let mut cell = Vec::new();
-            if *foil {
+            if foil {
                 cell.push(Span::styled(star, theme::fg(theme::ACCENT)));
             }
             cell.push(Span::raw(shorten(name, name_room)));

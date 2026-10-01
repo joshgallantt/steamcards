@@ -15,7 +15,7 @@ use account::{
         SpyCheckSignInUseCase, SpySignOutUseCase, StubGetAccountUseCase, StubSignInUseCase,
     },
 };
-use card::{AssetId, Card, CardAsset, CardSet, CardSets};
+use card::{AssetId, Card, CardAsset, CardKind, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
 use preferences::{
@@ -96,16 +96,19 @@ fn sets() -> CardSets {
     let mut sets = CardSets::default();
     sets.update(
         AppId(620),
-        CardSet::new(vec![
-            card("Atlas", 2),
-            card("P-Body", 1),
-            card("Wheatley", 0),
-            card("GLaDOS", 0),
-            card("Chell", 1),
-            card("Space Core", 0),
-            card("Cave Johnson", 0),
-            card("Turret", 0),
-        ]),
+        CardSet::new(
+            CardKind::Normal,
+            vec![
+                card("Atlas", 2),
+                card("P-Body", 1),
+                card("Wheatley", 0),
+                card("GLaDOS", 0),
+                card("Chell", 1),
+                card("Space Core", 0),
+                card("Cave Johnson", 0),
+                card("Turret", 0),
+            ],
+        ),
     );
     sets
 }
@@ -160,14 +163,17 @@ fn prices() -> PriceBook {
     book
 }
 
-fn hades_card(asset_id: u64, name: &str, foil: bool) -> DropCard {
-    let border = if foil { " (Foil)" } else { "" };
+fn hades_card(asset_id: u64, name: &str, kind: CardKind) -> DropCard {
+    let border = match kind {
+        CardKind::Normal => "",
+        CardKind::Foil => " (Foil)",
+    };
     DropCard::Identified(CardAsset {
         asset_id: AssetId(asset_id),
         app_id: AppId(1_145_360),
         name: name.into(),
         market_hash_name: format!("1145360-{name}{border}"),
-        foil,
+        kind,
         marketable: true,
         tradable: true,
     })
@@ -188,19 +194,19 @@ fn session() -> Session {
             drop(
                 at(13, 2),
                 1_145_360,
-                hades_card(11, "Zagreus", false),
+                hades_card(11, "Zagreus", CardKind::Normal),
                 Some(1),
             ),
             drop(
                 at(13, 31),
                 1_145_360,
-                hades_card(12, "Zagreus", false),
+                hades_card(12, "Zagreus", CardKind::Normal),
                 Some(2),
             ),
             drop(
                 at(13, 58),
                 1_145_360,
-                hades_card(13, "Thanatos", true),
+                hades_card(13, "Thanatos", CardKind::Foil),
                 Some(1),
             ),
             drop(
@@ -208,7 +214,6 @@ fn session() -> Session {
                 620,
                 DropCard::NameOnly {
                     name: "Atlas".into(),
-                    foil: false,
                 },
                 Some(2),
             ),
@@ -832,13 +837,16 @@ fn showcase_sets() -> CardSets {
     let mut sets = CardSets::default();
     sets.update(
         AppId(960_910),
-        CardSet::new(vec![
-            card("Ethan", 0),
-            card("Carter", 0),
-            card("Madison", 2),
-            card("Norman", 0),
-            card("Scott", 1),
-        ]),
+        CardSet::new(
+            CardKind::Normal,
+            vec![
+                card("Ethan", 0),
+                card("Carter", 0),
+                card("Madison", 2),
+                card("Norman", 0),
+                card("Scott", 1),
+            ],
+        ),
     );
     sets
 }
@@ -892,10 +900,7 @@ fn showcase_prices() -> PriceBook {
 }
 
 fn showcase_session() -> Session {
-    let named = |name: &str| DropCard::NameOnly {
-        name: name.into(),
-        foil: false,
-    };
+    let named = |name: &str| DropCard::NameOnly { name: name.into() };
     let drop = |(h, m): (u32, u32), app_id: u32, card: DropCard, copy: Option<u32>| Drop {
         at: at(h, m),
         app_id: AppId(app_id),
@@ -920,22 +925,27 @@ fn showcase_session() -> Session {
             drop(
                 (10, 54),
                 1_145_360,
-                hades_card(21, "Zagreus", false),
+                hades_card(21, "Zagreus", CardKind::Normal),
                 Some(1),
             ),
             drop(
                 (11, 26),
                 1_145_360,
-                hades_card(22, "Zagreus", false),
+                hades_card(22, "Zagreus", CardKind::Normal),
                 Some(2),
             ),
             drop(
                 (11, 58),
                 1_145_360,
-                hades_card(23, "Thanatos", true),
+                hades_card(23, "Thanatos", CardKind::Foil),
                 Some(1),
             ),
-            drop((12, 31), 1_145_360, hades_card(24, "Nyx", false), Some(1)),
+            drop(
+                (12, 31),
+                1_145_360,
+                hades_card(24, "Nyx", CardKind::Normal),
+                Some(1),
+            ),
             drop((12, 49), 504_230, named("Madeline"), Some(1)),
             drop((13, 12), 504_230, named("Badeline"), Some(1)),
             drop((13, 24), 557_600, named("The Boy"), Some(1)),

@@ -19,6 +19,7 @@ debug-log.workspace = true
 steam-api.workspace = true
 
 [dev-dependencies]
+card.workspace = true
 steam-library.workspace = true
 money.workspace = true
 serde_json.workspace = true

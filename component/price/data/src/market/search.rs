@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail};
+use card::CardKind;
 use serde::Deserialize;
 use steam_api::inventory::{STEAM_APP, card_name};
 
@@ -26,16 +27,20 @@ pub(crate) struct Listed {
     pub(crate) item_type: String,
 }
 
-/// `search/render` for a page of a game's cards: normal ones, or foils, 10
-/// to a page from `start`, by name. Exactly as research §1.1 has it.
-pub(crate) fn search_path(app_id: u32, foil: bool, start: u32) -> String {
+/// `search/render` for a page of a game's cards of one kind, 10 to a page
+/// from `start`, by name. Exactly as research §1.1 has it: Steam tags a
+/// normal card's border 0, and a foil's 1.
+pub(crate) fn search_path(app_id: u32, kind: CardKind, start: u32) -> String {
+    let border = match kind {
+        CardKind::Normal => 0,
+        CardKind::Foil => 1,
+    };
     format!(
         "/market/search/render/?norender=1&appid={STEAM_APP}\
          &category_{STEAM_APP}_Game%5B%5D=tag_app_{app_id}\
          &category_{STEAM_APP}_item_class%5B%5D=tag_item_class_2\
-         &category_{STEAM_APP}_cardborder%5B%5D=tag_cardborder_{}\
-         &sort_column=name&sort_dir=asc&start={start}",
-        u8::from(foil)
+         &category_{STEAM_APP}_cardborder%5B%5D=tag_cardborder_{border}\
+         &sort_column=name&sort_dir=asc&start={start}"
     )
 }
 
@@ -114,7 +119,7 @@ mod tests {
     #[test]
     fn a_sets_cards_are_asked_for_as_steams_own_pages_ask() {
         assert_eq!(
-            search_path(620, false, 0),
+            search_path(620, CardKind::Normal, 0),
             "/market/search/render/?norender=1&appid=753\
              &category_753_Game%5B%5D=tag_app_620\
              &category_753_item_class%5B%5D=tag_item_class_2\
@@ -122,7 +127,7 @@ mod tests {
              &sort_column=name&sort_dir=asc&start=0"
         );
         assert!(
-            search_path(220, true, 10)
+            search_path(220, CardKind::Foil, 10)
                 .ends_with("tag_cardborder_1&sort_column=name&sort_dir=asc&start=10")
         );
     }

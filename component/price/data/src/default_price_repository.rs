@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use card::CardKind;
 use chrono::{DateTime, TimeDelta, Utc};
 use debug_log::DebugLog;
 use price::{
@@ -88,9 +89,9 @@ impl PriceRepository for DefaultPriceRepository {
     async fn look_up_set(
         &self,
         app_id: AppId,
-        foil: bool,
+        kind: CardKind,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>> {
-        let answer = self.client.look_up_set(app_id, foil).await;
+        let answer = self.client.look_up_set(app_id, kind).await;
         self.keep_pause();
         answer
     }

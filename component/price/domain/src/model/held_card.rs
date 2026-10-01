@@ -1,4 +1,4 @@
-use card::CardAsset;
+use card::{CardAsset, CardKind};
 use steam_library::AppId;
 
 /// A card the account holds, as far as its value goes: a copy that dropped,
@@ -9,21 +9,20 @@ pub struct HeldCard {
     pub app_id: AppId,
     /// Its name as the game's set lists it.
     pub name: String,
-    pub foil: bool,
+    pub kind: CardKind,
     /// Its exact name on the market, when its copy was described.
     pub market_hash_name: Option<String>,
     pub marketable: bool,
 }
 
 impl HeldCard {
-    /// A card known only by its name and whether it's a foil: from its
-    /// game's card page, when its copy couldn't be described. Its price is
-    /// its set's, by name.
-    pub fn named(app_id: AppId, name: &str, foil: bool) -> Self {
+    /// A card known only by its name and kind: from its game's card page,
+    /// when its copy couldn't be described. Its price is its set's, by name.
+    pub fn named(app_id: AppId, name: &str, kind: CardKind) -> Self {
         Self {
             app_id,
             name: name.to_owned(),
-            foil,
+            kind,
             market_hash_name: None,
             marketable: true,
         }
@@ -35,7 +34,7 @@ impl From<&CardAsset> for HeldCard {
         Self {
             app_id: asset.app_id,
             name: asset.name.clone(),
-            foil: asset.foil,
+            kind: asset.kind,
             market_hash_name: Some(asset.market_hash_name.clone()),
             marketable: asset.marketable,
         }
@@ -56,7 +55,7 @@ mod tests {
             app_id: AppId(960_910),
             name: "Madison".into(),
             market_hash_name: "960910-Madison".into(),
-            foil: false,
+            kind: CardKind::Normal,
             marketable: true,
             tradable: true,
         };
@@ -65,7 +64,7 @@ mod tests {
             HeldCard {
                 app_id: AppId(960_910),
                 name: "Madison".into(),
-                foil: false,
+                kind: CardKind::Normal,
                 market_hash_name: Some("960910-Madison".into()),
                 marketable: true,
             }

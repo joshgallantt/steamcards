@@ -5,6 +5,7 @@
 
 mod support;
 
+use card::CardKind;
 use money::{Currency, Money};
 use price::{Basis, Price, PriceError, PriceEvent};
 use steam_library::AppId;
@@ -97,12 +98,15 @@ async fn a_sets_prices_are_shown_once_looked_up_and_kept() {
     assert!(matches!(event, PriceEvent::AllPriced { games: 1, .. }));
     let pence = |pence| Some(Money::new(pence, Currency::GBP));
     let heavy_rain = &player.sees().sets[&AppId(960_910)];
-    assert_eq!(ask(&heavy_rain.price("Madison", false)), pence(5));
-    assert_eq!(ask(&heavy_rain.price("Madison", true)), pence(60));
+    assert_eq!(
+        ask(&heavy_rain.price("Madison", CardKind::Normal)),
+        pence(5)
+    );
+    assert_eq!(ask(&heavy_rain.price("Madison", CardKind::Foil)), pence(60));
 
     let player = player.comes_back();
     assert_eq!(
-        ask(&player.sees().sets[&AppId(960_910)].price("Madison", false)),
+        ask(&player.sees().sets[&AppId(960_910)].price("Madison", CardKind::Normal)),
         pence(5),
         "kept when steamcards starts again"
     );

@@ -882,7 +882,7 @@ fn which_cards(told: &[usize], kept: &KeptSession) -> Vec<FarmingEvent> {
     let mut by_page = Vec::new();
     for drop in told.iter().filter_map(|&i| kept.session.drops.get(i)) {
         let game = kept.name(drop.app_id);
-        let Some(card) = drop.card.name() else {
+        let (Some(card), Some(kind)) = (drop.card.name(), drop.card.kind()) else {
             events.push(FarmingEvent::Untold { game });
             continue;
         };
@@ -893,7 +893,7 @@ fn which_cards(told: &[usize], kept: &KeptSession) -> Vec<FarmingEvent> {
         events.push(FarmingEvent::Identified {
             game,
             card: card.to_owned(),
-            foil: drop.card.is_foil(),
+            kind,
             copy: drop.copy,
         });
     }

@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use card::{CardAsset, CardSet, CardSets, GameCards};
+use card::{CardAsset, CardKind, CardSet, CardSets, GameCards};
 use chrono::{DateTime, Utc};
 use steam_library::{AppId, Game, SteamLibrary};
 
@@ -332,11 +332,14 @@ impl KeptSession {
             let shown = match &mut up {
                 // A normal card's count went up for it; a foil takes a drop
                 // the counts leave over.
-                Some(up) if card.foil => unnamed.len() > total(up),
+                Some(up) if card.kind == CardKind::Foil => unnamed.len() > total(up),
                 Some(up) => take_one(up, &card.name),
                 // Without the set before, the page can only say a normal
                 // card is held at all.
-                None => card.foil || f.after.as_ref().is_none_or(|a| a.owned(&card.name) > 0),
+                None => {
+                    card.kind == CardKind::Foil
+                        || f.after.as_ref().is_none_or(|a| a.owned(&card.name) > 0)
+                }
             };
             if shown {
                 self.session.drops[at].card = DropCard::Identified(card.clone());
@@ -356,7 +359,6 @@ impl KeptSession {
                 for (i, name) in unnamed.into_iter().zip(names) {
                     self.session.drops[i].card = DropCard::NameOnly {
                         name: name.to_owned(),
-                        foil: false,
                     };
                 }
             }
@@ -402,12 +404,12 @@ impl KeptSession {
     }
 
     /// Names a drop only its card page could name by the item Steam
-    /// described for it since: the same card, now with its copy's item.
+    /// described for it since: the same card, now with its copy's item. The
+    /// page counts normal cards only, so a foil was never named by it.
     fn name_earlier(&mut self, cards: &[&CardAsset], told: &[usize]) {
-        for &card in cards {
+        for &card in cards.iter().filter(|c| c.kind == CardKind::Normal) {
             let page_named = DropCard::NameOnly {
                 name: card.name.clone(),
-                foil: card.foil,
             };
             let earlier = self.session.drops.iter_mut().enumerate().find(|(i, d)| {
                 !told.contains(i) && d.app_id == card.app_id && d.card == page_named
@@ -558,13 +560,13 @@ mod tests {
         }
     }
 
-    fn asset(asset_id: u64, app_id: AppId, name: &str, foil: bool) -> CardAsset {
+    fn asset(asset_id: u64, app_id: AppId, name: &str, kind: CardKind) -> CardAsset {
         CardAsset {
             asset_id: AssetId(asset_id),
             app_id,
             name: name.into(),
             market_hash_name: format!("{app_id}-{name}"),
-            foil,
+            kind,
             marketable: true,
             tradable: true,
         }
@@ -572,13 +574,16 @@ mod tests {
 
     /// Heavy Rain's set: how many of each card the account has.
     fn heavy_rain_with(ethan: u32, madison: u32, norman: u32, scott: u32) -> CardSet {
-        CardSet::new(vec![
-            card("Ethan", ethan),
-            card("Carter", 0),
-            card("Madison", madison),
-            card("Norman", norman),
-            card("Scott", scott),
-        ])
+        CardSet::new(
+            CardKind::Normal,
+            vec![
+                card("Ethan", ethan),
+                card("Carter", 0),
+                card("Madison", madison),
+                card("Norman", norman),
+                card("Scott", scott),
+            ],
+        )
     }
 
     fn heavy_rain(madison: u32, scott: u32) -> CardSet {
@@ -644,7 +649,7 @@ mod tests {
     fn a_card_steam_describes_is_that_card() {
         let mut kept = farming(3, heavy_rain(1, 1));
         let found = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
-        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", CardKind::Normal);
 
         let told = kept.identify(&[found], slice::from_ref(&madison));
 
@@ -663,8 +668,8 @@ mod tests {
     fn two_copies_in_one_look_are_numbered_in_turn() {
         let mut kept = farming(3, heavy_rain(1, 0));
         let found = looks(&mut kept, 1, heavy_rain(3, 0)).expect("drops");
-        let first = asset(31_002, HEAVY_RAIN, "Madison", false);
-        let second = asset(31_003, HEAVY_RAIN, "Madison", false);
+        let first = asset(31_002, HEAVY_RAIN, "Madison", CardKind::Normal);
+        let second = asset(31_003, HEAVY_RAIN, "Madison", CardKind::Normal);
 
         let told = kept.identify(&[found], &[first, second]);
 
@@ -682,7 +687,7 @@ mod tests {
         // Steam described Scott, and Madison's count went up too.
         let mut kept = farming(3, heavy_rain(1, 0));
         let found = looks(&mut kept, 1, heavy_rain(2, 1)).expect("drops");
-        let scott = asset(31_004, HEAVY_RAIN, "Scott", false);
+        let scott = asset(31_004, HEAVY_RAIN, "Scott", CardKind::Normal);
 
         let told = kept.identify(&[found], slice::from_ref(&scott));
 
@@ -693,8 +698,7 @@ mod tests {
         assert_eq!(
             kept.session.drops[told[1]].card,
             DropCard::NameOnly {
-                name: "Madison".into(),
-                foil: false
+                name: "Madison".into()
             },
             "not Scott again: its count went up for the copy Steam described"
         );
@@ -708,7 +712,10 @@ mod tests {
         let mut kept = farming(3, heavy_rain(1, 1));
         let found = looks(&mut kept, 2, heavy_rain_with(1, 1, 0, 1)).expect("a drop");
 
-        let told = kept.identify(&[found], &[asset(31_004, HEAVY_RAIN, "Scott", false)]);
+        let told = kept.identify(
+            &[found],
+            &[asset(31_004, HEAVY_RAIN, "Scott", CardKind::Normal)],
+        );
 
         assert_eq!(
             named(&kept, &told),
@@ -720,7 +727,7 @@ mod tests {
     #[test]
     fn a_foil_takes_a_drop_the_counts_leave_over() {
         let mut kept = farming(3, heavy_rain(1, 1));
-        let foil = asset(31_005, HEAVY_RAIN, "Madison", true);
+        let foil = asset(31_005, HEAVY_RAIN, "Madison", CardKind::Foil);
 
         let one_normal = looks(&mut kept, 2, heavy_rain(2, 1)).expect("a drop");
         let told = kept.identify(&[one_normal], slice::from_ref(&foil));
@@ -799,7 +806,7 @@ mod tests {
         kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), every, at());
         let mut found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
         found[0].join(kept.update(page(HEAVY_RAIN, 2, heavy_rain(2, 1)), at()));
-        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", CardKind::Normal);
 
         let told = kept.identify(&found, slice::from_ref(&madison));
 
@@ -820,7 +827,7 @@ mod tests {
         let mut kept = KeptSession::new(at());
         kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 3)]), every, at());
         let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
-        let madison = asset(31_002, HEAVY_RAIN, "Madison", false);
+        let madison = asset(31_002, HEAVY_RAIN, "Madison", CardKind::Normal);
 
         let told = kept.identify(&found, slice::from_ref(&madison));
 
@@ -834,13 +841,17 @@ mod tests {
 
     #[test]
     fn foils_are_numbered_by_their_badge() {
-        let thanatos = |id| asset(id, HEAVY_RAIN, "Thanatos", true);
+        let thanatos = |id| asset(id, HEAVY_RAIN, "Thanatos", CardKind::Foil);
         let mut kept = farming(3, heavy_rain(1, 1));
         let found = looks(&mut kept, 1, heavy_rain(1, 1)).expect("drops");
         let told = kept.identify(&[found], &[thanatos(2), thanatos(3)]);
         assert_eq!(kept.foil_games(&told), [HEAVY_RAIN]);
 
-        kept.number_foils(HEAVY_RAIN, &told, &CardSet::new(vec![card("Thanatos", 4)]));
+        kept.number_foils(
+            HEAVY_RAIN,
+            &told,
+            &CardSet::new(CardKind::Foil, vec![card("Thanatos", 4)]),
+        );
 
         assert_eq!(
             named(&kept, &told),
@@ -857,7 +868,7 @@ mod tests {
         let mut kept = farming(3, heavy_rain(1, 0));
         let found = looks(&mut kept, 2, heavy_rain(1, 1)).expect("a drop");
 
-        let told = kept.identify(&[found], &[asset(9, AppId(2), "Madison", false)]);
+        let told = kept.identify(&[found], &[asset(9, AppId(2), "Madison", CardKind::Normal)]);
 
         assert_eq!(named(&kept, &told), [(some("Scott"), false, Some(1))]);
     }
@@ -866,7 +877,7 @@ mod tests {
     fn a_drop_no_look_saw_is_counted_into_the_set() {
         let mut kept = farming(3, heavy_rain(1, 0));
         let found = kept.take(SteamLibrary::new(vec![game(HEAVY_RAIN, 2)]), every, at());
-        let told = kept.identify(&found, &[asset(9, HEAVY_RAIN, "Madison", false)]);
+        let told = kept.identify(&found, &[asset(9, HEAVY_RAIN, "Madison", CardKind::Normal)]);
         assert_eq!(named(&kept, &told), [(some("Madison"), false, Some(2))]);
 
         let found = looks(&mut kept, 1, heavy_rain(3, 0)).expect("a drop");
@@ -910,18 +921,17 @@ mod tests {
     fn an_item_described_late_names_the_drop_the_page_named() {
         let mut kept = farming(3, heavy_rain(1, 1));
         let found = looks(&mut kept, 1, heavy_rain(2, 2)).expect("drops");
-        let madison = asset(30_001, HEAVY_RAIN, "Madison", false);
+        let madison = asset(30_001, HEAVY_RAIN, "Madison", CardKind::Normal);
         let first = kept.identify(&[found], slice::from_ref(&madison));
         assert_eq!(
             kept.session.drops[first[1]].card,
             DropCard::NameOnly {
-                name: "Scott".into(),
-                foil: false
+                name: "Scott".into()
             }
         );
 
-        let scott = asset(30_002, HEAVY_RAIN, "Scott", false);
-        let ethan = asset(30_003, HEAVY_RAIN, "Ethan", false);
+        let scott = asset(30_002, HEAVY_RAIN, "Scott", CardKind::Normal);
+        let ethan = asset(30_003, HEAVY_RAIN, "Ethan", CardKind::Normal);
         let found = looks(&mut kept, 0, heavy_rain_with(1, 2, 0, 2)).expect("a drop");
         let told = kept.identify(&[found], &[scott.clone(), ethan.clone()]);
 

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use card::CardKind;
 use chrono::{DateTime, Utc};
 use money::Money;
 use price::{
@@ -100,8 +101,8 @@ fn held_cards(session: &Session) -> (Vec<HeldCard>, u32) {
     for drop in &session.drops {
         match &drop.card {
             DropCard::Identified(asset) => cards.push(HeldCard::from(asset)),
-            DropCard::NameOnly { name, foil } => {
-                cards.push(HeldCard::named(drop.app_id, name, *foil));
+            DropCard::NameOnly { name } => {
+                cards.push(HeldCard::named(drop.app_id, name, CardKind::Normal));
             }
             DropCard::Identifying | DropCard::Unknown => unknown += 1,
         }
@@ -137,7 +138,7 @@ pub enum CardName {
     /// spare, a card already had.
     Named {
         name: String,
-        foil: bool,
+        kind: CardKind,
         copy: Option<u32>,
     },
     /// Still being found out: a moment after it dropped.
@@ -172,8 +173,8 @@ pub fn session_cards(
                 .map_or_else(|| format!("App {}", drop.app_id), |g| g.name.clone());
             let held = match &drop.card {
                 DropCard::Identified(asset) => Some(HeldCard::from(asset)),
-                DropCard::NameOnly { name, foil } => {
-                    Some(HeldCard::named(drop.app_id, name, *foil))
+                DropCard::NameOnly { name } => {
+                    Some(HeldCard::named(drop.app_id, name, CardKind::Normal))
                 }
                 DropCard::Identifying | DropCard::Unknown => None,
             };
@@ -181,7 +182,7 @@ pub fn session_cards(
                 (DropCard::Identifying, _) => CardName::Finding,
                 (_, Some(h)) => CardName::Named {
                     name: h.name.clone(),
-                    foil: h.foil,
+                    kind: h.kind,
                     copy: drop.copy,
                 },
                 (_, None) => CardName::Unknown,
@@ -237,7 +238,7 @@ pub fn card_price(
     let (Some(set), Some(wallet)) = (book.sets.get(&app_id), wallet) else {
         return CardPrice::Waiting;
     };
-    CardPrice::of(&set.price(name, false), wallet)
+    CardPrice::of(&set.price(name, CardKind::Normal), wallet)
 }
 
 /// The games to price, most urgent first: those playing now, then those
@@ -346,7 +347,7 @@ mod tests {
             app_id: AppId(960_910),
             name: "Madison".into(),
             market_hash_name: "960910-Madison".into(),
-            foil: false,
+            kind: CardKind::Normal,
             marketable: true,
             tradable: true,
         }
@@ -467,7 +468,7 @@ mod tests {
             cards[1].card,
             CardName::Named {
                 name: "Madison".into(),
-                foil: false,
+                kind: CardKind::Normal,
                 copy: Some(2)
             }
         );

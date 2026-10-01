@@ -859,6 +859,7 @@ dependencies = [
 name = "farming-words"
 version = "0.1.0"
 dependencies = [
+ "card",
  "chrono",
  "farming",
  "steam-library",
@@ -2164,6 +2165,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "card",
  "chrono",
  "config-file",
  "debug-log",
@@ -2184,6 +2186,7 @@ dependencies = [
 name = "price-di"
 version = "0.1.0"
 dependencies = [
+ "card",
  "config-file",
  "debug-log",
  "money",

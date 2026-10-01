@@ -57,14 +57,17 @@ The domain starts from its entities:
 - **`Card`**, in `card`: a card in a game's set, and how many the account
   has. The same card can drop more than once, so that's a count, and copies
   beyond one are spares.
-- **`CardSet`**: a game's set, or its foils, with how many of each card the
+- **`CardKind`**: every card comes in two kinds, `Normal` and `Foil`, a
+  rarer copy with a shiny border. Steam calls it the card's border; each
+  kind makes a badge of its own, and is an item of its own on the market.
+- **`CardSet`**: a game's set of one kind, with how many of each card the
   account has: what a badge needs. It's a measure of its own beside the
   game's drops, and neither stands in for the other: 3 of 4 drops can be 2
   of 5 cards and a spare. **`CardSets`** holds the sets looked at, by game;
   **`GameCards`** is one look at a game's card page, the game and its set.
 - **`CardAsset`**: one copy of a card the account holds, by its **`AssetId`**:
-  the game whose set it's from, its name, its market hash name, and whether
-  it's a foil, marketable and tradable. Each copy that drops is its own. It
+  the game whose set it's from, its name, its market hash name, its kind,
+  and whether it's marketable and tradable. Each copy that drops is its own. It
   says which card dropped, and is what selling one takes.
 - **`Account`**, in `account`: the one Steam account, and whether Steam still
   takes its sign-in. One account only, by design.
@@ -88,14 +91,14 @@ The domain starts from its entities:
   with Valve's fee rules (`buyer_pays`, `seller_gets`) in whole numbers.
 - **`Price`** and **`PriceQuote`**: what's known of a card's price (pending,
   known, no market, not marketable, failed), and what the market said, when.
-  A game's **`SetPrices`** hold its normal cards and foils as the market
-  lists them; the **`PriceBook`** holds every set, and each card's best
+  A game's **`SetPrices`** hold its cards of each kind as the market lists
+  them; the **`PriceBook`** holds every set, and each card's best
   offers looked up.
 - **`Basis`** (list, net or instant) in **`PriceSettings`**, the price
   component's own settings; **`MarketPause`**, Steam's pause on price lookups, which outlasts
   a restart.
 - **`HeldCard`**: a card held, as far as its value goes: from a `CardAsset`,
-  or just a name and a border. **`Held`** is what cards held are worth, at
+  or just a name and a kind. **`Held`** is what cards held are worth, at
   least; **`Estimate`**, what cards still to drop are likely worth.
 
 Steam's IDs are types of their own, `AppId` in `steam-library` and `AssetId` in
@@ -178,7 +181,7 @@ state.
 | | `SignOutUseCase` | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
 | game | `ReadLibraryUseCase` | The whole library, games with drops left first. Errs with `SteamLibraryError`. |
 | card | `LookAtCardsUseCase` | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
-| | `LookAtFoilsUseCase` | One game's foils afresh, from its foil badge: how many of each the account has. |
+| | `LookAtFoilsUseCase` | One game's set in foil afresh, from its foil badge: how many of each the account has. Read only when a foil drops, rather than ask Steam twice at every look. |
 | | `IdentifyCardsUseCase` | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
 | preferences | `GetPreferencesUseCase` | The current preferences. |
 | | `SetGameTierUseCase` | Moves a game between priority (at a rank), indifferent and skip. |
@@ -460,7 +463,7 @@ graph TD
     APP --> TUI & HL & ADI & LDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
     TUI --> FW & ACC & LIB & CARD & SES & PREF & FARM & PRICE & MON
     HL --> FW & ACC & FARM
-    FW --> FARM & LIB
+    FW --> FARM & LIB & CARD
     ADI --> AD
     LDI --> LD
     CDI --> CD

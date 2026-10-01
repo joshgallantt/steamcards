@@ -8,7 +8,8 @@
 use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
 use card::{
-    AssetId, DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
+    AssetId, CardKind, DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase,
+    DefaultLookAtFoilsUseCase,
 };
 use farming::{
     DefaultFarmCardsUseCase, FarmCardsUseCase,
@@ -191,20 +192,20 @@ fn looked(e: &FarmingEvent) -> bool {
 
 /// `card` named as it dropped for `game`: the `copy`th of it held.
 fn named(card: &str, game: &str, copy: u32) -> FarmingEvent {
-    told(card, false, game, copy)
+    told(card, CardKind::Normal, game, copy)
 }
 
 /// A foil `card` named as it dropped for `game`: the `copy`th foil of it
 /// held.
 fn named_foil(card: &str, game: &str, copy: u32) -> FarmingEvent {
-    told(card, true, game, copy)
+    told(card, CardKind::Foil, game, copy)
 }
 
-fn told(card: &str, foil: bool, game: &str, copy: u32) -> FarmingEvent {
+fn told(card: &str, kind: CardKind, game: &str, copy: u32) -> FarmingEvent {
     Identified {
         game: game.into(),
         card: card.into(),
-        foil,
+        kind,
         copy: Some(copy),
     }
 }
@@ -339,8 +340,7 @@ async fn when_steam_gives_only_a_count_the_card_page_names_the_card() {
     assert_eq!(
         drops[0].card,
         DropCard::NameOnly {
-            name: "Madison".into(),
-            foil: false
+            name: "Madison".into()
         }
     );
     assert!(player.steam.describes().is_empty(), "no item to ask about");

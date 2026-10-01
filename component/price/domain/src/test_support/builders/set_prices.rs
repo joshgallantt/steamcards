@@ -1,3 +1,4 @@
+use card::CardKind;
 use chrono::{DateTime, Utc};
 use steam_library::AppId;
 
@@ -14,16 +15,16 @@ pub fn set_prices(
     foil: &[(&str, i64)],
     at: DateTime<Utc>,
 ) -> SetPrices {
-    let cards = |cards: &[(&str, i64)], foil: bool| {
+    let cards = |cards: &[(&str, i64)], kind: CardKind| {
         cards
             .iter()
-            .map(|&(name, ask)| priced_card(app_id, name, foil, listing(ask, 50, at)))
+            .map(|&(name, ask)| priced_card(app_id, name, kind, listing(ask, 50, at)))
             .collect()
     };
     SetPrices {
         app_id: AppId(app_id),
-        normal: cards(normal, false),
-        foil: cards(foil, true),
+        normal: cards(normal, CardKind::Normal),
+        foil: cards(foil, CardKind::Foil),
         fetched_at: at,
         retry_at: None,
     }

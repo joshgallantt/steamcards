@@ -12,10 +12,11 @@ pub trait LookAtCardsUseCase: Send + Sync {
     fn call(&self, app_id: AppId) -> JoinHandle<Result<GameCards, CardError>>;
 }
 
-/// Looks at one game's foils afresh, in the background: each foil card of
-/// its set, and how many the account has. The set a game's card page shows
-/// counts normal cards only, so this is what says which copy of a foil one
-/// that drops is.
+/// Looks at one game's set in foil afresh, in the background: each card of
+/// it, and how many foils of it the account has. The set a game's card page
+/// shows is the normal one, so this is what says which copy of a foil one
+/// that drops is. A page of its own: farming reads it only when a foil
+/// drops, rather than ask Steam twice at every look.
 pub trait LookAtFoilsUseCase: Send + Sync {
     fn call(&self, app_id: AppId) -> JoinHandle<Result<CardSet, CardError>>;
 }
