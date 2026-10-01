@@ -11,5 +11,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Whether the computer is held awake, for other crates' tests. Never on in
+# the binary.
+test-support = []
+
 [dependencies]
 debug-log.workspace = true

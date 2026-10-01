@@ -93,6 +93,7 @@ impl SteamClient {
 
     /// The same, asking Steam about items again after `after` in place of 2
     /// seconds: for tests that can't wait.
+    #[cfg(feature = "test-support")]
     pub fn with_ask_again_after(mut self, after: Duration) -> Self {
         self.ask_again_after = after;
         self
@@ -101,6 +102,7 @@ impl SteamClient {
     /// The same, waiting for Steam's answers at sign-on (whether another
     /// device is playing, and what's new) only `within`, in place of 10
     /// seconds: for tests that can't wait.
+    #[cfg(feature = "test-support")]
     pub fn with_sign_on_answer_within(mut self, within: Duration) -> Self {
         self.answer_within = within;
         self

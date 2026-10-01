@@ -830,13 +830,10 @@ fn session_row(
     ];
     let room = card_w.saturating_sub(1);
     match &c.card {
-        CardName::Named { name, kind, copy } => {
+        CardName::Named { name, kind, spare } => {
             let foil = *kind == CardKind::Foil;
             let star = if foil { "★ " } else { "" };
-            let spare = match copy {
-                Some(n) if *n >= 2 => format!(", {}", ordinal(*n)),
-                _ => String::new(),
-            };
+            let spare = spare.map_or_else(String::new, |n| format!(", {}", ordinal(n)));
             let name_room = room.saturating_sub(star.chars().count() + spare.chars().count());
             let mut cell = Vec::new();
             if foil {

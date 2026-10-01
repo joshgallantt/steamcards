@@ -134,12 +134,12 @@ impl CardPrice {
 /// Which card dropped, as far as it's known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CardName {
-    /// `copy` is which copy of it the account then held: 2 or more is a
-    /// spare, a card already had.
+    /// `spare` is which copy of it the account then held, when the session
+    /// says it's a spare: a card already had.
     Named {
         name: String,
         kind: CardKind,
-        copy: Option<u32>,
+        spare: Option<u32>,
     },
     /// Still being found out: a moment after it dropped.
     Finding,
@@ -183,7 +183,7 @@ pub fn session_cards(
                 (_, Some(h)) => CardName::Named {
                     name: h.name.clone(),
                     kind: h.kind,
-                    copy: drop.copy,
+                    spare: drop.copy.filter(|_| drop.is_spare()),
                 },
                 (_, None) => CardName::Unknown,
             };
@@ -469,7 +469,7 @@ mod tests {
             CardName::Named {
                 name: "Madison".into(),
                 kind: CardKind::Normal,
-                copy: Some(2)
+                spare: Some(2)
             }
         );
         assert_eq!(cards[1].price, CardPrice::Worth(money(5)));

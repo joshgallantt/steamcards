@@ -26,4 +26,5 @@ tokio.workspace = true
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
+keep-awake = { workspace = true, features = ["test-support"] }
 steam-api = { workspace = true, features = ["test-support"] }

@@ -6,7 +6,7 @@
 //! - `ci`: everything CI checks, stopping at the first failure: the four
 //!   groups below, which CI (`.github/workflows/tests.yml`) runs as jobs of
 //!   their own.
-//!   - `lint`: formatting, spelling and clippy;
+//!   - `lint`: formatting, spelling, clippy, and dead code across crates;
 //!   - `test`: the tests (on every OS);
 //!   - `docs`: the docs, and the README's screenshots;
 //!   - `deps`: unused dependencies, and the dependencies themselves.
@@ -16,6 +16,8 @@
 //! - `hooks`: makes git run this project's hooks, in `.githooks/`.
 //! - `tools [group]`: the tools a group's checks need (all of them, by
 //!   default), as `crate@version`, so CI installs the versions `setup` does.
+//! - `dead-code`: fails on a public function only tests use, or nothing
+//!   does, which the compiler can't see. See `dead_code.rs`.
 //! - `screenshots`: redraws the README's images of the TUI, in `docs/images/`.
 //!   With `--check` (one of the `ci` checks), fails if they're out of date.
 //! - `protect`: puts the rules for `main` and for tags (in `.github/rulesets/`)
@@ -35,6 +37,7 @@
     reason = "a command-line tool reports on the terminal"
 )]
 
+mod dead_code;
 mod protect;
 mod release;
 mod screenshots;
@@ -49,7 +52,7 @@ use std::{
 const CARGO: &str = env!("CARGO");
 
 const USAGE: &str = "usage: cargo xtask <setup | ci | lint | test | docs | deps | pre-commit | fix | \
-                     hooks | tools [group] | screenshots [--check] | protect | \
+                     hooks | tools [group] | dead-code | screenshots [--check] | protect | \
                      release <patch | minor | major | X.Y.Z> | release-notes <tag> | homebrew <tag>>";
 
 /// A program a check runs that doesn't come with Rust.
@@ -140,6 +143,15 @@ const TEST: Step = Step {
     env: &[],
 };
 
+/// No public function is used only by tests, or by nothing: dead code the
+/// compiler can't see across crates.
+const DEAD_CODE: Step = Step {
+    name: "dead code",
+    tool: None,
+    args: &["xtask", "dead-code"],
+    env: &[],
+};
+
 /// The README's images of the TUI are what it draws now. The previews that
 /// draw them run on a fixed clock, so this changes only when the UI does.
 const SCREENSHOTS: Step = Step {
@@ -176,13 +188,23 @@ const DENY: Step = Step {
 
 /// The groups of checks CI runs as jobs of their own, in tests.yml: the
 /// tests on every OS, and the others once.
-const LINT: [Step; 3] = [FMT, TYPOS, CLIPPY];
+const LINT: [Step; 4] = [FMT, TYPOS, CLIPPY, DEAD_CODE];
 const TESTS: [Step; 1] = [TEST];
 const DOCS: [Step; 2] = [DOC, SCREENSHOTS];
 const DEPS: [Step; 2] = [MACHETE, DENY];
 
 /// Everything CI checks, one group after another.
-const CI: [Step; 8] = [FMT, TYPOS, CLIPPY, TEST, DOC, SCREENSHOTS, MACHETE, DENY];
+const CI: [Step; 9] = [
+    FMT,
+    TYPOS,
+    CLIPPY,
+    DEAD_CODE,
+    TEST,
+    DOC,
+    SCREENSHOTS,
+    MACHETE,
+    DENY,
+];
 
 /// A group of checks by name, as `cargo xtask <group>` and
 /// `cargo xtask tools <group>` take it.
@@ -235,6 +257,7 @@ fn main() -> ExitCode {
         Some("fix") => run(&FIX),
         Some("hooks") => hooks(),
         Some("tools") => tools(args.get(1).map_or("ci", String::as_str)),
+        Some("dead-code") => task(dead_code::run, &args[1..]),
         Some("screenshots") => task(screenshots::run, &args[1..]),
         Some("protect") => task(protect::run, &args[1..]),
         Some("release") => task(release::run, &args[1..]),

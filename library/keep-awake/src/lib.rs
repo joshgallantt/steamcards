@@ -119,6 +119,7 @@ impl KeepAwake {
     }
 
     /// Whether the machine is being held awake.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn is_held(&self) -> bool {
         self.held
             .lock()

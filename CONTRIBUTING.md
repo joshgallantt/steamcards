@@ -141,8 +141,8 @@ A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that fold
 | Command | What it does |
 | --- | --- |
 | `cargo xtask setup` | Installs the tools the checks need, at the versions CI uses, and turns on the git hook. |
-| `cargo xtask ci` | Everything CI checks: formatting, spelling, lints, tests, docs, the README's screenshots, unused dependencies, and the dependencies' security advisories, licences and sources. Run it before you push. |
-| `cargo xtask lint`, `test`, `docs` or `deps` | One part of `ci`, as CI runs it: formatting, spelling and lints; the tests; the docs and the README's screenshots; or the dependencies. |
+| `cargo xtask ci` | Everything CI checks: formatting, spelling, lints, dead code across crates, tests, docs, the README's screenshots, unused dependencies, and the dependencies' security advisories, licences and sources. Run it before you push. |
+| `cargo xtask lint`, `test`, `docs` or `deps` | One part of `ci`, as CI runs it: formatting, spelling, lints and dead code; the tests; the docs and the README's screenshots; or the dependencies. |
 | `cargo xtask pre-commit` | What the git hook runs: formatting, lints and tests. |
 | `cargo xtask fix` | Formats the code and applies clippy's suggestions. |
 | `cargo xtask hooks` | Turns on the git hook, without installing the tools. |
@@ -388,6 +388,8 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 - clippy's default set, plus no glob imports, no printing outside presentation, and no `dbg!`, `todo!` or `unimplemented!`;
 - broken links in doc comments.
 
+**Dead code across crates fails too.** The compiler judges a crate at a time, and counts what a crate exports as used, even when nothing else calls it. No crate here is published, so `cargo xtask dead-code`, part of `lint`, fails on a library's public function that nothing else names, or that only tests do. Test support goes behind the crate's `test-support` feature, like `SteamClient::with_ask_again_after`; what nothing uses goes.
+
 **Exceptions say why.** When a rule really doesn't fit, write `#[expect(lint, reason = "…")]`. `#[allow]` is itself denied. An `expect` also fails the checks once it's no longer needed, so none are left behind.
 
 **Dependencies are checked too.** Every crate comes from crates.io, under a licence that works in an MIT binary, with no known security advisory, in a version its author hasn't pulled. [`deny.toml`](deny.toml) lists the licences allowed, the crates that aren't and why, and any advisory accepted for now, with its reason. A new dependency that breaks one of these fails the checks until it's been looked at.
@@ -486,7 +488,7 @@ When you try a change for real:
 6. **Open the pull request.** The template's checklist matches these steps.
 
 CI is one workflow, **Tests** ([`tests.yml`](.github/workflows/tests.yml)), run on every pull request and every push to `main`, with a job for each check:
-- formatting, spelling and lints (`cargo xtask lint`), the docs and the README's screenshots (`cargo xtask docs`), and the dependencies (`cargo xtask deps`), once, on Linux;
+- formatting, spelling, lints and dead code (`cargo xtask lint`), the docs and the README's screenshots (`cargo xtask docs`), and the dependencies (`cargo xtask deps`), once, on Linux;
 - `cargo check` on the oldest supported Rust, the `rust-version` in [`Cargo.toml`](Cargo.toml), and actionlint and zizmor on the workflows themselves;
 - the tests (`cargo xtask test`) on every system steamcards supports: Linux, macOS and an Arch Linux container;
 - when the install scripts change, ShellCheck on them, and their tests on Linux and macOS.

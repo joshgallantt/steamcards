@@ -42,7 +42,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Formatting, spelling and clippy: `cargo xtask lint`.
+  # Formatting, spelling, clippy and dead code: `cargo xtask lint`.
   lint:
     name: Lint
     runs-on: ubuntu-latest
