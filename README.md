@@ -17,7 +17,6 @@
 - **Your games, in your order.** Rank the games you want cards from first; the rest follow, the ones closest to dropping first.
 - **See what you've got, and what it's worth.** The cards that dropped this session, each at its Steam market price; how many are left, and about how long they'll take; and what it'll all be worth when every card has dropped.
 - **Every game with cards in one list,** with its drops and what they're worth. Open one to see its set: how many of each card you have (a card can drop twice), and what each is worth.
-- **Farms the way that works.** Cards drop for one game at a time once it has 3 hours on record, so games short of that are played together, up to 32, to build hours. The rules are cross-checked against ArchiSteamFarm, Steam Game Idler and the other farmers: see [the research](docs/research/steam-card-farming.md).
 - **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.
 - **macOS and Linux.**
