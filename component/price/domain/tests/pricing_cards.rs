@@ -1,7 +1,9 @@
-//! Acceptance tier: prices as the user meets them. The watcher and the other
-//! use cases run for real over an in-memory market, on paused time, so a
-//! day of pricing passes in moments. Tests read what the user would: the
-//! prices on screen, and the log.
+//! Paused-time tier: prices as the user meets them, over days that pass in
+//! moments. The watcher and the other use cases run for real over a fake
+//! market on tokio's paused time, which a real connection to the market
+//! couldn't run on. Tests read what the user would: the prices on screen,
+//! and the log. The acceptance tier, through the price component, is in
+//! price-di.
 
 use std::{sync::Arc, time::Duration};
 

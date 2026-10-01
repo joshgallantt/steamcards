@@ -1,4 +1,6 @@
-//! Acceptance tier: a game's cards as the user meets them.
+//! Unit tier: a game's cards, the use cases over a fake repository. The
+//! acceptance tier, through the card component and stand-ins for Steam and
+//! its site, is in card-di.
 
 use std::sync::Arc;
 

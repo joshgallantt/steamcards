@@ -352,7 +352,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferencesU
 - **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `game-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
-- **Liskov substitution**: the acceptance tests drive the real `DefaultFarmCardsUseCase` over an in-memory Steam, and the farmer can't tell the difference.
+- **Liskov substitution**: the paused-time tests drive the real `DefaultFarmCardsUseCase` over a fake Steam account, and the farmer can't tell the difference.
 
 ---
 
@@ -400,13 +400,30 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 
 | Tier | Where | Speaks |
 | --- | --- | --- |
-| Unit | `#[cfg(test)]` next to the code | the system's terms |
-| Acceptance | `tests/` in each domain crate | the user's terms: `player.starts_farming()`, `player.reads(EventKind::Dropped)` |
+| Unit | `#[cfg(test)]` next to the code, and `tests/` in each domain crate | the system's terms, and the use cases' rules over the component's fakes |
+| Acceptance | `tests/` in each DI crate, with the driver in `tests/support/` | the user's terms, through the component as the app wires it: `player.signs_in()`, `player.comes_back()` |
+| Paused time | `tests/` in the farming and price domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(EventKind::Dropped)` |
 | End to end | `tests/` in the data and library crates | real code against local stand-ins for Steam: a CM server over a real WebSocket (`steam-api`'s `test_support`), and [wiremock](https://crates.io/crates/wiremock) for steamcommunity.com |
 | Screens | [`ui/terminal-ui/src/tui/preview.rs`](ui/terminal-ui/src/tui/preview.rs) | what's on screen, and that nothing is cut off at any size |
 | Architecture | [`app/tests/`](app/tests/) | the rules above |
 
-An acceptance test reads like the user's day:
+An acceptance test reads like the user's day, and runs the component as the app wires it, over its real data layer and a real config file, against a stand-in for Steam:
+
+**[`component/account/di/tests/signing_in.rs`](component/account/di/tests/signing_in.rs)**
+```rust
+#[tokio::test]
+async fn a_sign_in_thats_kept_is_there_when_steamcards_starts_again() {
+    let player = Player::new("kept").await;
+    player.steam.qr_goes(approved());
+    player.signs_in().await.1.unwrap();
+
+    let player = player.comes_back();
+
+    assert_eq!(player.sees(), signed_in(false));
+}
+```
+
+A paused-time test does the same over hours of play, which a real connection couldn't run on:
 
 **[`component/farming/domain/tests/farming_cards.rs`](component/farming/domain/tests/farming_cards.rs)**
 ```rust
@@ -428,7 +445,7 @@ async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
 
 This runs the real farmer through hours of drops in milliseconds, on paused time, with no network.
 
-- **Doubles** come from the domain crates' `test-support` features, which production builds never enable.
+- **Doubles** come from the domain crates' `test-support` features, which production builds never enable: a file each, named for their kind (`FakeGameRepository`, `StubGetAccountUseCase`, `SpySignOutUseCase`), and builders like `game()`.
 - **No test touches the real Steam.** End-to-end tests point `steam-api` at a local stand-in through its `Endpoints`.
 - **Use made-up account names, Steam IDs and tokens** in tests, fixtures and docs, never real ones.
 - **A test should fail when the code is wrong.** If you add one, break the code on purpose once and watch it fail.

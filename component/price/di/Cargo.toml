@@ -17,3 +17,12 @@ price-data.workspace = true
 config-file.workspace = true
 debug-log.workspace = true
 steam-api.workspace = true
+
+[dev-dependencies]
+game.workspace = true
+money.workspace = true
+serde_json.workspace = true
+steam-api = { workspace = true, features = ["test-support"] }
+tokio.workspace = true
+tokio-util.workspace = true
+wiremock.workspace = true

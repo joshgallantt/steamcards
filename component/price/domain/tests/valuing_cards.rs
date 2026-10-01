@@ -1,4 +1,5 @@
-//! Acceptance tier: what cards are worth, as the user reads it on screen.
+//! Unit tier: what cards are worth, as the user reads it on screen, worked
+//! out by the valuations alone.
 //! The session is the design's own (docs/design/ui.md, the haul at 17:31):
 //! 16 cards from 6 games, a foil among them, two of them second copies, and
 //! three that can't be counted yet.

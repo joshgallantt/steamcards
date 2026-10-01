@@ -1,9 +1,9 @@
-//! Acceptance tier: this session of farming, as the user meets it. Every
+//! Paused-time tier: this session of farming, as the user meets it. Every
 //! card that drops is a drop of its own, told at once and named a moment
 //! later; the session keeps what was played, the games finished and the
 //! first forecast, through pauses, until the user signs out. Every test
-//! drives the real `DefaultFarmCardsUseCase` over an in-memory Steam, on
-//! paused time.
+//! drives the real `DefaultFarmCardsUseCase` over a fake Steam account, on
+//! tokio's paused time.
 
 use std::{sync::Arc, time::Duration};
 

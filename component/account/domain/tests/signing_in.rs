@@ -1,48 +1,15 @@
-//! Acceptance tier: signing in and out as the user meets it.
+//! Unit tier: signing in and out, the account's use cases over a fake
+//! repository. The acceptance tier, through the account component and a
+//! stand-in for Steam, is in account-di.
 
-use std::sync::{Arc, atomic::Ordering};
+mod support;
+
+use std::sync::atomic::Ordering;
 
 use account::{
-    Account, CheckSignInUseCase, DefaultCheckSignInUseCase, DefaultGetAccountUseCase,
-    DefaultSignInUseCase, DefaultSignOutUseCase, GetAccountUseCase, LoginChallenge, SignInError,
-    SignInUseCase, SignOutError, SignOutUseCase, test_support::FakeAccountRepository,
+    Account, LoginChallenge, SignInError, SignOutError, test_support::FakeAccountRepository,
 };
-use tokio::sync::mpsc;
-
-struct Player {
-    steam: Arc<FakeAccountRepository>,
-    get_account: Arc<dyn GetAccountUseCase>,
-    check_sign_in: Arc<dyn CheckSignInUseCase>,
-    sign_in: Arc<dyn SignInUseCase>,
-    sign_out: Arc<dyn SignOutUseCase>,
-}
-
-impl Player {
-    fn with(steam: FakeAccountRepository) -> Self {
-        let steam = Arc::new(steam);
-        Self {
-            get_account: Arc::new(DefaultGetAccountUseCase::new(steam.clone())),
-            check_sign_in: Arc::new(DefaultCheckSignInUseCase::new(steam.clone())),
-            sign_in: Arc::new(DefaultSignInUseCase::new(steam.clone())),
-            sign_out: Arc::new(DefaultSignOutUseCase::new(steam.clone())),
-            steam,
-        }
-    }
-
-    fn sees(&self) -> Option<Account> {
-        self.get_account.call()
-    }
-
-    async fn signs_in(&self) -> (Vec<LoginChallenge>, Result<(), SignInError>) {
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let outcome = self.sign_in.call(tx).await.unwrap();
-        let mut seen = Vec::new();
-        while let Ok(c) = rx.try_recv() {
-            seen.push(c);
-        }
-        (seen, outcome)
-    }
-}
+use support::Player;
 
 fn account(name: &str, expired: bool) -> Option<Account> {
     Some(Account {

@@ -344,20 +344,27 @@ opens; `Settings` works out where.
 
 | Tier | Where | Speaks | Doubles |
 | --- | --- | --- | --- |
-| Unit | `#[cfg(test)]` beside the code | the system's terms: `farm_order`, `unpack_multi` | local fakes |
-| Acceptance | `component/*/domain/tests/` | the user's terms: `Player::starts_farming`, `reads(EventKind::Dropped)` | the component's `test-support` doubles |
+| Unit | `#[cfg(test)]` beside the code, and each domain crate's `tests/` | the system's terms (`farm_order`, `unpack_multi`), and the use cases' rules | the component's fakes, stubs and spies |
+| Acceptance | `component/*/di/tests/`, with the driver in `tests/support/` | the user's terms: `Player::signs_in`, `has_prices_looked_up` | only Steam: the stand-in Steam server and wiremock for steamcommunity.com, with real files in a folder of their own |
+| Paused time | `component/farming/domain/tests/`, `component/price/domain/tests/pricing_cards.rs` | the user's terms, over hours of play: `Player::starts_farming`, `reads(EventKind::Dropped)` | fakes of Steam and the market, on tokio's paused time |
 | Data | `component/*/data/tests/`, `library/steam-api/tests/` | Steam's terms | a stand-in Steam server over a real WebSocket, and wiremock for steamcommunity.com |
 | Screens | `ui/terminal-ui/src/tui/preview.rs` | what's on screen | `test-support` doubles |
 | Architecture | `app/tests/dependency_rule.rs`, `app/tests/language_rules.rs` | the table at the top of this page, and the section below | none |
 
-The farming acceptance tests run the real `DefaultFarmCardsUseCase` on paused tokio time
-over an in-memory Steam whose cards drop as its games are played: ten hours
-without a drop costs milliseconds. The market's run the real watcher on
-paused time over an in-memory market that pauses as Steam's queue does, and
-value the design's own session by hand. The market queue's real pace, minutes
-and all, is tested on paused time in `price-data`; over real requests to
-wiremock it runs at a quick pace, since paused time and real sockets don't
-mix.
+An acceptance test drives a component as the composition root wires it,
+through its DI and the real data layer, and stands in only for what the app
+can't own: Steam. It never names a repository or a `Default…` type. Its
+driver, named for the person (`Player`), says what they do: signs in, comes
+back after a restart, runs out of disk.
+
+The paused-time tests run the real `DefaultFarmCardsUseCase` on paused
+tokio time over a fake Steam account whose cards drop as its games are
+played: ten hours without a drop costs milliseconds. The market's run the
+real watcher on paused time over a fake market that pauses as Steam's queue
+does. Neither can go through the real data layer: paused time and real
+sockets don't mix. The market queue's real pace, minutes and all, is tested
+on paused time in `price-data`; over real requests to wiremock it runs at a
+quick pace.
 
 No test talks to Steam.
 

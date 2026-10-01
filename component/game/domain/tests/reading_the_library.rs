@@ -1,4 +1,6 @@
-//! Acceptance tier: the library as the user meets it.
+//! Unit tier: reading the library, the use case over a fake repository. The
+//! acceptance tier, through the game component and stand-ins for Steam and
+//! its site, is in game-di.
 
 use std::sync::{Arc, atomic::Ordering};
 

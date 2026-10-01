@@ -1,6 +1,8 @@
-//! Acceptance tier: the farmer as the user meets it. Every test drives the
-//! real `DefaultFarmCardsUseCase` over an in-memory Steam, on paused time, and reads only
-//! what the user would read — the log and the status line.
+//! Paused-time tier: the farmer as the user meets it, over hours of play
+//! that pass in moments. Every test drives the real `DefaultFarmCardsUseCase`
+//! over a fake Steam account on tokio's paused time, which a real connection
+//! to Steam couldn't run on, and reads only what the user would read: the
+//! log and the status line.
 
 use std::{sync::Arc, time::Duration};
 

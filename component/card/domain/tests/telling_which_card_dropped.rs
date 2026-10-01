@@ -1,5 +1,5 @@
-//! Acceptance tier: which cards new items are, as the user meets it when
-//! Steam can't say. What Steam says of each item (each copy on its own,
+//! Unit tier: which cards new items are, the use case over a fake
+//! repository, when Steam can't say. What Steam says of each item (each copy on its own,
 //! in the order asked, only cards) is Steam's own rule, tested against a
 //! stand-in for it in card-data and steam-api.
 

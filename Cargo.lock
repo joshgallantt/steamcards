@@ -31,7 +31,10 @@ version = "0.1.0"
 dependencies = [
  "account",
  "account-data",
+ "config-file",
+ "debug-log",
  "steam-api",
+ "tokio",
 ]
 
 [[package]]
@@ -284,7 +287,12 @@ version = "0.1.0"
 dependencies = [
  "card",
  "card-data",
+ "config-file",
+ "debug-log",
+ "game",
  "steam-api",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]
@@ -1031,9 +1039,13 @@ dependencies = [
 name = "game-di"
 version = "0.1.0"
 dependencies = [
+ "config-file",
+ "debug-log",
  "game",
  "game-data",
  "steam-api",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]
@@ -2154,6 +2166,7 @@ name = "preferences-di"
 version = "0.1.0"
 dependencies = [
  "config-file",
+ "game",
  "preferences",
  "preferences-data",
 ]
@@ -2201,9 +2214,15 @@ version = "0.1.0"
 dependencies = [
  "config-file",
  "debug-log",
+ "game",
+ "money",
  "price",
  "price-data",
+ "serde_json",
  "steam-api",
+ "tokio",
+ "tokio-util",
+ "wiremock",
 ]
 
 [[package]]

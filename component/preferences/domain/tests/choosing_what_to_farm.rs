@@ -1,64 +1,13 @@
-//! Acceptance tier: the rules as the user meets them. Every verb is theirs.
+//! Unit tier: the rules for what gets farmed first, the preferences' use
+//! cases over a fake repository. Every verb is the user's. The acceptance
+//! tier, through the preferences component and a real config file, is in
+//! preferences-di.
 
-use std::sync::Arc;
+mod support;
 
 use game::AppId;
-use preferences::{
-    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, Preferences, PreferencesError,
-    SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase, Tier,
-    test_support::FakePreferencesRepository,
-};
-
-/// Someone arranging what gets farmed first.
-struct Player {
-    get: Arc<dyn GetPreferencesUseCase>,
-    tier: Arc<dyn SetGameTierUseCase>,
-    only: Arc<dyn SetOnlyPriorityUseCase>,
-    online: Arc<dyn SetAppearOnlineUseCase>,
-}
-
-impl Player {
-    fn new() -> Self {
-        Self::on(FakePreferencesRepository::default())
-    }
-
-    fn whose_disk_is_full() -> Self {
-        Self::on(FakePreferencesRepository::default().failing())
-    }
-
-    fn on(repo: FakePreferencesRepository) -> Self {
-        let repo = Arc::new(repo);
-        Self {
-            get: Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
-            tier: Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
-            only: Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
-        }
-    }
-
-    fn prefs(&self) -> Preferences {
-        self.get.call()
-    }
-
-    /// The games farmed first, in order.
-    fn priorities(&self) -> Vec<u32> {
-        self.prefs().priority_games.iter().map(|g| g.0).collect()
-    }
-
-    /// The games never farmed.
-    fn skipped(&self) -> Vec<u32> {
-        self.prefs().skipped_games.iter().map(|g| g.0).collect()
-    }
-
-    fn ranks(&self, app_id: u32, rank: usize) {
-        self.tier.call(AppId(app_id), Tier::Priority(rank)).unwrap();
-    }
-
-    fn sets(&self, app_id: u32, tier: Tier) {
-        self.tier.call(AppId(app_id), tier).unwrap();
-    }
-}
+use preferences::{PreferencesError, Tier};
+use support::Player;
 
 #[test]
 fn a_game_moves_between_tiers() {
