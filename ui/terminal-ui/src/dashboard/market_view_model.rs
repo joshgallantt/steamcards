@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 /// Keeps the cards' market prices coming: runs the market's price watcher,
 /// tells it which games to price first, and asks again for a game whose card
 /// just dropped.
-pub struct Market {
+pub struct MarketViewModel {
     get_prices: Arc<dyn GetPricesUseCase>,
     set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
     keep_prices_up_to_date: Arc<dyn KeepPricesUpToDateUseCase>,
@@ -24,7 +24,7 @@ pub struct Market {
     wanted: Vec<AppId>,
 }
 
-impl Market {
+impl MarketViewModel {
     pub fn new(
         get_prices: Arc<dyn GetPricesUseCase>,
         set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
@@ -96,7 +96,7 @@ impl Market {
     }
 }
 
-impl Drop for Market {
+impl Drop for MarketViewModel {
     fn drop(&mut self) {
         self.stop();
     }
@@ -118,8 +118,8 @@ mod tests {
         refreshed: Arc<SpyRefreshPricesUseCase>,
     }
 
-    fn market(spies: &Spies) -> Market {
-        Market::new(
+    fn market(spies: &Spies) -> MarketViewModel {
+        MarketViewModel::new(
             Arc::new(StubGetPricesUseCase::default()),
             spies.told.clone(),
             spies.started.clone(),

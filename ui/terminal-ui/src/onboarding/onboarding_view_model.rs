@@ -1,36 +1,18 @@
 use std::sync::Arc;
 
+use crate::onboarding::{NeedsAccount, Step};
+
 use account::GetAccountUseCase;
-
-/// The steps of getting set up, in order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Step {
-    Welcome,
-    /// Sign in with the Steam app. Can't be skipped.
-    SignIn,
-    /// Pick priority games from the ones with cards left. Can be skipped.
-    Games,
-    Start,
-}
-
-impl Step {
-    pub const ALL: [Step; 4] = [Step::Welcome, Step::SignIn, Step::Games, Step::Start];
-}
-
-/// Nothing can be farmed without an account, so onboarding won't get past
-/// signing in until the account is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NeedsAccount;
 
 /// First run: a welcome, signing in, picking games, starting to farm. The app
 /// comes back to signing in when the account signs out.
-pub struct Onboarding {
+pub struct OnboardingViewModel {
     account: Arc<dyn GetAccountUseCase>,
     /// `None` once onboarding is over.
     step: Option<Step>,
 }
 
-impl Onboarding {
+impl OnboardingViewModel {
     /// Starts at the welcome when nobody is signed in; otherwise there is
     /// nothing to set up.
     pub fn new(account: Arc<dyn GetAccountUseCase>) -> Self {
@@ -109,17 +91,17 @@ mod tests {
 
     #[test]
     fn a_first_run_starts_at_the_welcome_and_a_set_up_one_skips_it() {
-        let first = Onboarding::new(steam(false));
+        let first = OnboardingViewModel::new(steam(false));
         assert_eq!(first.step(), Some(Step::Welcome));
 
-        let set_up = Onboarding::new(steam(true));
+        let set_up = OnboardingViewModel::new(steam(true));
         assert!(!set_up.is_active());
     }
 
     #[test]
     fn getting_past_signing_in_takes_an_account() {
         let steam = steam(false);
-        let mut o = Onboarding::new(steam.clone());
+        let mut o = OnboardingViewModel::new(steam.clone());
         assert_eq!(o.forward(), Ok(()));
         assert_eq!(o.step(), Some(Step::SignIn));
 
@@ -135,7 +117,7 @@ mod tests {
     #[test]
     fn games_can_be_skipped_and_the_last_step_ends_onboarding() {
         let steam = steam(false);
-        let mut o = Onboarding::new(steam.clone());
+        let mut o = OnboardingViewModel::new(steam.clone());
         o.forward().unwrap();
         steam.set(Some(cardfarmer()));
         o.forward().unwrap();
@@ -148,7 +130,7 @@ mod tests {
     #[test]
     fn back_retraces_the_steps() {
         let steam = steam(false);
-        let mut o = Onboarding::new(steam.clone());
+        let mut o = OnboardingViewModel::new(steam.clone());
         o.back();
         assert_eq!(o.step(), Some(Step::Welcome), "nowhere further back");
         o.forward().unwrap();
@@ -166,7 +148,7 @@ mod tests {
     #[test]
     fn signing_out_goes_back_to_signing_in() {
         let steam = steam(true);
-        let mut o = Onboarding::new(steam.clone());
+        let mut o = OnboardingViewModel::new(steam.clone());
         steam.set(None);
         o.signed_out();
         assert_eq!(o.step(), Some(Step::SignIn), "not the welcome again");

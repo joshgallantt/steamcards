@@ -294,23 +294,30 @@ builds its repository itself.
 
 ### `terminal-ui`
 
-- **`viewmodel/`** turns use cases into screen state and keys into use case
-  calls. It depends on domain crates only. `Summary` and the functions
-  beside it (`session_cards`, `value_to_come`, `card_price`) work out, each
-  frame, what the dashboard shows from the farmer's status and session and
-  the market's prices, using the market's own valuations. `Market` runs the
-  market's use cases: pricing in the background, the games wanted first,
-  and a game's set again when one of its cards drops.
-- **`tui/`** draws that state with ratatui and forwards keys. It holds no
-  business rule. `tui/dashboard.rs` draws the header, the summary, the
-  games beside this session's cards, and the details pop-up's content;
-  `tui/overlays.rs` the pop-ups; `tui/onboarding.rs` the steps of getting
-  set up. Each piece of text comes in a few lengths and the longest that
-  fits is drawn; `widgets::fitted` fails a test on any line wider than its
-  area. `tui/preview.rs` renders every screen into an in-memory terminal
-  with the domain crates' test doubles, and sweeps every state across
-  sizes from 60×16 to 240×70. The design is in
-  [docs/design/ui.md](design/ui.md).
+A feature to a module, each holding its view models and, beside them, the
+views that draw them: `dashboard/`, `onboarding/`, `account/`, `sign_in/`,
+`games/` and `help/`. A view model (`FarmingViewModel`, `SignInViewModel`)
+turns use cases into screen state and keys into use case calls; its view
+(`dashboard_view.rs`, `sign_in_view.rs`) draws that state with ratatui.
+Neither holds a business rule, and the crate depends on domain crates only.
+
+- **`app/`** holds every feature's view models: what's on screen, the pop-up
+  open, the keys, and the event loop. `app/popups.rs` draws the open pop-up
+  over what's underneath, faded; each feature draws its own.
+- **`dashboard/`**: `Summary` and the functions beside it (`session_cards`,
+  `value_to_come`, `card_price`) work out, each frame, what the dashboard
+  shows from the farmer's status and session and the market's prices, using
+  the market's own valuations. `MarketViewModel` runs the market's use
+  cases: pricing in the background, the games wanted first, and a game's
+  set again when one of its cards drops. The log and a game's details are
+  its pop-ups.
+- **`theme.rs`, `widgets.rs` and `popup.rs`** are what every feature draws
+  with, each named for what it is. Each piece of text comes in a few lengths
+  and the longest that fits is drawn; `widgets::fitted` fails a test on any
+  line wider than its area.
+- **`app/preview.rs`** renders every screen into an in-memory terminal with
+  the domain crates' test doubles, and sweeps every state across sizes from
+  60×16 to 240×70. The design is in [docs/design/ui.md](design/ui.md).
 
 ### `headless`
 
@@ -348,7 +355,7 @@ opens; `Settings` works out where.
 | Acceptance | `component/*/di/tests/`, with the driver in `tests/support/` | the user's terms: `Player::signs_in`, `has_prices_looked_up` | only Steam: the stand-in Steam server and wiremock for steamcommunity.com, with real files in a folder of their own |
 | Paused time | `component/farming/domain/tests/`, `component/price/domain/tests/pricing_cards.rs` | the user's terms, over hours of play: `Player::starts_farming`, `reads(EventKind::Dropped)` | fakes of Steam and the market, on tokio's paused time |
 | Data | `component/*/data/tests/`, `library/steam-api/tests/` | Steam's terms | a stand-in Steam server over a real WebSocket, and wiremock for steamcommunity.com |
-| Screens | `ui/terminal-ui/src/tui/preview.rs` | what's on screen | `test-support` doubles |
+| Screens | `ui/terminal-ui/src/app/preview.rs` | what's on screen | `test-support` doubles |
 | Architecture | `app/tests/dependency_rule.rs`, `app/tests/language_rules.rs` | the table at the top of this page, and the section below | none |
 
 An acceptance test drives a component as the composition root wires it,

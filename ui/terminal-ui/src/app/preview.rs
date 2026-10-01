@@ -33,8 +33,14 @@ use price::{
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
 
-use super::{App, Clock, LogView, LoginView, Overlay};
-use crate::viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding, Step};
+use super::{App, Clock, LogView, Overlay, SignInView};
+use crate::{
+    account::AccountViewModel,
+    dashboard::{FarmingViewModel, LibraryViewModel, MarketViewModel},
+    games::GamesViewModel,
+    onboarding::{OnboardingViewModel, Step},
+    sign_in::SignInViewModel,
+};
 
 /// The previews' clock: a fixed time, shown in UTC, so every screen is the
 /// same on any machine, on any day.
@@ -239,28 +245,28 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
     let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
     let accounts = Arc::new(StubGetAccountUseCase::new(account));
     let mut app = App::new(
-        Account::new(
+        AccountViewModel::new(
             accounts.clone(),
             Arc::new(SpyCheckSignInUseCase::default()),
             Arc::new(SpySignOutUseCase::default()),
         ),
-        Login::new(Arc::new(StubSignInUseCase)),
-        Farming::new(
+        SignInViewModel::new(Arc::new(StubSignInUseCase)),
+        FarmingViewModel::new(
             Arc::new(SpyFarmCardsUseCase::default()),
             Arc::new(SpyEndSessionUseCase::default()),
             accounts.clone(),
             get.clone(),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
-        Games::new(
+        GamesViewModel::new(
             get,
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        Library::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(library())))),
-        Onboarding::new(accounts),
-        Market::new(
+        LibraryViewModel::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(library())))),
+        OnboardingViewModel::new(accounts),
+        MarketViewModel::new(
             Arc::new(StubGetPricesUseCase::new(prices())),
             Arc::new(SpySetGamesToPriceUseCase::default()),
             Arc::new(SpyKeepPricesUpToDateUseCase::default()),
@@ -538,7 +544,7 @@ async fn previews() {
     assert!(scanned.contains("waiting for you to approve"));
     let small = show("sign-in, no room for QR 80×20", render(&mut a, 80, 20));
     assert!(small.contains("Make the window bigger"));
-    a.overlay = Some(Overlay::Login(LoginView {
+    a.overlay = Some(Overlay::SignIn(SignInView {
         challenge: None,
         outcome: Some(Err(
             "the sign-in wasn't approved in the Steam app — try again".into(),
@@ -580,7 +586,7 @@ async fn previews() {
 }
 
 fn login(url: Option<&str>, scanned: bool) -> Overlay {
-    Overlay::Login(LoginView {
+    Overlay::SignIn(SignInView {
         challenge: url.map(|u| LoginChallenge {
             url: u.into(),
             scanned,
@@ -962,30 +968,30 @@ fn showcase_app() -> App {
     let get = Arc::new(DefaultGetPreferencesUseCase::new(repo.clone()));
     let accounts = Arc::new(StubGetAccountUseCase::new(cardfarmer()));
     let mut a = App::new(
-        Account::new(
+        AccountViewModel::new(
             accounts.clone(),
             Arc::new(SpyCheckSignInUseCase::default()),
             Arc::new(SpySignOutUseCase::default()),
         ),
-        Login::new(Arc::new(StubSignInUseCase)),
-        Farming::new(
+        SignInViewModel::new(Arc::new(StubSignInUseCase)),
+        FarmingViewModel::new(
             Arc::new(SpyFarmCardsUseCase::default()),
             Arc::new(SpyEndSessionUseCase::default()),
             accounts.clone(),
             get.clone(),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
-        Games::new(
+        GamesViewModel::new(
             get,
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        Library::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(
+        LibraryViewModel::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(
             showcase_library(),
         )))),
-        Onboarding::new(accounts),
-        Market::new(
+        OnboardingViewModel::new(accounts),
+        MarketViewModel::new(
             Arc::new(StubGetPricesUseCase::new(showcase_prices())),
             Arc::new(SpySetGamesToPriceUseCase::default()),
             Arc::new(SpyKeepPricesUpToDateUseCase::default()),

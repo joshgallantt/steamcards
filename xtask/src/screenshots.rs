@@ -73,7 +73,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut stale = Vec::new();
     for (preview, file) in SCREENS {
         let screen = screens.get(*preview).ok_or_else(|| {
-            format!("no preview named {preview:?}; see ui/terminal-ui/src/tui/preview.rs")
+            format!("no preview named {preview:?}; see ui/terminal-ui/src/app/preview.rs")
         })?;
         let svg = render(screen)?;
         let path = images.join(format!("{file}.svg"));

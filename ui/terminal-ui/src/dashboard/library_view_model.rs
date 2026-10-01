@@ -9,7 +9,7 @@ use tokio::task::JoinHandle;
 
 /// The Steam library, read in the background, so a screen showing it never
 /// waits on Steam.
-pub struct Library {
+pub struct LibraryViewModel {
     read: Arc<dyn ReadLibraryUseCase>,
     pending: Option<JoinHandle<Result<SteamLibrary, GameError>>>,
     library: Option<SteamLibrary>,
@@ -21,7 +21,7 @@ pub struct Library {
     error: Option<String>,
 }
 
-impl Library {
+impl LibraryViewModel {
     pub fn new(read: Arc<dyn ReadLibraryUseCase>) -> Self {
         Self {
             read,
@@ -110,7 +110,7 @@ mod tests {
         Arc::new(SpyReadLibraryUseCase::answering(result))
     }
 
-    async fn settle(l: &mut Library) {
+    async fn settle(l: &mut LibraryViewModel) {
         for _ in 0..100 {
             l.poll();
             if !l.is_loading() {
@@ -127,7 +127,7 @@ mod tests {
             game(620, 5.2, 1, 3),
             game(220, 30.0, 3, 0),
         ])));
-        let mut l = Library::new(read.clone());
+        let mut l = LibraryViewModel::new(read.clone());
         l.refresh();
         l.refresh();
         assert_eq!(read.reads(), 1);
@@ -139,7 +139,7 @@ mod tests {
     #[tokio::test]
     async fn a_fresh_library_isnt_read_again_but_a_failed_one_is() {
         let read = answering(Ok(SteamLibrary::default()));
-        let mut l = Library::new(read.clone());
+        let mut l = LibraryViewModel::new(read.clone());
         l.refresh_if_older(Duration::from_secs(600));
         settle(&mut l).await;
         l.refresh_if_older(Duration::from_secs(600));
@@ -148,7 +148,7 @@ mod tests {
         let read = answering(Err(GameError::Unavailable(
             "steamcommunity.com didn't answer".into(),
         )));
-        let mut l = Library::new(read.clone());
+        let mut l = LibraryViewModel::new(read.clone());
         l.refresh_if_older(Duration::from_secs(600));
         settle(&mut l).await;
         assert_eq!(l.error(), Some("steamcommunity.com didn't answer"));

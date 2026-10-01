@@ -1,31 +1,22 @@
 use std::sync::Arc;
 
-use game::{AppId, CardDrops, Game};
+use crate::games::GameRow;
+
+use game::{AppId, Game};
 use preferences::{
     GetPreferencesUseCase, PreferencesError, SetAppearOnlineUseCase, SetGameTierUseCase,
     SetOnlyPriorityUseCase, Tier,
 };
 
-/// One line in a list of games to pick from.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GameRow {
-    pub app_id: AppId,
-    pub name: String,
-    /// 1-based position among the priority games.
-    pub rank: Option<usize>,
-    pub hours: f64,
-    pub drops: CardDrops,
-}
-
 /// Choosing which games are farmed first, and how farming shows to friends.
-pub struct Games {
+pub struct GamesViewModel {
     get: Arc<dyn GetPreferencesUseCase>,
     set_tier: Arc<dyn SetGameTierUseCase>,
     set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
     set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
 }
 
-impl Games {
+impl GamesViewModel {
     pub fn new(
         get: Arc<dyn GetPreferencesUseCase>,
         set_tier: Arc<dyn SetGameTierUseCase>,
@@ -132,12 +123,12 @@ mod tests {
 
     use super::*;
 
-    fn games(priority: &[u32]) -> Games {
+    fn games(priority: &[u32]) -> GamesViewModel {
         let repo = Arc::new(FakePreferencesRepository::new(Preferences {
             priority_games: priority.iter().copied().map(AppId).collect(),
             ..Default::default()
         }));
-        Games::new(
+        GamesViewModel::new(
             Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),

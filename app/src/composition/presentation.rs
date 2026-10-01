@@ -2,7 +2,11 @@ use std::time::Duration;
 
 use terminal_ui::{
     App,
-    viewmodel::{Account, Farming, Games, Library, Login, Market, Onboarding},
+    account::AccountViewModel,
+    dashboard::{FarmingViewModel, LibraryViewModel, MarketViewModel},
+    games::GamesViewModel,
+    onboarding::OnboardingViewModel,
+    sign_in::SignInViewModel,
 };
 
 use super::DomainAssembler;
@@ -20,28 +24,28 @@ impl PresentationAssembler {
     pub(crate) fn make_terminal_app(&self) -> App {
         let d = &self.domain;
         App::new(
-            Account::new(
+            AccountViewModel::new(
                 d.account.get_account.clone(),
                 d.account.check_sign_in.clone(),
                 d.account.sign_out.clone(),
             ),
-            Login::new(d.account.sign_in.clone()),
-            Farming::new(
+            SignInViewModel::new(d.account.sign_in.clone()),
+            FarmingViewModel::new(
                 d.farming.farm_cards.clone(),
                 d.session.end_session.clone(),
                 d.account.get_account.clone(),
                 d.preferences.get_preferences.clone(),
                 d.preferences.set_game_tier.clone(),
             ),
-            Games::new(
+            GamesViewModel::new(
                 d.preferences.get_preferences.clone(),
                 d.preferences.set_game_tier.clone(),
                 d.preferences.set_only_priority.clone(),
                 d.preferences.set_appear_online.clone(),
             ),
-            Library::new(d.game.read_library.clone()),
-            Onboarding::new(d.account.get_account.clone()),
-            Market::new(
+            LibraryViewModel::new(d.game.read_library.clone()),
+            OnboardingViewModel::new(d.account.get_account.clone()),
+            MarketViewModel::new(
                 d.price.get_prices.clone(),
                 d.price.set_games_to_price.clone(),
                 d.price.keep_prices_up_to_date.clone(),

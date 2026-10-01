@@ -1,22 +1,19 @@
-// TUI — onboarding on first run, then a single dashboard that stays up the
-// whole time, with pop-ups for the account, signing in, games, the log and
-// help. Renders view-model state and forwards keys to view models; no
-// business logic lives here.
+//! The app: onboarding on the first run, then one dashboard that stays up
+//! the whole time, with pop-ups for the account, signing in, games, the log
+//! and help. It holds every feature's view models, draws what's on screen
+//! with each feature's views, and forwards keys to the view models; no
+//! business rule lives here.
 
-mod dashboard;
-mod onboarding;
-mod overlays;
+mod popups;
 #[cfg(test)]
 mod preview;
-mod theme;
-mod widgets;
 
 use std::{
     io,
     time::{Duration, Instant},
 };
 
-use account::{Account as SignedIn, LoginChallenge};
+use account::Account as SignedIn;
 use card::CardSets;
 use chrono::{DateTime, FixedOffset, Local, Utc};
 use crossterm::{
@@ -32,28 +29,38 @@ use price::{PriceBook, PriceEvent, PriceEventKind, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 use session::Session;
 
-use crate::viewmodel::{
-    Account, Farming, GameRow, Games, Library, Login, LoginUpdate, Market, NeedsAccount,
-    Onboarding, Queue, QueueEntry, Section, Step, card_page, open_in_browser, prices_wanted,
+use crate::{
+    account::AccountViewModel,
+    dashboard::{
+        FarmingViewModel, LibraryViewModel, LogEntry, MarketViewModel, Queue, QueueEntry, Section,
+        card_page, dashboard_view, log_view::LogView, open_in_browser, prices_wanted,
+    },
+    games::{GameRow, GamesViewModel, games_view::GamesView},
+    onboarding::{
+        NeedsAccount, OnboardingViewModel, Step,
+        onboarding_view::{self, SetupView},
+    },
+    sign_in::{SignInUpdate, SignInViewModel, sign_in_view::SignInView},
+    theme,
 };
 
 const MAX_LOG: usize = 1000;
-const MIN_WIDTH: u16 = 60;
-const MIN_HEIGHT: u16 = 16;
+pub(crate) const MIN_WIDTH: u16 = 60;
+pub(crate) const MIN_HEIGHT: u16 = 16;
 const FLASH_FOR: Duration = Duration::from_secs(4);
 const LOGIN_DONE_FOR: Duration = Duration::from_millis(1500);
 /// How old the library may be when a screen showing it opens.
 const LIBRARY_FRESH: Duration = Duration::from_secs(10 * 60);
 /// The sign-in step lists the account, then "Continue".
-const CONTINUE_ROW: usize = 1;
+pub(crate) const CONTINUE_ROW: usize = 1;
 
 /// What time it is, and the time zone times are shown in: the system's when
 /// steamcards runs, and fixed ones in the previews, so a screen looks the
 /// same on any machine, on any day.
 #[derive(Clone, Copy)]
-struct Clock {
-    now: fn() -> DateTime<Utc>,
-    zone: fn() -> FixedOffset,
+pub(crate) struct Clock {
+    pub(crate) now: fn() -> DateTime<Utc>,
+    pub(crate) zone: fn() -> FixedOffset,
 }
 
 impl Clock {
@@ -68,21 +75,13 @@ fn local_zone() -> FixedOffset {
     *Local::now().offset()
 }
 
-struct LogEntry {
-    /// When it happened, in the time zone it's shown in.
-    at: DateTime<FixedOffset>,
-    received: Instant,
-    kind: EventKind,
-    text: String,
-}
-
-enum Overlay {
+pub(crate) enum Overlay {
     Help,
     Account {
         /// Asking whether to sign out.
         confirm: bool,
     },
-    Login(LoginView),
+    SignIn(SignInView),
     Games(GamesView),
     Log(LogView),
     /// The chosen game's details: its set, and what each card is worth,
@@ -93,115 +92,88 @@ enum Overlay {
     ConfirmQuit,
 }
 
-struct LoginView {
-    challenge: Option<LoginChallenge>,
-    /// `Ok(account name)` or `Err(reason)` once the sign-in ends.
-    outcome: Option<Result<String, String>>,
-    finished: Option<Instant>,
-    /// Return to the account pop-up (rather than the dashboard) afterwards.
-    from_account: bool,
-}
-
-struct GamesView {
-    cursor: usize,
-}
-
-/// Where the user is within an onboarding step.
-#[derive(Default)]
-struct SetupView {
-    cursor: usize,
-}
-
-struct LogView {
-    offset: usize,
-    /// Largest offset at the last draw (the view's bottom).
-    max: usize,
-    /// Stick to the newest entries as they arrive.
-    follow: bool,
-}
-
 /// Everything a frame needs, computed once per draw.
-struct Ctx<'a> {
-    app: &'a App,
-    queue: &'a Queue,
-    account: Option<&'a SignedIn>,
-    prefs: &'a Preferences,
-    now: DateTime<Utc>,
+pub(crate) struct Ctx<'a> {
+    pub(crate) app: &'a App,
+    pub(crate) queue: &'a Queue,
+    pub(crate) account: Option<&'a SignedIn>,
+    pub(crate) prefs: &'a Preferences,
+    pub(crate) now: DateTime<Utc>,
     /// The time zone times are shown in.
-    zone: FixedOffset,
+    pub(crate) zone: FixedOffset,
     /// The library as it's best known, and the games that will be farmed,
     /// in farm order.
-    library: &'a SteamLibrary,
-    order: &'a [AppId],
+    pub(crate) library: &'a SteamLibrary,
+    pub(crate) order: &'a [AppId],
     /// The card sets of the games looked at, with the copies that dropped
     /// counted in.
-    sets: &'a CardSets,
+    pub(crate) sets: &'a CardSets,
     /// This session's cards.
-    session: &'a Session,
+    pub(crate) session: &'a Session,
     /// Every price known, and the wallet whose currency they're shown in.
-    book: &'a PriceBook,
-    wallet: Option<&'a Wallet>,
+    pub(crate) book: &'a PriceBook,
+    pub(crate) wallet: Option<&'a Wallet>,
 }
 
 impl Ctx<'_> {
-    fn selected(&self) -> Option<&QueueEntry> {
+    pub(crate) fn selected(&self) -> Option<&QueueEntry> {
         self.app.selected.and_then(|id| self.queue.get(id))
     }
 
-    fn spinner(&self) -> &'static str {
+    pub(crate) fn spinner(&self) -> &'static str {
         theme::SPINNER[self.app.tick % theme::SPINNER.len()]
     }
 
-    fn signed_in(&self) -> bool {
+    pub(crate) fn signed_in(&self) -> bool {
         self.account.is_some()
     }
 
-    fn expired(&self) -> bool {
+    pub(crate) fn expired(&self) -> bool {
         self.account.is_some_and(|a| a.expired)
     }
 }
 
 pub struct App {
-    account: Account,
-    login: Login,
-    farming: Farming,
-    games: Games,
-    library: Library,
-    onboarding: Onboarding,
-    market: Market,
-    setup: SetupView,
+    pub(crate) account: AccountViewModel,
+    pub(crate) login: SignInViewModel,
+    pub(crate) farming: FarmingViewModel,
+    pub(crate) games: GamesViewModel,
+    pub(crate) library: LibraryViewModel,
+    pub(crate) onboarding: OnboardingViewModel,
+    pub(crate) market: MarketViewModel,
+    pub(crate) setup: SetupView,
 
     /// The farmer's last word on what it's doing.
-    status: Option<FarmingStatus>,
-    log: Vec<LogEntry>,
-    clock: Clock,
+    pub(crate) status: Option<FarmingStatus>,
+    pub(crate) log: Vec<LogEntry>,
+    pub(crate) clock: Clock,
     /// This session's drops already seen: a new one has its game priced
     /// again.
-    seen_drops: usize,
+    pub(crate) seen_drops: usize,
 
     /// Game under the cursor, by app ID, so it stays put when the queue
     /// re-sorts.
-    selected: Option<AppId>,
-    queue_offset: usize,
-    show_done: bool,
-    paused_by_user: bool,
+    pub(crate) selected: Option<AppId>,
+    pub(crate) queue_offset: usize,
+    pub(crate) show_done: bool,
+    pub(crate) paused_by_user: bool,
 
-    overlay: Option<Overlay>,
+    pub(crate) overlay: Option<Overlay>,
     /// Short-lived confirmation shown above the footer.
-    flash: Option<(String, Instant)>,
-    tick: usize,
-    quit: bool,
+    pub(crate) flash: Option<(String, Instant)>,
+    pub(crate) tick: usize,
+    pub(crate) quit: bool,
 }
 
 impl App {
     pub fn new(
-        account: Account,
-        login: Login,
-        farming: Farming,
-        games: Games,
-        library: Library,
-        onboarding: Onboarding,
-        market: Market,
+        account: AccountViewModel,
+        login: SignInViewModel,
+        farming: FarmingViewModel,
+        games: GamesViewModel,
+        library: LibraryViewModel,
+        onboarding: OnboardingViewModel,
+        market: MarketViewModel,
     ) -> Self {
         Self {
             account,
@@ -276,7 +248,7 @@ impl App {
         }
         self.keep_prices_coming();
         self.library.poll();
-        if let Some(Overlay::Login(v)) = &self.overlay {
+        if let Some(Overlay::SignIn(v)) = &self.overlay {
             let done = matches!(v.outcome, Some(Ok(_)))
                 && v.finished.is_some_and(|t| t.elapsed() >= LOGIN_DONE_FOR);
             if done {
@@ -347,8 +319,8 @@ impl App {
         self.market.want(wanted);
     }
 
-    fn on_login_update(&mut self, u: LoginUpdate) {
-        let Some(Overlay::Login(mut v)) = self.overlay.take() else {
+    fn on_login_update(&mut self, u: SignInUpdate) {
+        let Some(Overlay::SignIn(mut v)) = self.overlay.take() else {
             return;
         };
         if let Some(c) = u.challenge {
@@ -389,7 +361,7 @@ impl App {
             }
             v.finished = Some(Instant::now());
         }
-        self.overlay = Some(Overlay::Login(v));
+        self.overlay = Some(Overlay::SignIn(v));
     }
 
     fn push_log(&mut self, kind: EventKind, text: String) {
@@ -410,7 +382,7 @@ impl App {
 
     /// The library as it's best known: the farmer's, whose hours and drops
     /// are the latest, or the one read for browsing.
-    fn known_library(&self) -> SteamLibrary {
+    pub(crate) fn known_library(&self) -> SteamLibrary {
         match &self.status {
             Some(s) if !s.library.is_empty() => s.library.clone(),
             _ => self.library.library().cloned().unwrap_or_default(),
@@ -462,7 +434,7 @@ impl App {
     }
 
     /// The onboarding's games, in the library's order.
-    fn picks(&self) -> Vec<GameRow> {
+    pub(crate) fn picks(&self) -> Vec<GameRow> {
         self.games.picks(&self.library.with_drops_left())
     }
 
@@ -586,7 +558,7 @@ impl App {
 
     fn begin_login(&mut self, from_account: bool) -> Overlay {
         self.login.start();
-        Overlay::Login(LoginView {
+        Overlay::SignIn(SignInView {
             challenge: None,
             outcome: None,
             finished: None,
@@ -763,7 +735,7 @@ impl App {
                 }
             }
 
-            Overlay::Login(v) => self.login_key(v, k),
+            Overlay::SignIn(v) => self.login_key(v, k),
 
             Overlay::Games(v) => self.games_key(v, k),
 
@@ -822,7 +794,7 @@ impl App {
         }
     }
 
-    fn login_key(&mut self, v: LoginView, k: KeyEvent) -> Option<Overlay> {
+    fn login_key(&mut self, v: SignInView, k: KeyEvent) -> Option<Overlay> {
         match (&v.outcome, k.code) {
             (Some(Err(_)), KeyCode::Char('r')) => Some(self.begin_login(v.from_account)),
             (Some(_), KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) => {
@@ -832,7 +804,7 @@ impl App {
                 self.flash("Stopped signing in.");
                 self.after_login(v.from_account)
             }
-            _ => Some(Overlay::Login(v)),
+            _ => Some(Overlay::SignIn(v)),
         }
     }
 
@@ -882,7 +854,7 @@ impl App {
     fn draw(&mut self, f: &mut Frame<'_>) {
         let area = f.area();
         if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-            dashboard::too_small(f, area);
+            dashboard_view::too_small(f, area);
             return;
         }
         let prefs = self.farming.preferences();
@@ -914,12 +886,12 @@ impl App {
             };
             let queue_offset = match self.onboarding.step() {
                 Some(step) => {
-                    onboarding::render(f, area, &cx, step);
+                    onboarding_view::render(f, area, &cx, step);
                     self.queue_offset
                 }
-                None => dashboard::render(f, area, &cx),
+                None => dashboard_view::render(f, area, &cx),
             };
-            let log_scroll = overlays::render(f, area, &cx);
+            let log_scroll = popups::render(f, area, &cx);
             (queue_offset, log_scroll)
         };
         self.queue_offset = queue_offset;

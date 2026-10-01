@@ -5,13 +5,13 @@ use account::{
 };
 
 /// The one Steam account: who's signed in, and signing out.
-pub struct Account {
+pub struct AccountViewModel {
     get_account: Arc<dyn GetAccountUseCase>,
     check_sign_in: Arc<dyn CheckSignInUseCase>,
     sign_out: Arc<dyn SignOutUseCase>,
 }
 
-impl Account {
+impl AccountViewModel {
     /// Also starts a background check of the saved sign-in.
     pub fn new(
         get_account: Arc<dyn GetAccountUseCase>,
@@ -52,8 +52,11 @@ mod tests {
 
     use super::*;
 
-    fn account(check: Arc<SpyCheckSignInUseCase>, sign_out: Arc<SpySignOutUseCase>) -> Account {
-        Account::new(Arc::new(StubGetAccountUseCase::new(None)), check, sign_out)
+    fn account(
+        check: Arc<SpyCheckSignInUseCase>,
+        sign_out: Arc<SpySignOutUseCase>,
+    ) -> AccountViewModel {
+        AccountViewModel::new(Arc::new(StubGetAccountUseCase::new(None)), check, sign_out)
     }
 
     #[test]

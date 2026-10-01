@@ -9,15 +9,17 @@ use ratatui::{
     widgets::{Block, BorderType, Padding, Paragraph},
 };
 
-use super::{
-    CONTINUE_ROW, Ctx, dashboard,
+use crate::{
+    app::{CONTINUE_ROW, Ctx},
+    dashboard::dashboard_view,
+    games::GameRow,
+    onboarding::Step,
     theme::{self, ACCENT, BAD, BUSY, GOOD},
     widgets::{
         centered, first_fit, fit, flash_line, hints, keycap, scroll, selected_row, spread, width,
         wrap_list, wrap_text,
     },
 };
-use crate::viewmodel::{GameRow, Step};
 
 /// The card's width on roomy windows.
 const CARD_W: u16 = 80;
@@ -51,7 +53,13 @@ impl Card {
     }
 }
 
-pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, step: Step) {
+/// Where the user is within an onboarding step.
+#[derive(Default)]
+pub(crate) struct SetupView {
+    pub(crate) cursor: usize,
+}
+
+pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, step: Step) {
     let [header, body, strip, footer] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(8),
@@ -241,7 +249,7 @@ fn sign_in(cx: &Ctx<'_>, w: usize, room: usize) -> Card {
         Span::raw(" "),
         Span::styled(fit("Steam", 9), theme::steam()),
     ];
-    left.extend(dashboard::account_badge(cx));
+    left.extend(dashboard_view::account_badge(cx));
     let right = if cursor == 0 {
         vec![Span::raw(format!("{} › ", sign_in_label(cx)))]
     } else {
@@ -379,7 +387,7 @@ fn games(cx: &Ctx<'_>, w: usize, room: usize) -> Card {
 
 /// Reading, failed or empty: the library, when it's not simply there, in
 /// lines of `w` columns; none when it is.
-pub(super) fn library_status(cx: &Ctx<'_>, w: usize) -> Vec<Line<'static>> {
+pub(crate) fn library_status(cx: &Ctx<'_>, w: usize) -> Vec<Line<'static>> {
     let library = &cx.app.library;
     let say = |text: &str, style| -> Vec<Line<'static>> {
         wrap_text(text, w)
@@ -423,13 +431,13 @@ fn pick_row(r: &GameRow, w: usize) -> Line<'static> {
 
 /// A game's drops to come and hours, as much as fits in `room`, for here and
 /// the games pop-up.
-pub(super) fn game_facts(r: &GameRow, room: usize) -> Vec<Span<'static>> {
+pub(crate) fn game_facts(r: &GameRow, room: usize) -> Vec<Span<'static>> {
     let left = match r.drops.remaining {
         0 => "done".to_owned(),
         1 => "1 card to drop".to_owned(),
         n => format!("{n} cards to drop"),
     };
-    let played = dashboard::hours(r.hours);
+    let played = dashboard_view::hours(r.hours);
     first_fit(
         vec![
             vec![dim(format!("  {left} · {played} played "))],
@@ -450,7 +458,7 @@ fn start(cx: &Ctx<'_>, w: usize, room: usize) -> Card {
         Span::raw(" "),
         Span::styled(fit("Steam", LABEL), theme::steam()),
     ];
-    spans.extend(dashboard::account_badge(cx));
+    spans.extend(dashboard_view::account_badge(cx));
     head.push(Line::from(spans));
 
     let games: Vec<String> = cx

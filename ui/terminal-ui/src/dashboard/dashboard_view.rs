@@ -24,17 +24,18 @@ use ratatui::{
 };
 use session::Mode;
 
-use super::{
-    Ctx, LogEntry, MIN_HEIGHT, MIN_WIDTH,
+use crate::dashboard::{
+    CardName, CardPrice, QueueEntry, Section, SessionCard, Summary, Value, card_price,
+    session_cards, value_to_come,
+};
+use crate::{
+    app::{Ctx, MIN_HEIGHT, MIN_WIDTH},
+    dashboard::LogEntry,
     theme::{self, BAD, BUSY, GOOD},
     widgets::{
         DIVIDER, elapsed, fit, fit_right, fitted, flash_line, gauge, hints, keycap, panel, rule,
         selected_row, shorten, spread, width, wrap_text,
     },
-};
-use crate::viewmodel::{
-    CardName, CardPrice, QueueEntry, Section, SessionCard, Summary, Value, card_price,
-    session_cards, value_to_come,
 };
 
 /// From this width, the games and this session's cards sit side by side.
@@ -45,7 +46,7 @@ const LABEL: usize = 15;
 const FRESH: Duration = Duration::from_secs(20);
 
 /// Draws the dashboard; returns the games list's scroll offset to remember.
-pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
+pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
     let [header, summary_area, body, strip, footer] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(2),
@@ -79,7 +80,7 @@ pub(super) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
     offset
 }
 
-pub(super) fn too_small(f: &mut Frame<'_>, area: Rect) {
+pub(crate) fn too_small(f: &mut Frame<'_>, area: Rect) {
     let lines = vec![
         Line::styled("Make the window a little bigger", theme::bold()),
         Line::styled(
@@ -106,7 +107,7 @@ fn dim(s: impl Into<String>) -> Span<'static> {
 
 /// What a game is doing, drawn the same way everywhere.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum State {
+pub(crate) enum State {
     /// Played on its own: its cards are dropping.
     Farming,
     /// Played with others, building hours.
@@ -147,7 +148,7 @@ impl State {
 }
 
 /// "5.2h", "12h", "1,234h".
-pub(super) fn hours(h: f64) -> String {
+pub(crate) fn hours(h: f64) -> String {
     if h < 10.0 {
         format!("{h:.1}h")
     } else {
@@ -430,7 +431,7 @@ fn account_lines(cx: &Ctx<'_>) -> Vec<Vec<Span<'static>>> {
 }
 
 /// "● cardfarmer", "✕ sign-in expired" or "○ not signed in".
-pub(super) fn account_badge(cx: &Ctx<'_>) -> Vec<Span<'static>> {
+pub(crate) fn account_badge(cx: &Ctx<'_>) -> Vec<Span<'static>> {
     match cx.account {
         Some(a) if a.expired => vec![Span::styled(
             format!("{} sign-in expired", theme::FAILED),
@@ -862,7 +863,7 @@ fn session_row(
 
 /// Everything about one game — what it's doing, its hours and drops, and its
 /// set with how many of each card you have and what each is worth.
-pub(super) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'static>> {
+pub(crate) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'static>> {
     let g = &e.game;
     let state = State::of(e);
     let mut out = Vec::new();
@@ -1010,7 +1011,7 @@ pub(super) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
 
 /// The game's tier as a set of radio buttons, each with the key that picks
 /// it — so ranking is discoverable right where the game is shown.
-pub(super) fn tier_controls(e: &QueueEntry, w: usize) -> Vec<Line<'static>> {
+pub(crate) fn tier_controls(e: &QueueEntry, w: usize) -> Vec<Line<'static>> {
     let mut out = vec![rule(
         vec![Span::styled("Farm priority", theme::heading())],
         Vec::new(),
@@ -1110,7 +1111,7 @@ fn render_strip(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
 
 /// A log entry in `w` columns: time, icon, text, the text shortened with
 /// "…" when it doesn't fit. `fade` greys out older entries.
-pub(super) fn log_line(e: &LogEntry, fade: bool, w: usize) -> Line<'static> {
+pub(crate) fn log_line(e: &LogEntry, fade: bool, w: usize) -> Line<'static> {
     let (icon, style) = match e.kind {
         EventKind::Dropped | EventKind::Identified => (theme::DONE, theme::fg(GOOD)),
         EventKind::Playing => (theme::FARMING, theme::fg(GOOD)),

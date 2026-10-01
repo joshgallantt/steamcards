@@ -153,7 +153,7 @@ A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that fold
 
 `cargo xtask` is a small Rust tool in [`xtask/`](xtask/src/main.rs), so it works the same everywhere. Three of its checks use a tool that doesn't come with Rust: spelling (typos), unused dependencies (cargo-machete) and the dependencies themselves (cargo-deny). Without the tool, that check is skipped locally, with a hint; CI always runs it. The tools' versions are set in one place, `TOOLS` in [`xtask/src/main.rs`](xtask/src/main.rs), and CI installs the same ones.
 
-After changing the UI, run `cargo xtask screenshots` to redraw the README's images. They're drawn from the previews' made-up data (`readme_previews` in [`preview.rs`](ui/terminal-ui/src/tui/preview.rs)), so they never show a real account; don't replace them with screenshots of a signed-in steamcards. With `PREVIEW_DUMP=<dir>`, the previews also write each screen's cells as JSON. The screens' design, and the rules that keep anything from being cut off, are in [docs/design/ui.md](docs/design/ui.md).
+After changing the UI, run `cargo xtask screenshots` to redraw the README's images. They're drawn from the previews' made-up data (`readme_previews` in [`preview.rs`](ui/terminal-ui/src/app/preview.rs)), so they never show a real account; don't replace them with screenshots of a signed-in steamcards. With `PREVIEW_DUMP=<dir>`, the previews also write each screen's cells as JSON. The screens' design, and the rules that keep anything from being cut off, are in [docs/design/ui.md](docs/design/ui.md).
 
 ---
 
@@ -207,7 +207,8 @@ On the dashboard, you select a game and press `1`. You want its cards first. Her
       press 1
         │
         ▼
- ①  App::set_tier → Farming::set_tier   ui/terminal-ui                presentation
+ ①  App::set_tier →                     ui/terminal-ui                presentation
+     FarmingViewModel::set_tier
         │  calls a use case trait
         ▼
  ②  DefaultSetGameTierUseCase           component/preferences/domain  domain  ── the rule
@@ -229,9 +230,9 @@ The line at ③ is where it turns. The contract lives in the **domain**, and the
 
 #### ① The screen holds only what it calls
 
-**[`ui/terminal-ui/src/viewmodel/farming.rs`](ui/terminal-ui/src/viewmodel/farming.rs)**
+**[`ui/terminal-ui/src/dashboard/farming_view_model.rs`](ui/terminal-ui/src/dashboard/farming_view_model.rs)**
 ```rust
-pub struct Farming {
+pub struct FarmingViewModel {
     farm: Arc<dyn FarmCardsUseCase>,
     end_session: Arc<dyn EndSessionUseCase>,
     account: Arc<dyn GetAccountUseCase>,
@@ -336,7 +337,7 @@ component/preferences/
 
 If the write succeeded, the dashboard flashes *"Hades is now priority #1."* If it failed:
 
-**[`ui/terminal-ui/src/tui/mod.rs`](ui/terminal-ui/src/tui/mod.rs)**
+**[`ui/terminal-ui/src/app/mod.rs`](ui/terminal-ui/src/app/mod.rs)**
 ```rust
 if let Err(err) = self.farming.set_tier(e.game.app_id, tier) {
     return self.didnt_stick(err);
@@ -404,7 +405,7 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 | Acceptance | `tests/` in each DI crate, with the driver in `tests/support/` | the user's terms, through the component as the app wires it: `player.signs_in()`, `player.comes_back()` |
 | Paused time | `tests/` in the farming and price domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(EventKind::Dropped)` |
 | End to end | `tests/` in the data and library crates | real code against local stand-ins for Steam: a CM server over a real WebSocket (`steam-api`'s `test_support`), and [wiremock](https://crates.io/crates/wiremock) for steamcommunity.com |
-| Screens | [`ui/terminal-ui/src/tui/preview.rs`](ui/terminal-ui/src/tui/preview.rs) | what's on screen, and that nothing is cut off at any size |
+| Screens | [`ui/terminal-ui/src/app/preview.rs`](ui/terminal-ui/src/app/preview.rs) | what's on screen, and that nothing is cut off at any size |
 | Architecture | [`app/tests/`](app/tests/) | the rules above |
 
 An acceptance test reads like the user's day, and runs the component as the app wires it, over its real data layer and a real config file, against a stand-in for Steam:

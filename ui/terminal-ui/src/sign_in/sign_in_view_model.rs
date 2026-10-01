@@ -1,24 +1,20 @@
 use std::sync::Arc;
 
+use crate::sign_in::SignInUpdate;
+
 use account::{LoginChallenge, SignInUseCase};
 use tokio::sync::mpsc;
 
-pub struct LoginUpdate {
-    pub challenge: Option<LoginChallenge>,
-    pub done: bool,
-    pub err: Option<String>,
-}
-
 /// Signing in with the Steam app, in the background: QR codes to show while
 /// it waits, then how it went.
-pub struct Login {
+pub struct SignInViewModel {
     sign_in: Arc<dyn SignInUseCase>,
     /// Stops the sign-in itself on cancel.
     task: Option<tokio::task::AbortHandle>,
-    updates: Option<mpsc::UnboundedReceiver<LoginUpdate>>,
+    updates: Option<mpsc::UnboundedReceiver<SignInUpdate>>,
 }
 
-impl Login {
+impl SignInViewModel {
     pub fn new(sign_in: Arc<dyn SignInUseCase>) -> Self {
         Self {
             sign_in,
@@ -30,7 +26,7 @@ impl Login {
     /// Starts signing in; progress arrives through `try_recv`.
     pub fn start(&mut self) {
         self.cancel();
-        let (tx, rx) = mpsc::unbounded_channel::<LoginUpdate>();
+        let (tx, rx) = mpsc::unbounded_channel::<SignInUpdate>();
         self.updates = Some(rx);
         let (challenge_tx, mut challenge_rx) = mpsc::unbounded_channel::<LoginChallenge>();
 
@@ -38,7 +34,7 @@ impl Login {
         let codes = tx.clone();
         tokio::spawn(async move {
             while let Some(c) = challenge_rx.recv().await {
-                let _ = codes.send(LoginUpdate {
+                let _ = codes.send(SignInUpdate {
                     challenge: Some(c),
                     done: false,
                     err: None,
@@ -55,7 +51,7 @@ impl Login {
                 Err(e) if e.is_cancelled() => return,
                 Err(e) => Some(format!("the sign-in stopped: {e}")),
             };
-            let _ = tx.send(LoginUpdate {
+            let _ = tx.send(SignInUpdate {
                 challenge: None,
                 done: true,
                 err,
@@ -63,7 +59,7 @@ impl Login {
         });
     }
 
-    pub fn try_recv(&mut self) -> Option<LoginUpdate> {
+    pub fn try_recv(&mut self) -> Option<SignInUpdate> {
         self.updates.as_mut()?.try_recv().ok()
     }
 

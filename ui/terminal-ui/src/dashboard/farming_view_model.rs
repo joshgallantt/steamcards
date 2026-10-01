@@ -9,7 +9,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 /// Runs the farmer, pauses and resumes it, and ends its session.
-pub struct Farming {
+pub struct FarmingViewModel {
     farm: Arc<dyn FarmCardsUseCase>,
     end_session: Arc<dyn EndSessionUseCase>,
     account: Arc<dyn GetAccountUseCase>,
@@ -23,7 +23,7 @@ pub struct Farming {
     session_for: Option<String>,
 }
 
-impl Farming {
+impl FarmingViewModel {
     pub fn new(
         farm: Arc<dyn FarmCardsUseCase>,
         end_session: Arc<dyn EndSessionUseCase>,
@@ -129,12 +129,12 @@ mod tests {
     use super::*;
 
     /// Farming, signed in or not, counting the farmer's runs.
-    fn farming(signed_in: bool, farm: &Arc<SpyFarmCardsUseCase>) -> Farming {
+    fn farming(signed_in: bool, farm: &Arc<SpyFarmCardsUseCase>) -> FarmingViewModel {
         let account = signed_in.then(|| Account {
             name: "cardfarmer".into(),
             expired: false,
         });
-        Farming::new(
+        FarmingViewModel::new(
             farm.clone(),
             Arc::new(SpyEndSessionUseCase::default()),
             Arc::new(StubGetAccountUseCase::new(account)),
@@ -156,8 +156,11 @@ mod tests {
 
     /// Farming, signed in as whoever `who` says, counting the sessions
     /// ended.
-    fn farming_as(who: &Arc<StubGetAccountUseCase>, ended: &Arc<SpyEndSessionUseCase>) -> Farming {
-        Farming::new(
+    fn farming_as(
+        who: &Arc<StubGetAccountUseCase>,
+        ended: &Arc<SpyEndSessionUseCase>,
+    ) -> FarmingViewModel {
+        FarmingViewModel::new(
             Arc::new(SpyFarmCardsUseCase::default()),
             ended.clone(),
             who.clone(),
