@@ -3,6 +3,7 @@
 [![Tests](https://github.com/joshgallantt/steamcards/actions/workflows/tests.yml/badge.svg)](https://github.com/joshgallantt/steamcards/actions/workflows/tests.yml)
 [![macOS](https://img.shields.io/badge/macOS-supported-2ea44f)](#macos)
 [![Linux](https://img.shields.io/badge/Linux-supported-2ea44f)](#linux)
+[![Windows](https://img.shields.io/badge/Windows-supported-2ea44f)](#windows)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![unsafe: forbidden](https://img.shields.io/badge/unsafe-forbidden-2ea44f)](CONTRIBUTING.md#the-rules-the-build-enforces)
 ![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange?logo=rust)
@@ -19,7 +20,7 @@
 - **Every game with cards in one list,** with its drops and what they're worth. Open one to see its set: how many of each card you have (a card can drop twice), and what each is worth.
 - **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.
-- **macOS and Linux.**
+- **Windows, macOS and Linux.**
 
 ## Install
 
@@ -43,6 +44,14 @@ brew tap joshgallantt/steamcards https://github.com/joshgallantt/steamcards && b
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.sh | sh
+```
+
+### Windows
+
+In Windows Terminal:
+
+```powershell
+irm https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.ps1 | iex
 ```
 
 To update, run the same line again (with Homebrew, `brew upgrade steamcards`). See [what's new](https://github.com/joshgallantt/steamcards/releases).
@@ -73,10 +82,18 @@ Start a game on another computer while steamcards farms, and Steam says you're a
 
 Your sign-in and choices stay on your computer, in one file only you can read, and steamcards talks to nobody but Steam. The market's prices of your cards are kept beside it, so a restart doesn't look every game up again. Signing out (press `a`) forgets the sign-in and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.
 
-To uninstall, paste this line. It works however you installed steamcards, and asks whether to delete your sign-in and choices too.
+To uninstall, paste the line for your computer. It works however you installed steamcards, and asks whether to delete your sign-in and choices too.
+
+**macOS and Linux**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/uninstall.sh | sh
+```
+
+**Windows**
+
+```powershell
+irm https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/uninstall.ps1 | iex
 ```
 
 ## Disclaimer

@@ -18,8 +18,9 @@ Thanks for helping. This guide is the technical side of steamcards: building it 
 
 ## Building from source
 
-macOS or Linux, with Rust 1.88 or later and a C compiler. First set up your OS:
+Any OS, with Rust 1.88 or later and a C compiler. First set up your OS:
 
+- **Windows:** install [Rust](https://www.rust-lang.org/tools/install), with `rustup-init.exe` or `winget install Rustlang.Rustup`. When rustup asks, let it install the **Visual Studio Build Tools** (the "Desktop development with C++" workload). If you skipped that, get them from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/visual-cpp-build-tools/). On Windows on ARM, also install LLVM (`winget install LLVM.LLVM`): the `ring` crate needs Clang to build there.
 - **macOS:** install the Xcode command-line tools, then [Rust](https://www.rust-lang.org/tools/install):
   ```sh
   xcode-select --install
@@ -43,7 +44,7 @@ Then build and install it:
 cargo install --git https://github.com/joshgallantt/steamcards --locked steamcards
 ```
 
-This puts `steamcards` in `~/.cargo/bin`, which rustup adds to your `PATH`. From a clone of the repository, `cargo install --path app --locked` does the same. To update it, run the same command with `--force`; to remove it, `cargo uninstall steamcards`.
+This puts `steamcards` in `~/.cargo/bin` (`%USERPROFILE%\.cargo\bin` on Windows), which rustup adds to your `PATH`. From a clone of the repository, `cargo install --path app --locked` does the same. To update it, run the same command with `--force`; to remove it, `cargo uninstall steamcards`.
 
 ## Running it: the technical details
 
@@ -71,24 +72,30 @@ Your sign-in and choices are in one file, `config.json`, in a folder of steamcar
 | --- | --- |
 | macOS | `~/Library/Application Support/steamcards` |
 | Linux | `$XDG_CONFIG_HOME/steamcards` when `XDG_CONFIG_HOME` is set to a full path, otherwise `~/.config/steamcards` |
+| Windows | `%APPDATA%\steamcards` |
 
-That's [`dirs::config_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_dir.html), from Rust's `dirs` crate, plus `steamcards`. It's the only folder of yours the uninstall script deletes: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
+That's [`dirs::config_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_dir.html), from Rust's `dirs` crate, plus `steamcards`. It's the only folder of yours the uninstall scripts delete: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
 
 ### Opening links on Linux
 
 steamcards opens a game's card page in your browser through `$BROWSER` or the desktop's opener, such as `xdg-open` from `xdg-utils`. Most desktops have one. A text browser, like lynx, takes over the terminal until it quits.
 
-### The install script
+### The install scripts
 
-The one-line installer is [`install/install.sh`](install/install.sh). It downloads the release for your system, checks it against the release's `SHA256SUMS`, and installs it without admin rights, to `~/.local/bin`, or wherever steamcards already is. It won't overwrite a copy that Homebrew or cargo installed; it says how to update that one instead. Run again, it compares `steamcards --version` with the latest release, and only downloads when it's newer.
+The one-line installers are [`install/install.sh`](install/install.sh) for macOS and Linux, and [`install/install.ps1`](install/install.ps1) for Windows. Each downloads the release for your system, checks it against the release's `SHA256SUMS`, and installs it without admin rights:
 
-It reads these variables, all optional:
+- on macOS and Linux, to `~/.local/bin`, or wherever steamcards already is;
+- on Windows, to `%LOCALAPPDATA%\Programs\steamcards`, which it adds to your user `PATH`.
+
+They won't overwrite a copy that Homebrew or cargo installed; they say how to update that one instead. Run again, they compare `steamcards --version` with the latest release, and only download when it's newer.
+
+They read these variables, all optional:
 
 | Variable | What it does |
 | --- | --- |
 | `STEAMCARDS_VERSION` | Install this release, e.g. `0.1.0`, instead of the latest. It's how to install a pre-release. |
 | `STEAMCARDS_FORCE` | `1` reinstalls, even if that version is already installed. |
-| `STEAMCARDS_INSTALL_DIR` | Install here instead of `~/.local/bin`. |
+| `STEAMCARDS_INSTALL_DIR` | macOS and Linux only: install here instead of `~/.local/bin`. |
 | `STEAMCARDS_RELEASES_URL` | Download from a mirror instead of the [releases page](https://github.com/joshgallantt/steamcards/releases). It needs the same layout: `<url>/latest` redirects to `<url>/tag/vX.Y.Z`, and each release's files are in `<url>/download/vX.Y.Z/`. |
 
 For example:
@@ -97,25 +104,25 @@ For example:
 curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.sh | STEAMCARDS_VERSION=0.1.0 sh
 ```
 
-Without the script, every release's archives are on the [releases page](https://github.com/joshgallantt/steamcards/releases/latest), one per platform. The [security policy](.github/SECURITY.md#checking-a-download) says how to check one.
+Without the scripts, every release's archives are on the [releases page](https://github.com/joshgallantt/steamcards/releases/latest), one per platform: on Windows, `steamcards-x86_64-pc-windows-msvc.zip` holds `steamcards.exe`, to put wherever you like. The [security policy](.github/SECURITY.md#checking-a-download) says how to check one.
 
-### The uninstall script
+### The uninstall scripts
 
-The one-line uninstaller, in the [README](README.md#your-data-and-uninstalling), is [`install/uninstall.sh`](install/uninstall.sh). It finds steamcards as the install script does, in `~/.local/bin` or else first on your `PATH`, and removes it the way it was installed:
+The one-line uninstallers, in the [README](README.md#your-data-and-uninstalling), are [`install/uninstall.sh`](install/uninstall.sh) for macOS and Linux, and [`install/uninstall.ps1`](install/uninstall.ps1) for Windows. They find steamcards as the install scripts do, in the install folder or else first on your `PATH`, and remove it the way it was installed:
 
 - a copy from Homebrew with `brew uninstall steamcards`, using the `brew` beside it (a Mac can have two Homebrews), then `brew untap joshgallantt/steamcards` if that tap is there;
 - a copy that cargo built, in `~/.cargo/bin` (or `$CARGO_HOME/bin`), with `cargo uninstall steamcards`, so that cargo forgets it too;
-- any other copy by deleting it.
+- any other copy by deleting it. On Windows, that's the whole `%LOCALAPPDATA%\Programs\steamcards` folder when steamcards is in it, or else just `steamcards.exe`.
 
-If `brew` or `cargo` can't be found, it stops and says the command to run instead. Like the install script, it never uses `sudo`, so a copy in a folder only an administrator can change is left for you to delete.
+If `brew` or `cargo` can't be found, they stop and say the command to run instead. Like the install scripts, they never use `sudo` or admin rights, so a copy in a folder only an administrator can change is left for you to delete. On Windows, they also take `%LOCALAPPDATA%\Programs\steamcards` off your user `PATH`, even if you deleted steamcards by hand, and leave every other entry as it was. They won't delete a `steamcards.exe` that's running.
 
-Then it asks whether to delete your sign-in and choices too: the folder in [Where your data is](#where-your-data-is), and nothing else. When it can't ask (with no terminal), it keeps it and says where it is. `STEAMCARDS_DELETE_DATA` answers for you: `1` deletes it without asking, and `0` keeps it. For example:
+Then they ask whether to delete your sign-in and choices too: the folder in [Where your data is](#where-your-data-is), and nothing else. When they can't ask (with no terminal, or in a PowerShell that can't prompt), they keep it and say where it is. `STEAMCARDS_DELETE_DATA` answers for you: `1` deletes it without asking, and `0` keeps it. For example:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/uninstall.sh | STEAMCARDS_DELETE_DATA=1 sh
 ```
 
-A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that folder is on your `PATH`.
+In PowerShell, set it first: `$env:STEAMCARDS_DELETE_DATA = 1`. A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that folder is on your `PATH`.
 
 ---
 
@@ -135,6 +142,7 @@ A copy you installed with `STEAMCARDS_INSTALL_DIR` is found as long as that fold
    ```sh
    STEAMCARDS_CONFIG=/tmp/steamcards-dev.json cargo run
    ```
+   In PowerShell: `$env:STEAMCARDS_CONFIG = "$env:TEMP\steamcards-dev.json"; cargo run`.
 
 ## Everyday commands
 
@@ -458,7 +466,7 @@ This runs the real farmer through hours of drops in milliseconds, on paused time
 - **Use made-up account names, Steam IDs and tokens** in tests, fixtures and docs, never real ones.
 - **A test should fail when the code is wrong.** If you add one, break the code on purpose once and watch it fail.
 
-**The install and uninstall scripts** have tests of their own, in [`install/tests/`](install/tests/). Each scenario runs one of the scripts with a home, install folder and data folder of its own, so your own steamcards and sign-in are never touched: the install script against a local stand-in for GitHub Releases, and the uninstall script with stand-ins for Homebrew and cargo. `uninstall.sh` runs with no terminal, as on CI, or with one of its own that answers its question ([`terminal.py`](install/tests/terminal.py)). They need Python 3. `sh install/tests/run.sh` tests both scripts under sh, dash and BusyBox, whichever you have. CI runs them on Linux and macOS whenever the scripts change.
+**The install and uninstall scripts** have tests of their own, in [`install/tests/`](install/tests/). Each scenario runs one of the scripts with a home, install folder and data folder of its own, so your own steamcards and sign-in are never touched: the install scripts against a local stand-in for GitHub Releases, and the uninstall scripts with stand-ins for Homebrew and cargo. `uninstall.sh` runs with no terminal, as on CI, or with one of its own that answers its question ([`terminal.py`](install/tests/terminal.py)). They need Python 3. `sh install/tests/run.sh` tests `install.sh` and `uninstall.sh` under sh, dash and BusyBox, whichever you have. `pwsh -NoProfile -File install/tests/run.ps1` tests `install.ps1` and `uninstall.ps1`; on macOS and Linux it skips the scenarios that need Windows, and on Windows it puts your user `PATH` back as it was after each one. CI runs them on Linux, macOS and Windows, under Windows PowerShell 5.1 and PowerShell 7, whenever the scripts change.
 
 ---
 
@@ -489,8 +497,8 @@ When you try a change for real:
 CI is one workflow, **Tests** ([`tests.yml`](.github/workflows/tests.yml)), run on every pull request and every push to `main`, with a job for each check:
 - formatting, spelling, lints and dead code (`cargo xtask lint`), the docs and the README's screenshots (`cargo xtask docs`), and the dependencies (`cargo xtask deps`), once, on Linux;
 - `cargo check` on the oldest supported Rust, the `rust-version` in [`Cargo.toml`](Cargo.toml), and actionlint and zizmor on the workflows themselves;
-- the tests (`cargo xtask test`) on every system steamcards supports: Linux, macOS and an Arch Linux container;
-- when the install scripts change, ShellCheck on them, and their tests on Linux and macOS.
+- the tests (`cargo xtask test`) on every system steamcards supports: Linux, macOS, Windows and an Arch Linux container;
+- when the install scripts change, ShellCheck and PSScriptAnalyzer on them, and their tests on Linux, macOS and Windows.
 
 Its last job, "Tests passed", passes once every other job has passed or was skipped as not needed. It's the one check pull requests need.
 
@@ -525,16 +533,16 @@ What it does:
 3. **Asks, then pushes** `main` and the tag together. `--yes` skips the question.
 4. **Follows the release build** ([`release.yml`](.github/workflows/release.yml)) to the end. The build:
    - waits for the tests to pass on the tagged commit, which pushing it to `main` started;
-   - builds macOS (Apple silicon and Intel) and Linux (x86_64 and arm64, static), and checks each build runs and reports the tag's version;
+   - builds macOS (Apple silicon and Intel), Linux (x86_64 and arm64, static) and Windows (x86_64), and checks each build runs and reports the tag's version;
    - publishes them as a GitHub release, with `SHA256SUMS` and, for a public repository, [build-provenance attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations). Its notes say how to install it, then GitHub lists the pull requests merged since the last release, grouped as [`.github/release.yml`](.github/release.yml) says. Edit them on the release's page to add anything else;
-   - for a public repository, installs the release with the install script, the way users do on each platform, checks it runs, and uninstalls it again.
+   - for a public repository, installs the release with the install scripts, the way users do on each platform, checks it runs, and uninstalls it again.
 5. **Points the [Homebrew formula](Formula/steamcards.rb) at the release**, and pushes that to `main`. [`homebrew.yml`](.github/workflows/homebrew.yml) then installs it with Homebrew and checks it runs.
 
 It needs no secrets, tokens or repository settings. The workflows never push to `main`; only you do, which is what lets `main` stay protected.
 
 **If something stops it** (a failed check, Ctrl-C, a closed laptop), run the same command again with the same version: it carries on from where it stopped. Once the tag is pushed, the release itself finishes on GitHub whether or not your machine is watching; running the command again afterwards points Homebrew at it. If the build fails before publishing, nothing is published: fix it on `main` and release the next version, or move the tag to the fix (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`) and run the command again.
 
-**A pre-release** is a version with a hyphen, like `0.3.0-rc.1`. It's marked as one on GitHub, and Homebrew and the install script's "latest" skip it. People install it by name, with `STEAMCARDS_VERSION`.
+**A pre-release** is a version with a hyphen, like `0.3.0-rc.1`. It's marked as one on GitHub, and Homebrew and the install scripts' "latest" skip it. People install it by name, with `STEAMCARDS_VERSION`.
 
 ---
 

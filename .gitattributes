@@ -1,4 +1,5 @@
-# LF everywhere, so rustfmt sees the same bytes on every OS.
+# LF everywhere, so a checkout on Windows doesn't turn every line into a diff
+# (and rustfmt sees the same bytes on every OS).
 * text=auto eol=lf
 
 # Hooks run under sh, which needs LF.

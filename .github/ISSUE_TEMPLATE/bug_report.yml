@@ -43,6 +43,7 @@ body:
     attributes:
       label: Operating system
       options:
+        - Windows
         - macOS
         - Linux (Arch-based)
         - Linux (other)
@@ -52,7 +53,7 @@ body:
     id: terminal
     attributes:
       label: Terminal
-      placeholder: Ghostty, iTerm2, Terminal, Konsole, ...
+      placeholder: Windows Terminal, Ghostty, iTerm2, Terminal, Konsole, ...
   - type: textarea
     id: log
     attributes:

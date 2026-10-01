@@ -9,7 +9,7 @@
 //! 3. **Asks**, then **publishes**: pushes `main` and the tag together.
 //!    Pushing `main` runs the tests on the release commit, and the tag starts
 //!    `.github/workflows/release.yml`, which waits for them to pass,
-//!    builds steamcards for macOS and Linux, checks each build runs,
+//!    builds steamcards for macOS, Linux and Windows, checks each build runs,
 //!    and publishes them as a GitHub release. GitHub writes its notes from
 //!    the pull requests merged since the last release.
 //! 4. **Follows that build** to the end, then points the Homebrew formula at
@@ -345,7 +345,7 @@ impl Release<'_> {
         }
         println!(
             "  The tag starts the release build, which publishes steamcards {} for\n  \
-             macOS and Linux on {}'s releases page.",
+             macOS, Linux and Windows on {}'s releases page.",
             self.version, github.name
         );
         if github.private {
@@ -515,6 +515,7 @@ impl Release<'_> {
             );
         } else {
             println!("  macOS and Linux: curl -fsSL {raw}/install/install.sh | sh");
+            println!("  Windows:         irm {raw}/install/install.ps1 | iex");
             println!("  Homebrew:        brew upgrade steamcards");
         }
         if github.private {

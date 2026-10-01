@@ -6,7 +6,7 @@
 # - the oldest Rust steamcards supports, and the workflows themselves;
 # - the tests (`cargo xtask test`), on every system steamcards runs on;
 # - when they change, the install scripts: linted, and tested on the systems
-#   they're for (macOS and Linux).
+#   they're for.
 #
 # The last job, "Tests passed", passes once every other job has passed or
 # was skipped as not needed. It's the one check the rules for main require,
@@ -162,6 +162,8 @@ jobs:
             os: ubuntu-latest
           - name: macOS
             os: macos-latest
+          - name: Windows
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -193,10 +195,10 @@ jobs:
         run: rustup toolchain install --no-self-update
       - run: cargo xtask test
 
-  # Whether the install scripts changed. Their tests run on Macs, the costly
-  # machines, so they run only when the scripts (or this workflow) change.
-  # GitHub can skip a whole workflow by the files a change touches, but not a
-  # single job, so this job works it out.
+  # Whether the install scripts changed. Their tests run on Macs and Windows,
+  # the costly machines, so they run only when the scripts (or this
+  # workflow) change. GitHub can skip a whole workflow by the files a change
+  # touches, but not a single job, so this job works it out.
   changes:
     name: What changed
     runs-on: ubuntu-latest
@@ -230,9 +232,10 @@ jobs:
           echo "The install scripts need testing: $install"
           echo "install=$install" >> "$GITHUB_OUTPUT"
 
-  # ShellCheck for the scripts and their tests.
+  # ShellCheck for the sh scripts, and PSScriptAnalyzer for the PowerShell
+  # ones, with the settings in install/tests/.
   install-lint:
-    name: Install scripts (ShellCheck)
+    name: Install scripts (ShellCheck, PSScriptAnalyzer)
     needs: changes
     if: needs.changes.outputs.install == 'true'
     runs-on: ubuntu-latest
@@ -246,6 +249,16 @@ jobs:
           command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install --yes shellcheck; }
           shellcheck --version
           shellcheck install/install.sh install/uninstall.sh install/tests/run.sh
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Repository PSGallery -Scope CurrentUser -Force
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          $findings = foreach ($file in 'install/install.ps1', 'install/uninstall.ps1', 'install/tests/run.ps1') {
+            Invoke-ScriptAnalyzer -Path $file -Settings install/tests/PSScriptAnalyzerSettings.psd1
+          }
+          $findings | Format-Table -AutoSize -Wrap -Property Severity, RuleName, ScriptName, Line, Message
+          if ($findings) { exit 1 }
 
   # install.sh and uninstall.sh, against a local stand-in for GitHub Releases
   # and stand-ins for Homebrew and cargo, under every shell that's there: sh
@@ -274,6 +287,40 @@ jobs:
       - name: Test install.sh and uninstall.sh
         run: sh install/tests/run.sh
 
+  # install.ps1 and uninstall.ps1, under Windows PowerShell 5.1 and PowerShell
+  # 7. The tests change the runner's user PATH, as installing and
+  # uninstalling do, which is fine on a machine that's thrown away afterwards.
+  # On Linux, pwsh runs the scenarios that don't need Windows, as it does for
+  # anyone running the tests on a Mac.
+  install-ps1:
+    name: Install scripts (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.install == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows PowerShell 5.1
+            os: windows-latest
+            shell: powershell
+          - name: PowerShell 7, Windows
+            os: windows-latest
+            shell: pwsh
+          - name: PowerShell 7, Linux
+            os: ubuntu-latest
+            shell: pwsh
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test install.ps1 and uninstall.ps1
+        run: ./install/tests/run.ps1
+
   # The one check the rules for main require. It waits for every job above,
   # then passes if each one passed, or, for the install scripts' jobs, was
   # skipped as not needed. It runs even when the run is cancelled, so a
@@ -292,6 +339,7 @@ jobs:
       - changes
       - install-lint
       - install-sh
+      - install-ps1
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

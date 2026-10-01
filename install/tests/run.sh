@@ -139,7 +139,11 @@ publish() {
         COPYFILE_DISABLE=1 tar -czf "$releases/v$1/steamcards-$target.tar.gz" \
             -C "$build" steamcards LICENSE README.md
     done
-    (cd "$releases/v$1" && sha256 steamcards-*.tar.gz) >"$releases/v$1/SHA256SUMS"
+    (
+        cd "$releases/v$1" &&
+            sha256 steamcards-*.tar.gz &&
+            echo "0000000000000000000000000000000000000000000000000000000000000000  steamcards-x86_64-pc-windows-msvc.zip"
+    ) >"$releases/v$1/SHA256SUMS"
 }
 
 # latest VERSION chooses the release that /latest redirects to. "" is a
