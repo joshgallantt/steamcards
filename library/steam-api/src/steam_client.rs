@@ -15,12 +15,13 @@ use std::{
 use anyhow::{anyhow, bail};
 use config_file::{CredentialStore, Credentials};
 use debug_log::DebugLog;
+use tokio::sync::broadcast;
 
 use crate::{
     EResult, Endpoints,
     auth::{self, Approved},
     badges::{BadgeGame, SetCard, read_foil_cards_page, read_game_cards_page},
-    cm::{self, Connection, LogOn, NoAnswer, Refused, WalletInfo},
+    cm::{self, Announced, Connection, LogOn, NoAnswer, Refused, WalletInfo},
     community::{Community, Reply, WebLogin},
     directory,
     inventory::{self, Described, InventoryItem},
@@ -54,6 +55,8 @@ pub struct SteamClient {
     /// The account's wallet, as Steam last said: kept when the connection
     /// goes.
     wallet: Mutex<Option<WalletInfo>>,
+    /// What every connection signed on announces of new items.
+    announced: broadcast::Sender<Announced>,
     /// How long before asking Steam about items again.
     ask_again_after: Duration,
     /// How long Steam's answers at sign-on may take.
@@ -86,6 +89,7 @@ impl SteamClient {
             connecting: tokio::sync::Mutex::default(),
             web: Mutex::default(),
             wallet: Mutex::default(),
+            announced: broadcast::channel(64).0,
             ask_again_after: ASK_AGAIN_AFTER,
             answer_within: cm::SIGN_ON_ANSWER_WITHIN,
         }
@@ -192,10 +196,19 @@ impl SteamClient {
         let endpoints = self.endpoints.clone();
         let http = self.http.clone();
         tokio::spawn(async move {
+            // Signed on only to end the sign-in: what Steam announces on it
+            // is nobody's news.
             let conn = match live.filter(|c| c.is_signed_on()) {
                 Some(conn) => conn,
-                None => match sign_on(&endpoints, &http, &log, &creds, cm::SIGN_ON_ANSWER_WITHIN)
-                    .await
+                None => match sign_on(
+                    &endpoints,
+                    &http,
+                    &log,
+                    &creds,
+                    cm::SIGN_ON_ANSWER_WITHIN,
+                    None,
+                )
+                .await
                 {
                     Ok(conn) => Arc::new(conn),
                     Err(e) => return log.line(&format!("signing out: {e}")),
@@ -229,6 +242,7 @@ impl SteamClient {
             &self.log,
             &creds,
             self.answer_within,
+            Some(&self.announced),
         )
         .await
         {
@@ -252,6 +266,14 @@ impl SteamClient {
             self.keep_wallet(&gone);
         }
         Ok(conn)
+    }
+
+    /// What Steam announces of new items from now on, on every connection
+    /// that signs on, in the order it says it: the answer each gets at
+    /// sign-on, of what was new already, and items as they arrive. A
+    /// connection is heard from before it signs on, so nothing is missed.
+    pub fn announcements(&self) -> broadcast::Receiver<Announced> {
+        self.announced.subscribe()
     }
 
     /// Whether Steam signed the last session off for another signed on in
@@ -450,13 +472,15 @@ fn worth_asking_again(e: &anyhow::Error) -> bool {
             .is_some_and(|r| r.eresult.is_worth_asking_again())
 }
 
-/// Connects to the best CM server that answers and signs on with `creds`.
+/// Connects to the best CM server that answers and signs on with `creds`,
+/// telling `announced`, if given, of what it announces of new items.
 async fn sign_on(
     endpoints: &Endpoints,
     http: &reqwest::Client,
     log: &DebugLog,
     creds: &Credentials,
     answer_within: Duration,
+    announced: Option<&broadcast::Sender<Announced>>,
 ) -> anyhow::Result<Connection> {
     let servers = servers(endpoints, http).await?;
     let mut last = None;
@@ -469,6 +493,9 @@ async fn sign_on(
             }
         };
         conn.sign_on_answer_within(answer_within);
+        if let Some(to) = announced {
+            conn.announce_to(creds.steam_id, to.clone());
+        }
         let signed_on = conn
             .log_on(&LogOn {
                 refresh_token: &creds.refresh_token,

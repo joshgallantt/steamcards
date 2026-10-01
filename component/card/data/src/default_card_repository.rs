@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use card::{AssetId, CardAsset, CardRepository, CardSet, GameCards};
+use card::{AssetId, CardAsset, CardRepository, CardSet, GameCards, NewItem};
 use game::AppId;
 
 use crate::CardClient;
@@ -29,5 +29,9 @@ impl CardRepository for DefaultCardRepository {
 
     async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>> {
         self.client.describe(asset_ids).await
+    }
+
+    async fn next_new_items(&self) -> Vec<NewItem> {
+        self.client.next_new_items().await
     }
 }

@@ -12,7 +12,8 @@ publish.workspace = true
 workspace = true
 
 [features]
-# Doubles for other crates' tests. Never depends on farming-data.
+# Doubles for other crates' tests. Farming has no data crate: it works
+# through other components' use cases.
 test-support = []
 
 [dependencies]

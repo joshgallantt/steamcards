@@ -19,6 +19,7 @@ path = "src/main.rs"
 # nothing depends on.
 [dependencies]
 account-di.workspace = true
+farming.workspace = true
 farming-di.workspace = true
 game-di.workspace = true
 card-di.workspace = true

@@ -1,5 +1,6 @@
 use account_di::AccountComponent;
 use card_di::CardComponent;
+use farming::FarmingDependencies;
 use farming_di::FarmingComponent;
 use game_di::GameComponent;
 use preferences_di::PreferencesComponent;
@@ -24,15 +25,21 @@ impl DomainAssembler {
         let card = CardComponent::new(data.steam.clone(), data.config.clone(), data.prices.clone());
         let preferences = PreferencesComponent::new(data.config.clone());
         let session = SessionComponent::new(data.sessions.clone());
-        let farming = FarmingComponent::new(
-            data.steam.clone(),
-            game.get_library.clone(),
-            card.look_at_cards.clone(),
-            card.look_at_foils.clone(),
-            card.identify_cards.clone(),
-            preferences.get_preferences.clone(),
-            data.sessions.clone(),
-        );
+        // The farmer plays and looks through the game and card components'
+        // use cases, and keeps nothing of its own.
+        let farming = FarmingComponent::new(FarmingDependencies {
+            get_library: game.get_library.clone(),
+            play_games: game.play_games.clone(),
+            stand_by: game.stand_by.clone(),
+            stop_playing: game.stop_playing.clone(),
+            observe_playing: game.observe_playing.clone(),
+            look_at_cards: card.look_at_cards.clone(),
+            look_at_foils: card.look_at_foils.clone(),
+            identify_cards: card.identify_cards.clone(),
+            observe_new_items: card.observe_new_items.clone(),
+            get_preferences: preferences.get_preferences.clone(),
+            sessions: data.sessions.clone(),
+        });
         Self {
             account,
             game,

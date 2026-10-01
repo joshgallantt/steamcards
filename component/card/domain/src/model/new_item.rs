@@ -1,6 +1,7 @@
-use card::AssetId;
 use chrono::{DateTime, Utc};
 use game::AppId;
+
+use crate::AssetId;
 
 /// An item Steam announced as new in the account's inventory: perhaps a
 /// card that just dropped.

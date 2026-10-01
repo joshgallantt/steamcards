@@ -17,10 +17,10 @@ steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 scraper.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
-tokio.workspace = true
 wiremock.workspace = true

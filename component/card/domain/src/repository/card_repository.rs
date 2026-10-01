@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use game::AppId;
 
-use crate::{AssetId, CardAsset, CardSet, GameCards};
+use crate::{AssetId, CardAsset, CardSet, GameCards, NewItem};
 
 /// Where the cards come from. Declared here, beside the use cases that need
 /// it; the data layer is written to fit.
@@ -23,4 +23,12 @@ pub trait CardRepository: Send + Sync {
     /// each once, in the order asked. Other items (emoticons, backgrounds,
     /// gems, booster packs) are left out, and so are IDs Steam doesn't know.
     async fn describe(&self, asset_ids: &[AssetId]) -> anyhow::Result<Vec<CardAsset>>;
+
+    /// What Steam says next is new in the account's inventory, once it says
+    /// it: the community items it lists that weren't heard of before, or
+    /// none when it only counts more than before. A card may have dropped
+    /// either way. What was new before steamcards first signed on isn't
+    /// news. Dropped before Steam has said, nothing is missed: the next call
+    /// hears it.
+    async fn next_new_items(&self) -> Vec<NewItem>;
 }

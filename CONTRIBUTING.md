@@ -188,11 +188,11 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 ```
 ├── component/     Domain + Data + DI. One folder per business concept.
 │   ├── account/       The one Steam account: signing in with a QR code, and out, and its wallet.
-│   ├── game/          Your games with trading cards, and their drops: the Steam library.
-│   ├── card/          Each game's cards, normal and foil: its sets, the copies you hold, and what they sell for.
+│   ├── game/          Your games with trading cards, their drops, and playing them.
+│   ├── card/          Each game's cards, normal and foil: its sets, the copies you hold, new items, and what they sell for.
 │   ├── preferences/   What you want farmed first.
 │   ├── session/       This session: every card that dropped, and how long the rest should take.
-│   ├── farming/       What to play, playing it, and stepping aside for another device.
+│   ├── farming/       What to play, and how, and stepping aside for another device. Keeps nothing: no data crate.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, the pages several components read.
@@ -206,7 +206,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 └── xtask/         Project tooling, run as `cargo xtask <task>`.
 ```
 
-Each component is split into a `domain` crate (the rules and the contracts), a `data` crate (what satisfies the contracts) and a `di` crate (what wires the two). Each folder is its own crate, so the folder tree *is* the dependency graph. See [docs/architecture.md](docs/architecture.md#module-dependencies) for the whole graph.
+Each component is split into a `domain` crate (the rules and the contracts), a `data` crate (what satisfies the contracts) and a `di` crate (what wires the two). One that keeps nothing has no `data` crate: `farming` works through other components' use cases, and `session` is kept in memory. Each folder is its own crate, so the folder tree *is* the dependency graph. See [docs/architecture.md](docs/architecture.md#module-dependencies) for the whole graph.
 
 ### The walkthrough: you press `1` on a game
 
@@ -250,7 +250,7 @@ pub struct FarmingViewModel {
     ...
 ```
 
-Use cases, each one the view model actually calls. It holds no repository, no Steam connection and no config file. Its crate can't hold them either: [`ui/terminal-ui/Cargo.toml`](ui/terminal-ui/Cargo.toml) lists domain crates only, so `use farming_data` doesn't resolve.
+Use cases, each one the view model actually calls. It holds no repository, no Steam connection and no config file. Its crate can't hold them either: [`ui/terminal-ui/Cargo.toml`](ui/terminal-ui/Cargo.toml) lists domain crates only, so `use card_data` doesn't resolve.
 
 #### ② The rule lives in the domain, once
 
@@ -359,7 +359,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferencesU
 
 ### What that buys
 
-- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `CardPriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Dependency inversion** (③): `GameRepository`, `PlayingRepository`, `CardRepository`, `CardPriceRepository`, `AccountRepository` and `PreferencesRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `game-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the paused-time tests drive the real `DefaultFarmCardsUseCase` over a fake Steam account, and the farmer can't tell the difference.

@@ -18,10 +18,11 @@ impl GetLibraryUseCase for DefaultGetLibraryUseCase {
     fn call(&self) -> JoinHandle<Result<SteamLibrary, GameError>> {
         let repo = Arc::clone(&self.repo);
         tokio::spawn(async move {
-            let library = repo
-                .library()
-                .await
-                .map_err(|e| GameError::Unavailable(e.to_string()))?;
+            let library = match repo.library().await {
+                Ok(library) => library,
+                Err(_) if repo.replaced() => return Err(GameError::Replaced),
+                Err(e) => return Err(GameError::Unavailable(e.to_string())),
+            };
             let mut games = library.games().to_vec();
             games.sort_by(|a, b| {
                 b.has_drops_left()

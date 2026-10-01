@@ -3,9 +3,14 @@
 //! has to give; and the Steam library of them all. What a game's cards are,
 //! its set and the copies the account holds, is the card component's.
 //!
-//! How Steam is asked (the badge pages) is the data layer's business,
-//! behind [`GameRepository`]. Farming works through the library with the
-//! use cases here, never the repository.
+//! Playing them is the game's too: playing exactly the games asked, or
+//! standing by while another device plays, and hearing what Steam says of
+//! it.
+//!
+//! How Steam is asked (the badge pages, the CM connection) is the data
+//! layer's business, behind [`GameRepository`] and [`PlayingRepository`].
+//! Farming reads the library and plays through the use cases here, never
+//! the repositories.
 
 mod model;
 mod repository;
@@ -15,7 +20,11 @@ mod use_cases;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use model::{AppId, CardDrops, Game, GameError, SteamLibrary};
-pub use repository::GameRepository;
+pub use model::{AppId, CardDrops, Game, GameError, Playing, PlayingSignal, SteamLibrary};
+pub use repository::{GameRepository, PlayingRepository};
 pub use rules::{HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE};
-pub use use_cases::{DefaultGetLibraryUseCase, GetLibraryUseCase};
+pub use use_cases::{
+    DefaultGetLibraryUseCase, DefaultObservePlayingUseCase, DefaultPlayGamesUseCase,
+    DefaultStandByUseCase, DefaultStopPlayingUseCase, GetLibraryUseCase, ObservePlayingUseCase,
+    PlayGamesUseCase, StandByUseCase, StopPlayingUseCase,
+};

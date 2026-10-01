@@ -13,7 +13,7 @@ workspace = true
 
 # Domain crates, and farming-words for what the farmer says. No *-data crate
 # is listed, so a screen cannot reach a repository, Steam or the config
-# file: `use farming_data` does not resolve.
+# file: `use card_data` does not resolve.
 [dependencies]
 account.workspace = true
 farming.workspace = true

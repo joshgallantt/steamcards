@@ -1,23 +1,27 @@
-use game::AppId;
-use session::NewItem;
+use card::NewItem;
+use game::{AppId, PlayingSignal};
 
-/// Something Steam said that the farmer acts on.
+/// Something Steam said that the farmer acts on: what the game component
+/// hears of playing, a variant of [`PlayingSignal`] each, or new items, as
+/// the card component hears of them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Signal {
-    /// Another device started playing on the account (what, when Steam
-    /// says): nothing played here counts until it stops.
+pub(crate) enum Signal {
     Blocked(Option<AppId>),
-    /// It stopped.
     Unblocked,
-    /// Another device took over playing, and Steam signed this session off
-    /// to let it: nothing played here counts until it stops.
     TakenOver,
-    /// New items arrived: a card may have dropped. The items Steam listed,
-    /// each once; none when it gave only a count.
     NewItems(Vec<NewItem>),
-    /// Another session signed on in this one's place. Signing on again would
-    /// knock that one off in turn.
     Replaced,
-    /// The connection to Steam went, for this reason.
     Lost(String),
+}
+
+impl From<PlayingSignal> for Signal {
+    fn from(said: PlayingSignal) -> Self {
+        match said {
+            PlayingSignal::Blocked(by) => Signal::Blocked(by),
+            PlayingSignal::Unblocked => Signal::Unblocked,
+            PlayingSignal::TakenOver => Signal::TakenOver,
+            PlayingSignal::Replaced => Signal::Replaced,
+            PlayingSignal::Lost(why) => Signal::Lost(why),
+        }
+    }
 }

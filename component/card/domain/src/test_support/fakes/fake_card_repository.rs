@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{
         Mutex,
         atomic::{AtomicBool, Ordering},
@@ -8,11 +8,12 @@ use std::{
 
 use async_trait::async_trait;
 use game::{AppId, Game, SteamLibrary};
+use tokio::sync::Notify;
 
-use crate::{AssetId, CardAsset, CardRepository, CardSet, GameCards};
+use crate::{AssetId, CardAsset, CardRepository, CardSet, GameCards, NewItem};
 
-/// Games' cards held in memory: each game's card page, its foils, and the
-/// copies of cards the account holds.
+/// Games' cards held in memory: each game's card page, its foils, the
+/// copies of cards the account holds, and what Steam announces is new.
 #[derive(Default)]
 pub struct FakeCardRepository {
     /// The games whose card pages can be looked at.
@@ -28,6 +29,9 @@ pub struct FakeCardRepository {
     pub assets: Mutex<Vec<CardAsset>>,
     /// Everything fails, as if Steam were down.
     pub down: AtomicBool,
+    /// What Steam has announced is new, and nobody has heard yet.
+    announced: Mutex<VecDeque<Vec<NewItem>>>,
+    told: Notify,
 }
 
 impl FakeCardRepository {
@@ -36,6 +40,12 @@ impl FakeCardRepository {
             library: Mutex::new(SteamLibrary::new(games)),
             ..Default::default()
         }
+    }
+
+    /// Steam announces these items as new: none, when it only counts more.
+    pub fn announce(&self, items: Vec<NewItem>) {
+        self.announced.lock().unwrap().push_back(items);
+        self.told.notify_one();
     }
 
     fn game(&self, app_id: AppId) -> anyhow::Result<Game> {
@@ -81,6 +91,15 @@ impl CardRepository for FakeCardRepository {
             anyhow::bail!("Steam didn't answer in time");
         }
         Ok(among(&self.assets.lock().unwrap(), asset_ids))
+    }
+
+    async fn next_new_items(&self) -> Vec<NewItem> {
+        loop {
+            if let Some(items) = self.announced.lock().unwrap().pop_front() {
+                return items;
+            }
+            self.told.notified().await;
+        }
     }
 }
 

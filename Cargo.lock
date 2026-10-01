@@ -841,33 +841,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "farming-data"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "card",
- "chrono",
- "config-file",
- "debug-log",
- "farming",
- "game",
- "session",
- "steam-api",
- "tokio",
-]
-
-[[package]]
 name = "farming-di"
 version = "0.1.0"
 dependencies = [
- "card",
  "farming",
- "farming-data",
- "game",
- "preferences",
- "session",
- "steam-api",
 ]
 
 [[package]]
@@ -2946,6 +2923,7 @@ dependencies = [
  "config-file",
  "debug-log",
  "dirs",
+ "farming",
  "farming-di",
  "game-di",
  "headless",

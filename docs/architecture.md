@@ -13,7 +13,7 @@ is: the same layers, the same rules, and the same checks that keep them.
 | Layer | Crates | May depend on |
 | --- | --- | --- |
 | Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming` | Domain |
-| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data` | Domain, Library |
+| Data | `account-data`, `game-data`, `card-data`, `preferences-data` | Domain, Library |
 | DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `steam-api` | Library |
 | Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
@@ -53,6 +53,10 @@ The domain starts from its entities:
 - **`Game`**: one of those games, by its **`AppId`**: its hours, its `CardDrops`
   (received and still to come) and its badge level. Its drops are what
   farming works through.
+- **`Playing`**: who plays on the account, this session or another device,
+  which keeps it from playing anything; **`PlayingSignal`**, what Steam says
+  of it (another device started or stopped, took over, a session took this
+  one's place, the connection went).
 - **`Card`**, in `card`: a card in a game's set, and how many the account
   has. The same card can drop more than once, so that's a count, and copies
   beyond one are spares.
@@ -67,7 +71,8 @@ The domain starts from its entities:
 - **`CardAsset`**: one copy of a card the account holds, by its **`AssetId`**:
   the game whose set it's from, its name, its market hash name, its kind,
   and whether it's marketable and tradable. Each copy that drops is its own. It
-  says which card dropped, and is what selling one takes.
+  says which card dropped, and is what selling one takes. A **`NewItem`**
+  is one Steam announced, by its asset ID, before anyone knows what it is.
 - **`Account`**, in `account`: the one Steam account, and whether Steam still
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
@@ -142,9 +147,10 @@ chapter 5): `card`'s valuations work over prices, sets, the wallet and the
 library at once, so they're functions in `service/`, pure, so every figure
 can be checked by hand.
 
-`farming` adds `farmer.rs` (the farmer `DefaultFarmCardsUseCase` runs),
-`ranking.rs` (what to play, and how: pure), `rules.rs` (every number it
-runs on, with where it comes from) and `reporter.rs`.
+`farming` keeps nothing, so it has no repository either. It adds
+`farmer.rs` (the farmer `DefaultFarmCardsUseCase` runs), `ranking.rs` (what
+to play, and how: pure), `rules.rs` (every number it runs on, with where it
+comes from) and `reporter.rs`.
 `session` keeps which card each drop was in `KeptSession`, the time to
 finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `game`
 has the rules both use, the 3 hours a game needs and the 32 Steam plays at
@@ -178,8 +184,14 @@ repository by a `Default…UseCase` in a file of its own under
 `use_cases/impl/`. View models hold `Arc<dyn …UseCase>`, only the ones they
 call, and read `self.set_tier.call(app_id, tier)`. A test double is a type of
 its own: a `Stub…UseCase` answers as it's told, and a `Spy…UseCase` keeps
-what it's asked. `Get…` answers with the current value, and `Set…` sets a new
-state.
+what it's asked. `Get…` answers with the current value, `Set…` sets a new
+state, and `Observe…` waits for what Steam says next.
+
+A use case whose answer takes a while returns a `JoinHandle`: its work goes
+on in the background, whoever waits for it. One its caller waits on in
+place is an `async fn` instead: the farmer waits on Steam's word in a
+`select!` with its clock, and a future the `select!` drops takes nothing
+with it, where a dropped `JoinHandle`'s task would go on and take the word.
 
 | Component | Use case | What it does |
 | --- | --- | --- |
@@ -188,10 +200,15 @@ state.
 | | `SignInUseCase` | Signs in with a QR code; the codes arrive on a channel. Errs with `SignInError`. |
 | | `SignOutUseCase` | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
 | | `GetWalletUseCase` | The wallet, once Steam has said. |
-| game | `GetLibraryUseCase` | The whole library, games with drops left first. Errs with `GameError`. |
+| game | `GetLibraryUseCase` | The whole library, games with drops left first. Errs with `GameError`, `Replaced` when another session took this one's place meanwhile. |
+| | `PlayGamesUseCase` | Plays exactly these games, signing on first if need be, online or not: says whether they play here, or another device keeps them from playing. |
+| | `StandByUseCase` | Signs on if need be, playing nothing, so Steam can say when another device stops: says who plays now. |
+| | `StopPlayingUseCase` | Stops playing, and signs off. |
+| | `ObservePlayingUseCase` | What Steam says next about playing: a `PlayingSignal`. |
 | card | `LookAtCardsUseCase` | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
 | | `LookAtFoilsUseCase` | One game's set in foil afresh, from its foil badge: how many of each the account has. Read only when a foil drops, rather than ask Steam twice at every look. |
 | | `IdentifyCardsUseCase` | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
+| | `ObserveNewItemsUseCase` | What Steam says next is new in the inventory: each item once, and none when it only counts more. What was new before steamcards first signed on isn't news. |
 | | `GetCardPricesUseCase` | The price book now. |
 | | `SetCardsToPriceUseCase` | Which games' cards to price, most urgent first. |
 | | `KeepCardPricesUpToDateUseCase` | Prices those games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
@@ -212,14 +229,18 @@ adds what it needs when it's built: an order book's best offer, for one.
 
 ### Use cases that call other use cases
 
-`DefaultFarmCardsUseCase` needs the library, the cards and what the user
-wants. It takes `GetLibraryUseCase`, `LookAtCardsUseCase`,
-`LookAtFoilsUseCase`, `IdentifyCardsUseCase` and `GetPreferencesUseCase`,
-not their repositories: so `farming` depends on `game`,
-`card` and `preferences` as domain components, and never learns where any of
-them comes from. When a tier changes,
-the farmer sees it within moments, through the same use case the screens
-call.
+`DefaultFarmCardsUseCase` needs the library, playing, the cards and what
+the user wants. It takes the game component's `GetLibraryUseCase`,
+`PlayGamesUseCase`, `StandByUseCase`, `StopPlayingUseCase` and
+`ObservePlayingUseCase`, the card component's `LookAtCardsUseCase`,
+`LookAtFoilsUseCase`, `IdentifyCardsUseCase` and `ObserveNewItemsUseCase`,
+and `GetPreferencesUseCase`, handed in together as `FarmingDependencies`,
+never their repositories: so `farming` depends on `game`, `card` and
+`preferences` as domain components, and never learns where any of them
+comes from. It's a feature over them, with no data of its own. When a
+tier changes, the farmer sees it within moments,
+through the same use case the screens call. Steam's word on playing and on
+new items comes as two answers; the farmer waits for whichever comes first.
 
 `DefaultFarmCardsUseCase` and `DefaultEndSessionUseCase` share a
 `SessionKeeper`, which the
@@ -239,9 +260,9 @@ the two.
 | --- | --- | --- |
 | `AccountRepository` | `account` | `DefaultAccountRepository` in `account-data`, through a `SteamAccountClient` |
 | `GameRepository` | `game` | `DefaultGameRepository` in `game-data`, through a `SteamGameClient` |
+| `PlayingRepository` | `game` | `DefaultPlayingRepository` in `game-data`, through a `SteamPlayingClient` |
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
-| `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient` |
 | `CardPriceRepository` | `card` | `DefaultCardPriceRepository` in `card-data`, through a `SteamMarketClient` and a `FilePriceStore` |
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,
@@ -276,6 +297,14 @@ wallet Steam tells of as it signs on (CM message 5528), and says which
 currency the account's prices are in: the wallet's, or dollars without one.
 `account-data` makes the `Wallet` of it, and the market reads its prices in
 that currency.
+
+**So is playing, and what's new.** `SteamPlayingClient`, in `game-data`,
+tells Steam what's played on the connection it signs on, and hears what
+Steam says of playing there. Steam announces new items on whichever
+connection is signed on, the farmer's or any other: `SteamClient` hears
+each connection's from before it signs on, in order, and `SteamCardClient`,
+in `card-data`, passes each card on once. What was new at the account's
+first sign-on here was there already.
 
 **Each data crate has the same shape.** A `Default…Repository` satisfies the
 domain's contract through a client or a store: a trait, with the
@@ -443,7 +472,6 @@ graph TD
         GD[game-data]
         CD[card-data]
         PD[preferences-data]
-        FD[farming-data]
     end
 
     subgraph DOMAIN["component/*/domain"]
@@ -462,7 +490,7 @@ graph TD
         DL[debug-log]
     end
 
-    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & SES & CF & SA & DL
+    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & SES & FARM & CF & SA & DL
     TUI --> FW & ACC & GAME & CARD & SES & PREF & FARM & MON
     HL --> FW & ACC & FARM
     FW --> FARM & GAME & CARD
@@ -470,13 +498,12 @@ graph TD
     GDI --> GD
     CDI --> CD
     PDI --> PD
-    FDI --> FD
+    FDI --> FARM
     SDI --> SES
     AD --> ACC & MON & SA
     GD --> GAME & SA
     CD --> CARD & GAME & MON & SA & CF & DL
     PD --> PREF & GAME & CF
-    FD --> FARM & SES & GAME & CARD & SA
     ACC --> MON
     CARD --> GAME & MON & ACC
     PREF --> GAME
@@ -486,6 +513,7 @@ graph TD
 ```
 
 Every arrow is a line in a `Cargo.toml`. Each DI crate also lists its
-domain crate, and `farming-di` the domain crates whose use cases it's
-handed: those arrows are left out, so the graph stays readable, but for
-`session-di`'s, which has no data crate to go through.
+domain crate: those arrows are left out, so the graph stays readable, but
+for `session-di`'s and `farming-di`'s, which have no data crate to go
+through. The composition root hands farming the other components' use
+cases, so `app` lists `farming` too.

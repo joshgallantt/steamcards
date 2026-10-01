@@ -1,3 +1,11 @@
 mod default_get_library_use_case;
+mod default_observe_playing_use_case;
+mod default_play_games_use_case;
+mod default_stand_by_use_case;
+mod default_stop_playing_use_case;
 
 pub use default_get_library_use_case::DefaultGetLibraryUseCase;
+pub use default_observe_playing_use_case::DefaultObservePlayingUseCase;
+pub use default_play_games_use_case::DefaultPlayGamesUseCase;
+pub use default_stand_by_use_case::DefaultStandByUseCase;
+pub use default_stop_playing_use_case::DefaultStopPlayingUseCase;

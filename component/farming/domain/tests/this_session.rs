@@ -7,10 +7,7 @@
 
 use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
-use card::{
-    AssetId, CardKind, DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase,
-    DefaultLookAtFoilsUseCase,
-};
+use card::{AssetId, CardKind, NewItem};
 use farming::{
     DefaultFarmCardsUseCase, FarmCardsUseCase,
     FarmingEvent::{
@@ -18,12 +15,12 @@ use farming::{
         Looked, Stalled, Untold,
     },
     FarmingStatus, FarmingUpdate, Status,
-    test_support::FakeSteamAccount,
+    test_support::{FakeSteamAccount, farming_over},
 };
-use game::{AppId, DefaultGetLibraryUseCase};
+use game::AppId;
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::{
-    DefaultEndSessionUseCase, DropCard, EndSessionUseCase, Finished, Mode, NewItem, SessionKeeper,
+    DefaultEndSessionUseCase, DropCard, EndSessionUseCase, Finished, Mode, SessionKeeper,
 };
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
@@ -53,15 +50,11 @@ impl Player {
         let sessions = Arc::new(SessionKeeper::default());
         let (tx, updates) = mpsc::channel(8192);
         Self {
-            farm: Arc::new(DefaultFarmCardsUseCase::new(
-                Arc::new(DefaultGetLibraryUseCase::new(steam.clone())),
-                Arc::new(DefaultLookAtCardsUseCase::new(steam.clone())),
-                Arc::new(DefaultLookAtFoilsUseCase::new(steam.clone())),
-                Arc::new(DefaultIdentifyCardsUseCase::new(steam.clone())),
-                steam.clone(),
+            farm: Arc::new(DefaultFarmCardsUseCase::new(farming_over(
+                &steam,
                 prefs.clone(),
                 sessions.clone(),
-            )),
+            ))),
             end_session: Arc::new(DefaultEndSessionUseCase::new(sessions)),
             steam,
             prefs,
@@ -801,7 +794,7 @@ async fn a_pause_while_a_card_is_told_stops_at_once() {
         "stopped {:?} after the pause",
         paused.elapsed()
     );
-    assert!(player.steam.playing().is_empty(), "and stopped playing");
+    assert!(player.steam.playing_now().is_empty(), "and stopped playing");
 }
 
 #[tokio::test(start_paused = true)]

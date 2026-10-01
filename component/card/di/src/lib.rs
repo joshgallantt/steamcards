@@ -9,9 +9,10 @@ use std::{path::PathBuf, sync::Arc};
 use card::{
     CardPriceRepository, CardRepository, Clock, DefaultGetCardPricesUseCase,
     DefaultIdentifyCardsUseCase, DefaultKeepCardPricesUpToDateUseCase, DefaultLookAtCardsUseCase,
-    DefaultLookAtFoilsUseCase, DefaultRefreshCardPricesUseCase, DefaultSetCardsToPriceUseCase,
-    GetCardPricesUseCase, IdentifyCardsUseCase, KeepCardPricesUpToDateUseCase, LookAtCardsUseCase,
-    LookAtFoilsUseCase, RefreshCardPricesUseCase, SetCardsToPriceUseCase, system_clock,
+    DefaultLookAtFoilsUseCase, DefaultObserveNewItemsUseCase, DefaultRefreshCardPricesUseCase,
+    DefaultSetCardsToPriceUseCase, GetCardPricesUseCase, IdentifyCardsUseCase,
+    KeepCardPricesUpToDateUseCase, LookAtCardsUseCase, LookAtFoilsUseCase, ObserveNewItemsUseCase,
+    RefreshCardPricesUseCase, SetCardsToPriceUseCase, system_clock,
 };
 use card_data::{
     CardClient, DefaultCardPriceRepository, DefaultCardRepository, FilePriceStore, MarketClient,
@@ -25,6 +26,7 @@ pub struct CardComponent {
     pub look_at_cards: Arc<dyn LookAtCardsUseCase>,
     pub look_at_foils: Arc<dyn LookAtFoilsUseCase>,
     pub identify_cards: Arc<dyn IdentifyCardsUseCase>,
+    pub observe_new_items: Arc<dyn ObserveNewItemsUseCase>,
     pub get_card_prices: Arc<dyn GetCardPricesUseCase>,
     pub set_cards_to_price: Arc<dyn SetCardsToPriceUseCase>,
     pub keep_card_prices_up_to_date: Arc<dyn KeepCardPricesUpToDateUseCase>,
@@ -60,7 +62,8 @@ impl CardComponent {
         Self {
             look_at_cards: Arc::new(DefaultLookAtCardsUseCase::new(repo.clone())),
             look_at_foils: Arc::new(DefaultLookAtFoilsUseCase::new(repo.clone())),
-            identify_cards: Arc::new(DefaultIdentifyCardsUseCase::new(repo)),
+            identify_cards: Arc::new(DefaultIdentifyCardsUseCase::new(repo.clone())),
+            observe_new_items: Arc::new(DefaultObserveNewItemsUseCase::new(repo)),
             get_card_prices: Arc::new(DefaultGetCardPricesUseCase::new(prices.clone())),
             set_cards_to_price: Arc::new(DefaultSetCardsToPriceUseCase::new(prices.clone())),
             keep_card_prices_up_to_date: Arc::new(DefaultKeepCardPricesUpToDateUseCase::new(

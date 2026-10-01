@@ -10,11 +10,14 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use game::AppId;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{AssetId, CardAsset, CardError, CardSet, GameCards, PriceBook, PriceError, PriceEvent};
+use crate::{
+    AssetId, CardAsset, CardError, CardSet, GameCards, NewItem, PriceBook, PriceError, PriceEvent,
+};
 
 /// Looks at one game's cards afresh, in the background: its card page, with
 /// the game's drops and hours, and its set.
@@ -37,6 +40,16 @@ pub trait LookAtFoilsUseCase: Send + Sync {
 /// doesn't know.
 pub trait IdentifyCardsUseCase: Send + Sync {
     fn call(&self, asset_ids: Vec<AssetId>) -> JoinHandle<Result<Vec<CardAsset>, CardError>>;
+}
+
+/// What Steam says next is new in the account's inventory, once it says
+/// it: perhaps a card that just dropped. The items it lists that weren't
+/// heard of before, each once; none when it only counts more. Waited on in
+/// place: dropped before Steam has said, as a `select!` drops the branches
+/// that lose, nothing is missed.
+#[async_trait]
+pub trait ObserveNewItemsUseCase: Send + Sync {
+    async fn call(&self) -> Vec<NewItem>;
 }
 
 /// Every card priced so far.

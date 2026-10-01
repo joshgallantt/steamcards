@@ -16,7 +16,7 @@ mod use_cases;
 pub mod test_support;
 
 pub use model::{
-    Drop, DropCard, Finished, Forecast, Found, KeptSession, Looked, Mode, NewItem, Session,
-    SessionKeeper, SetAside, Stretch,
+    Drop, DropCard, Finished, Forecast, Found, KeptSession, Looked, Mode, Session, SessionKeeper,
+    SetAside, Stretch,
 };
 pub use use_cases::{DefaultEndSessionUseCase, EndSessionUseCase};

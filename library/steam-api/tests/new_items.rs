@@ -7,7 +7,7 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use steam_api::{
     SteamClient,
-    cm::{Announcement, Event},
+    cm::{Announced, Announcement, Event},
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token, unseen_card},
 };
 use tokio::sync::broadcast;
@@ -35,6 +35,14 @@ async fn next(events: &mut broadcast::Receiver<Event>) -> Event {
         .await
         .expect("an event within a second")
         .expect("the connection's events")
+}
+
+/// The next announcement the session hears, within a second.
+async fn heard(announced: &mut broadcast::Receiver<Announced>) -> Announced {
+    tokio::time::timeout(Duration::from_secs(1), announced.recv())
+        .await
+        .expect("an announcement within a second")
+        .expect("the session's announcements")
 }
 
 /// Waits until `check` holds, or a second has passed.
@@ -135,4 +143,52 @@ async fn a_drop_after_an_unanswered_ask_is_news() {
         "a card that dropped, not what was there already"
     );
     assert_eq!(conn.new_at_sign_on(), None);
+}
+
+#[tokio::test]
+async fn the_session_hears_every_connections_word_on_new_items_in_order() {
+    let steam = FakeSteam::start().await;
+    let before = unseen_card(31_001, 960_910);
+    steam.already_unseen(vec![before]);
+    let session = signed_in(&steam, "announced");
+    let mut announced = session.announcements();
+
+    session.connection().await.unwrap();
+    assert_eq!(
+        heard(&mut announced).await,
+        Announced {
+            account: STEAM_ID,
+            announcement: Announcement {
+                count: 1,
+                items: vec![before],
+                at_sign_on: true,
+            },
+        },
+        "what was new already, as the connection signed on"
+    );
+
+    session.disconnect().await;
+    let madison = unseen_card(31_002, 960_910);
+    steam.already_unseen(vec![madison]);
+    session.connection().await.unwrap();
+    assert_eq!(
+        heard(&mut announced).await.announcement,
+        Announcement {
+            count: 2,
+            items: vec![before, madison],
+            at_sign_on: true,
+        },
+        "the next connection's too"
+    );
+
+    let scott = unseen_card(31_003, 960_910);
+    steam.announce(vec![scott]);
+    assert_eq!(
+        heard(&mut announced).await.announcement,
+        Announcement {
+            count: 3,
+            items: vec![before, madison, scott],
+            at_sign_on: false,
+        }
+    );
 }

@@ -86,6 +86,14 @@ pub struct Announcement {
     pub at_sign_on: bool,
 }
 
+/// Steam's word on new items, as the session hears it: whichever
+/// connection it came on, and the account that one signed on as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Announced {
+    pub account: u64,
+    pub announcement: Announcement,
+}
+
 /// An item Steam lists as new.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnseenItem {
@@ -206,6 +214,9 @@ struct State {
     answer_within: Mutex<Duration>,
     /// The answer, once it came.
     new_at_sign_on: Mutex<Option<Announcement>>,
+    /// Where announcements go besides this connection's own events: the
+    /// session's, for the account signing on.
+    session: Mutex<Option<(u64, broadcast::Sender<Announced>)>>,
     wallet: Mutex<Option<WalletInfo>>,
     /// Why Steam signed the session off, once it has.
     logged_off: Mutex<Option<EResult>>,
@@ -248,6 +259,7 @@ impl Connection {
             asked_new_items: Mutex::default(),
             answer_within: Mutex::new(SIGN_ON_ANSWER_WITHIN),
             new_at_sign_on: Mutex::default(),
+            session: Mutex::default(),
             wallet: Mutex::default(),
             logged_off: Mutex::default(),
             events,
@@ -478,6 +490,13 @@ impl Connection {
         tokio::time::timeout(within, said).await.ok().flatten()
     }
 
+    /// Tells `to` too of what Steam announces of new items here, as
+    /// `account`'s. Told before signing on, it misses nothing, the answer at
+    /// sign-on included, and hears it as the connection's own events do.
+    pub(crate) fn announce_to(&self, account: u64, to: broadcast::Sender<Announced>) {
+        *self.state.session.lock().unwrap() = Some((account, to));
+    }
+
     /// The new items Steam listed when asked at sign-on: those already there
     /// before this session. `None` until it answers.
     pub fn new_at_sign_on(&self) -> Option<Announcement> {
@@ -674,6 +693,12 @@ impl State {
                         items: a.unseen_items.iter().filter_map(unseen).collect(),
                         at_sign_on,
                     };
+                    if let Some((account, to)) = &*self.session.lock().unwrap() {
+                        let _ = to.send(Announced {
+                            account: *account,
+                            announcement: announced.clone(),
+                        });
+                    }
                     if at_sign_on {
                         *self.new_at_sign_on.lock().unwrap() = Some(announced.clone());
                     }

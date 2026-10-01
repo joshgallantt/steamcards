@@ -10,6 +10,6 @@ pub use farming_event::FarmingEvent;
 pub use farming_status::FarmingStatus;
 pub use farming_update::FarmingUpdate;
 pub use nothing_to_farm::NothingToFarm;
-pub use signal::Signal;
+pub(crate) use signal::Signal;
 pub use status::Status;
 pub use trouble::Trouble;

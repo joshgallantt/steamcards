@@ -14,6 +14,9 @@ const MAX_PAGES: u32 = 100;
 pub trait GameClient: Send + Sync {
     /// Every game with trading cards on the account.
     async fn games(&self) -> anyhow::Result<Vec<Game>>;
+
+    /// Whether Steam signed the last session off for another in its place.
+    fn replaced(&self) -> bool;
 }
 
 /// The account's badge pages, read signed in, as the Steam client fetches
@@ -62,6 +65,10 @@ impl GameClient for SteamGameClient {
             }
         }
         Ok(games)
+    }
+
+    fn replaced(&self) -> bool {
+        self.steam.replaced()
     }
 }
 

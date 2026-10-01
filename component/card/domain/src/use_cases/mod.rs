@@ -3,10 +3,10 @@ mod r#impl;
 
 pub use card_use_cases::{
     GetCardPricesUseCase, IdentifyCardsUseCase, KeepCardPricesUpToDateUseCase, LookAtCardsUseCase,
-    LookAtFoilsUseCase, RefreshCardPricesUseCase, SetCardsToPriceUseCase,
+    LookAtFoilsUseCase, ObserveNewItemsUseCase, RefreshCardPricesUseCase, SetCardsToPriceUseCase,
 };
 pub use r#impl::{
     DefaultGetCardPricesUseCase, DefaultIdentifyCardsUseCase, DefaultKeepCardPricesUpToDateUseCase,
-    DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase, DefaultRefreshCardPricesUseCase,
-    DefaultSetCardsToPriceUseCase,
+    DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase, DefaultObserveNewItemsUseCase,
+    DefaultRefreshCardPricesUseCase, DefaultSetCardsToPriceUseCase,
 };

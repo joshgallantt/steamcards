@@ -6,7 +6,6 @@
 
 use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
-use card::{DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase};
 use farming::{
     DefaultFarmCardsUseCase, FarmCardsUseCase,
     FarmingEvent::{
@@ -14,9 +13,9 @@ use farming::{
         PlayedElsewhere, Stalled, TakenOver, WentWrong,
     },
     FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble,
-    test_support::FakeSteamAccount,
+    test_support::{FakeSteamAccount, farming_over},
 };
-use game::{AppId, DefaultGetLibraryUseCase};
+use game::AppId;
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::Mode;
 use tokio::{sync::mpsc, time::Instant};
@@ -50,15 +49,11 @@ impl Player {
     }
 
     fn starts_farming(&mut self) {
-        let farm = DefaultFarmCardsUseCase::new(
-            Arc::new(DefaultGetLibraryUseCase::new(self.steam.clone())),
-            Arc::new(DefaultLookAtCardsUseCase::new(self.steam.clone())),
-            Arc::new(DefaultLookAtFoilsUseCase::new(self.steam.clone())),
-            Arc::new(DefaultIdentifyCardsUseCase::new(self.steam.clone())),
-            self.steam.clone(),
+        let farm = DefaultFarmCardsUseCase::new(farming_over(
+            &self.steam,
             self.prefs.clone(),
             Arc::default(),
-        );
+        ));
         let (tx, rx) = mpsc::channel(8192);
         self.farmer = Some(farm.call(self.token.clone(), tx));
         self.updates = Some(rx);

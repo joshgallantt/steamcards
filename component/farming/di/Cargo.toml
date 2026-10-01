@@ -1,6 +1,6 @@
 [package]
 name = "farming-di"
-description = "Builds the farming use cases over the Steam session: farming, and ending its session."
+description = "Builds the farming use case from the other components' use cases: farming keeps nothing of its own."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,10 +12,4 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-session.workspace = true
 farming.workspace = true
-farming-data.workspace = true
-game.workspace = true
-card.workspace = true
-preferences.workspace = true
-steam-api.workspace = true

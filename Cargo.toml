@@ -1,8 +1,9 @@
 # The folder tree is the dependency graph. Each business concept under
 # `component/` is split into a `domain` crate (the rules and the contracts),
 # a `data` crate (what satisfies the contracts) and a `di` crate (what wires
-# the two). No domain crate lists its data crate, so an import in the wrong
-# direction does not build. See docs/architecture.md.
+# the two); one that keeps nothing has no `data` crate. No domain crate
+# lists its data crate, so an import in the wrong direction does not build.
+# See docs/architecture.md.
 
 [workspace]
 resolver = "2"
@@ -24,7 +25,6 @@ members = [
     "component/preferences/data",
     "component/preferences/di",
     "component/farming/domain",
-    "component/farming/data",
     "component/farming/di",
     "library/config-file",
     "library/debug-log",
@@ -105,7 +105,6 @@ account-data = { path = "component/account/data" }
 game-data = { path = "component/game/data" }
 card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
-farming-data = { path = "component/farming/data" }
 
 # DI
 account-di = { path = "component/account/di" }

@@ -5,12 +5,11 @@ use std::{
 };
 
 use async_trait::async_trait;
-use card::{AssetId, Card, CardAsset, CardKind, CardRepository, CardSet, GameCards};
-use game::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
-use session::NewItem;
+use card::{AssetId, Card, CardAsset, CardKind, CardRepository, CardSet, GameCards, NewItem};
+use game::{
+    AppId, CardDrops, Game, GameRepository, Playing, PlayingRepository, PlayingSignal, SteamLibrary,
+};
 use tokio::{sync::mpsc, time::Instant};
-
-use crate::{FarmingRepository, Signal};
 
 /// A game's card drops, as the stand-in plays them out.
 #[derive(Debug, Clone)]
@@ -68,11 +67,15 @@ struct State {
 /// of farming on paused time. Each card that drops is an item of its own,
 /// which Steam announces when told to, and describes when asked. Whether
 /// another device is playing is said only to a session signed on, and while
-/// it plays, nothing is played here.
+/// it plays, nothing is played here. It's every repository farming plays and
+/// looks through: the game component's, for the library and playing, and
+/// the card component's.
 pub struct FakeSteamAccount {
     state: Mutex<State>,
-    signals_tx: mpsc::UnboundedSender<Signal>,
-    signals: tokio::sync::Mutex<mpsc::UnboundedReceiver<Signal>>,
+    said: mpsc::UnboundedSender<PlayingSignal>,
+    to_hear: tokio::sync::Mutex<mpsc::UnboundedReceiver<PlayingSignal>>,
+    announced: mpsc::UnboundedSender<Vec<NewItem>>,
+    to_announce: tokio::sync::Mutex<mpsc::UnboundedReceiver<Vec<NewItem>>>,
 }
 
 impl Default for FakeSteamAccount {
@@ -86,7 +89,8 @@ const FIRST_ASSET: u64 = 30_001;
 
 impl FakeSteamAccount {
     pub fn new() -> Self {
-        let (signals_tx, signals) = mpsc::unbounded_channel();
+        let (said, to_hear) = mpsc::unbounded_channel();
+        let (announced, to_announce) = mpsc::unbounded_channel();
         Self {
             state: Mutex::new(State {
                 games: BTreeMap::new(),
@@ -107,8 +111,10 @@ impl FakeSteamAccount {
                 cant_describe: false,
                 describe_takes: Duration::ZERO,
             }),
-            signals_tx,
-            signals: tokio::sync::Mutex::new(signals),
+            said,
+            to_hear: tokio::sync::Mutex::new(to_hear),
+            announced,
+            to_announce: tokio::sync::Mutex::new(to_announce),
         }
     }
 
@@ -218,7 +224,7 @@ impl FakeSteamAccount {
         let mut s = self.state.lock().unwrap();
         s.blocked = Some(app_id);
         if s.signed_on {
-            let _ = self.signals_tx.send(Signal::Blocked(app_id));
+            let _ = self.said.send(PlayingSignal::Blocked(app_id));
         }
     }
 
@@ -228,19 +234,19 @@ impl FakeSteamAccount {
         let mut s = self.state.lock().unwrap();
         s.blocked = None;
         if s.signed_on {
-            let _ = self.signals_tx.send(Signal::Unblocked);
+            let _ = self.said.send(PlayingSignal::Unblocked);
         }
     }
 
     /// Another device takes over playing, and Steam signs this session off
     /// to let it. Its game starts when the test says, with `block`.
     pub fn take_over(&self) {
-        self.sign_off(Signal::TakenOver);
+        self.sign_off(PlayingSignal::TakenOver);
     }
 
     /// Steam says new items arrived, giving only a count.
     pub fn new_items(&self) {
-        let _ = self.signals_tx.send(Signal::NewItems(Vec::new()));
+        let _ = self.announced.send(Vec::new());
     }
 
     /// Steam says which items arrived since it last said: each card that
@@ -248,12 +254,12 @@ impl FakeSteamAccount {
     pub fn announce(&self) {
         self.settle();
         let items = std::mem::take(&mut self.state.lock().unwrap().unannounced);
-        let _ = self.signals_tx.send(Signal::NewItems(items));
+        let _ = self.announced.send(items);
     }
 
     /// Steam announces these items.
     pub fn announce_items(&self, items: Vec<NewItem>) {
-        let _ = self.signals_tx.send(Signal::NewItems(items));
+        let _ = self.announced.send(items);
     }
 
     /// Asking which cards items are fails from now on.
@@ -287,13 +293,13 @@ impl FakeSteamAccount {
     /// Another session signs on in this one's place: Steam signs this one
     /// off, and says why.
     pub fn replace(&self) {
-        self.sign_off(Signal::Replaced);
+        self.sign_off(PlayingSignal::Replaced);
         self.state.lock().unwrap().replaced = true;
     }
 
     /// The connection to Steam goes.
     pub fn lose(&self, why: &str) {
-        self.sign_off(Signal::Lost(why.into()));
+        self.sign_off(PlayingSignal::Lost(why.into()));
     }
 
     /// How often a session signed on.
@@ -302,12 +308,12 @@ impl FakeSteamAccount {
     }
 
     /// The session is signed off, and told so: nothing it played counts.
-    fn sign_off(&self, why: Signal) {
+    fn sign_off(&self, why: PlayingSignal) {
         self.settle();
         let mut s = self.state.lock().unwrap();
         s.signed_on = false;
         s.playing.clear();
-        let _ = self.signals_tx.send(why);
+        let _ = self.said.send(why);
     }
 
     /// The badges can't be read, as if steamcommunity.com were down, or can
@@ -333,7 +339,7 @@ impl FakeSteamAccount {
     }
 
     /// What's playing now.
-    pub fn playing(&self) -> Vec<u32> {
+    pub fn playing_now(&self) -> Vec<u32> {
         self.state
             .lock()
             .unwrap()
@@ -465,6 +471,10 @@ impl GameRepository for FakeSteamAccount {
             s.games.values().map(|f| f.game.clone()).collect(),
         ))
     }
+
+    fn replaced(&self) -> bool {
+        self.state.lock().unwrap().replaced
+    }
 }
 
 #[async_trait]
@@ -515,6 +525,13 @@ impl CardRepository for FakeSteamAccount {
             .filter_map(|id| s.held.iter().find(|a| a.asset_id == *id).cloned())
             .collect())
     }
+
+    async fn next_new_items(&self) -> Vec<NewItem> {
+        match self.to_announce.lock().await.recv().await {
+            Some(items) => items,
+            None => std::future::pending().await,
+        }
+    }
 }
 
 /// Signs the session on, if it isn't.
@@ -527,7 +544,7 @@ fn sign_on(s: &mut State) {
 }
 
 #[async_trait]
-impl FarmingRepository for FakeSteamAccount {
+impl PlayingRepository for FakeSteamAccount {
     async fn play(&self, app_ids: &[AppId], online: bool) -> anyhow::Result<()> {
         self.settle();
         let mut s = self.state.lock().unwrap();
@@ -554,17 +571,16 @@ impl FarmingRepository for FakeSteamAccount {
         s.stops += 1;
     }
 
-    fn blocked(&self) -> Option<Option<AppId>> {
+    fn playing(&self) -> Playing {
         let s = self.state.lock().unwrap();
-        s.blocked.filter(|_| s.signed_on)
+        match s.blocked.filter(|_| s.signed_on) {
+            Some(by) => Playing::Elsewhere(by),
+            None => Playing::Here,
+        }
     }
 
-    fn replaced(&self) -> bool {
-        self.state.lock().unwrap().replaced
-    }
-
-    async fn next_signal(&self) -> Signal {
-        match self.signals.lock().await.recv().await {
+    async fn next_signal(&self) -> PlayingSignal {
+        match self.to_hear.lock().await.recv().await {
             Some(signal) => signal,
             None => std::future::pending().await,
         }

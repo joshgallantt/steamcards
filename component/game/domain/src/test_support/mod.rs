@@ -7,5 +7,5 @@ mod fakes;
 mod spies;
 
 pub use builders::game;
-pub use fakes::FakeGameRepository;
+pub use fakes::{FakeGameRepository, FakePlayingRepository};
 pub use spies::SpyGetLibraryUseCase;

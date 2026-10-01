@@ -1,38 +1,18 @@
 use std::sync::Arc;
 
-use card::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
-use game::GetLibraryUseCase;
-use preferences::GetPreferencesUseCase;
-use session::SessionKeeper;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{FarmCardsUseCase, FarmingRepository, FarmingUpdate, farmer::Farmer};
+use crate::{FarmCardsUseCase, FarmingDependencies, FarmingUpdate, farmer::Farmer};
 
 pub struct DefaultFarmCardsUseCase {
     farmer: Arc<Farmer>,
 }
 
 impl DefaultFarmCardsUseCase {
-    pub fn new(
-        get_library: Arc<dyn GetLibraryUseCase>,
-        look_at_cards: Arc<dyn LookAtCardsUseCase>,
-        look_at_foils: Arc<dyn LookAtFoilsUseCase>,
-        identify_cards: Arc<dyn IdentifyCardsUseCase>,
-        play: Arc<dyn FarmingRepository>,
-        get_preferences: Arc<dyn GetPreferencesUseCase>,
-        sessions: Arc<SessionKeeper>,
-    ) -> Self {
+    pub fn new(dependencies: FarmingDependencies) -> Self {
         Self {
-            farmer: Arc::new(Farmer::new(
-                get_library,
-                look_at_cards,
-                look_at_foils,
-                identify_cards,
-                play,
-                get_preferences,
-                sessions,
-            )),
+            farmer: Arc::new(Farmer::new(dependencies)),
         }
     }
 }

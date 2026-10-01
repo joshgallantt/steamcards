@@ -9,16 +9,23 @@ use std::{
     time::Duration,
 };
 
-use card::{AssetId, CardAsset, IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
+use card::{
+    AssetId, CardAsset, IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase,
+    ObserveNewItemsUseCase,
+};
 use chrono::Utc;
-use game::{AppId, Game, GetLibraryUseCase, HOURS_BEFORE_DROPS, SteamLibrary};
+use game::{
+    AppId, Game, GameError, GetLibraryUseCase, HOURS_BEFORE_DROPS, ObservePlayingUseCase,
+    PlayGamesUseCase, Playing, StandByUseCase, SteamLibrary, StopPlayingUseCase,
+};
 use preferences::{GetPreferencesUseCase, Preferences};
 use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    FarmingEvent, FarmingRepository, FarmingStatus, FarmingUpdate, Signal, Status, Trouble,
+    FarmingDependencies, FarmingEvent, FarmingStatus, FarmingUpdate, Status, Trouble,
+    model::Signal,
     ranking::{Plan, farm_order, plan, why_nothing},
     reporter::Reporter,
     rules::{
@@ -28,14 +35,18 @@ use crate::{
 };
 
 /// Farms through the game, card and preferences components' use cases, never
-/// their storage, plays through the repository, and writes the session its
-/// keeper keeps from one run to the next.
+/// their storage, and writes the session its keeper keeps from one run to
+/// the next.
 pub(crate) struct Farmer {
     get_library: Arc<dyn GetLibraryUseCase>,
+    play_games: Arc<dyn PlayGamesUseCase>,
+    stand_by: Arc<dyn StandByUseCase>,
+    stop_playing: Arc<dyn StopPlayingUseCase>,
+    observe_playing: Arc<dyn ObservePlayingUseCase>,
     look_at_cards: Arc<dyn LookAtCardsUseCase>,
     look_at_foils: Arc<dyn LookAtFoilsUseCase>,
     identify_cards: Arc<dyn IdentifyCardsUseCase>,
-    play: Arc<dyn FarmingRepository>,
+    observe_new_items: Arc<dyn ObserveNewItemsUseCase>,
     get_preferences: Arc<dyn GetPreferencesUseCase>,
     sessions: Arc<SessionKeeper>,
 }
@@ -123,23 +134,19 @@ impl Run {
 }
 
 impl Farmer {
-    pub(crate) fn new(
-        get_library: Arc<dyn GetLibraryUseCase>,
-        look_at_cards: Arc<dyn LookAtCardsUseCase>,
-        look_at_foils: Arc<dyn LookAtFoilsUseCase>,
-        identify_cards: Arc<dyn IdentifyCardsUseCase>,
-        play: Arc<dyn FarmingRepository>,
-        get_preferences: Arc<dyn GetPreferencesUseCase>,
-        sessions: Arc<SessionKeeper>,
-    ) -> Self {
+    pub(crate) fn new(d: FarmingDependencies) -> Self {
         Self {
-            get_library,
-            look_at_cards,
-            look_at_foils,
-            identify_cards,
-            play,
-            get_preferences,
-            sessions,
+            get_library: d.get_library,
+            play_games: d.play_games,
+            stand_by: d.stand_by,
+            stop_playing: d.stop_playing,
+            observe_playing: d.observe_playing,
+            look_at_cards: d.look_at_cards,
+            look_at_foils: d.look_at_foils,
+            identify_cards: d.identify_cards,
+            observe_new_items: d.observe_new_items,
+            get_preferences: d.get_preferences,
+            sessions: d.sessions,
         }
     }
 
@@ -157,7 +164,7 @@ impl Farmer {
         };
         run.carry_on(&r, &self.get_preferences.call());
         self.run(&run, &r, &token).await;
-        self.play.stop().await;
+        self.stop_playing.call().await;
     }
 
     async fn run(&self, run: &Run, r: &Reporter, token: &CancellationToken) {
@@ -187,7 +194,7 @@ impl Farmer {
                     // Another session took this one's place as the badges
                     // were read: farming stops, as it does when that happens
                     // while it plays, rather than knock that one off.
-                    if self.play.replaced() {
+                    if matches!(failed, Ok(Err(GameError::Replaced))) {
                         return replaced(r);
                     }
                     let why = match failed {
@@ -245,11 +252,10 @@ impl Farmer {
         token: &CancellationToken,
     ) -> Outcome {
         let prefs = self.get_preferences.call();
-        if let Err(e) = self.play.play(&[app_id], prefs.appear_online).await {
-            return Outcome::Lost(e.to_string());
-        }
-        if let Some(by) = self.play.blocked() {
-            return Outcome::Elsewhere(Elsewhere::Playing(by));
+        match self.play_games.call(&[app_id], prefs.appear_online).await {
+            Ok(Playing::Here) => {}
+            Ok(Playing::Elsewhere(by)) => return Outcome::Elsewhere(Elsewhere::Playing(by)),
+            Err(e) => return Outcome::Lost(e.to_string()),
         }
         let Some(game) = run.kept().library.game(app_id).cloned() else {
             return Outcome::Again;
@@ -324,7 +330,7 @@ impl Farmer {
                         return Outcome::Again;
                     }
                     if latest.appear_online != prefs.appear_online
-                        && let Err(e) = self.play.play(&[app_id], latest.appear_online).await
+                        && let Err(e) = self.play_games.call(&[app_id], latest.appear_online).await
                     {
                         return Outcome::Lost(e.to_string());
                     }
@@ -396,11 +402,10 @@ impl Farmer {
         token: &CancellationToken,
     ) -> Outcome {
         let prefs = self.get_preferences.call();
-        if let Err(e) = self.play.play(&app_ids, prefs.appear_online).await {
-            return Outcome::Lost(e.to_string());
-        }
-        if let Some(by) = self.play.blocked() {
-            return Outcome::Elsewhere(Elsewhere::Playing(by));
+        match self.play_games.call(&app_ids, prefs.appear_online).await {
+            Ok(Playing::Here) => {}
+            Ok(Playing::Elsewhere(by)) => return Outcome::Elsewhere(Elsewhere::Playing(by)),
+            Err(e) => return Outcome::Lost(e.to_string()),
         }
         let stretch = run.kept().start(&app_ids, Mode::Hours, Utc::now());
         let outcome = self.build(&app_ids, prefs, run, r, token).await;
@@ -470,7 +475,7 @@ impl Farmer {
                     return Outcome::Again;
                 }
                 if latest.appear_online != prefs.appear_online
-                    && let Err(e) = self.play.play(app_ids, latest.appear_online).await
+                    && let Err(e) = self.play_games.call(app_ids, latest.appear_online).await
                 {
                     return Outcome::Lost(e.to_string());
                 }
@@ -482,7 +487,7 @@ impl Farmer {
     /// Nothing to farm: signs off, and looks again in a few hours, or as
     /// soon as the user's choices change.
     async fn rest(&self, run: &Run, r: &Reporter, token: &CancellationToken) -> Outcome {
-        self.play.stop().await;
+        self.stop_playing.call().await;
         let prefs = self.get_preferences.call();
         let until = Instant::now() + IDLE_LOOK;
         let status = {
@@ -532,18 +537,21 @@ impl Farmer {
             Elsewhere::TookOver => AFTER_TAKEN_OVER,
         };
         'listening: loop {
-            if let Err(e) = self.play.listen().await {
-                if !lost(Trouble::Lost(e.to_string()), r, token).await {
-                    return Waited::Stopped;
+            let playing = match self.stand_by.call().await {
+                Ok(playing) => playing,
+                Err(e) => {
+                    if !lost(Trouble::Lost(e.to_string()), r, token).await {
+                        return Waited::Stopped;
+                    }
+                    continue;
                 }
-                continue;
-            }
-            if let Some(by) = self.play.blocked() {
+            };
+            if let Playing::Elsewhere(by) = playing {
                 self.waiting(by, None, run, r);
                 loop {
                     let signal = tokio::select! {
                         _ = token.cancelled() => return Waited::Stopped,
-                        signal = self.play.next_signal() => signal,
+                        signal = self.next_signal() => signal,
                     };
                     let trouble = match signal {
                         Signal::Unblocked => break,
@@ -575,7 +583,7 @@ impl Farmer {
                 let signal = tokio::select! {
                     _ = token.cancelled() => return Waited::Stopped,
                     _ = tokio::time::sleep_until(until) => return Waited::Resume,
-                    signal = self.play.next_signal() => signal,
+                    signal = self.next_signal() => signal,
                 };
                 match signal {
                     Signal::Blocked(_) => continue 'listening,
@@ -769,7 +777,19 @@ impl Farmer {
             } else {
                 Woke::Tick
             }),
-            signal = self.play.next_signal() => Some(Woke::Signal(signal)),
+            signal = self.next_signal() => Some(Woke::Signal(signal)),
+        }
+    }
+
+    /// What Steam says next that the farmer acts on: of playing, or of new
+    /// items. Either ask can be dropped before Steam has said, as the losing
+    /// side of a `select!` is, without missing anything. Items first, when
+    /// both have something to say: a card that dropped is news either way.
+    async fn next_signal(&self) -> Signal {
+        tokio::select! {
+            biased;
+            items = self.observe_new_items.call() => Signal::NewItems(items),
+            said = self.observe_playing.call() => Signal::from(said),
         }
     }
 

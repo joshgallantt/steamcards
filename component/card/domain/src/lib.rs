@@ -23,15 +23,15 @@ pub mod test_support;
 
 pub use model::{
     AssetId, Basis, Card, CardAsset, CardError, CardKind, CardSet, CardSets, Clock, Estimate,
-    GameCards, Held, HeldCard, Lookup, MarketPause, Price, PriceBook, PriceError, PriceEvent,
-    PriceQuote, PricedCard, SetPrices, system_clock,
+    GameCards, Held, HeldCard, Lookup, MarketPause, NewItem, Price, PriceBook, PriceError,
+    PriceEvent, PriceQuote, PricedCard, SetPrices, system_clock,
 };
 pub use repository::{CardPriceRepository, CardRepository};
 pub use service::{expected_per_drop, held_value, on_completion, value_left, value_of};
 pub use use_cases::{
     DefaultGetCardPricesUseCase, DefaultIdentifyCardsUseCase, DefaultKeepCardPricesUpToDateUseCase,
-    DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase, DefaultRefreshCardPricesUseCase,
-    DefaultSetCardsToPriceUseCase, GetCardPricesUseCase, IdentifyCardsUseCase,
-    KeepCardPricesUpToDateUseCase, LookAtCardsUseCase, LookAtFoilsUseCase,
-    RefreshCardPricesUseCase, SetCardsToPriceUseCase,
+    DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase, DefaultObserveNewItemsUseCase,
+    DefaultRefreshCardPricesUseCase, DefaultSetCardsToPriceUseCase, GetCardPricesUseCase,
+    IdentifyCardsUseCase, KeepCardPricesUpToDateUseCase, LookAtCardsUseCase, LookAtFoilsUseCase,
+    ObserveNewItemsUseCase, RefreshCardPricesUseCase, SetCardsToPriceUseCase,
 };

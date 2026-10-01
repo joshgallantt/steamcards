@@ -18,13 +18,11 @@ use std::{
     time::Duration,
 };
 
-use card::{CardAsset, CardKind, CardSet, CardSets, GameCards};
+use card::{CardAsset, CardKind, CardSet, CardSets, GameCards, NewItem};
 use chrono::{DateTime, Utc};
 use game::{AppId, Game, SteamLibrary};
 
-use crate::{
-    Drop, DropCard, Finished, Forecast, Found, Looked, Mode, NewItem, Session, SetAside, Stretch,
-};
+use crate::{Drop, DropCard, Finished, Forecast, Found, Looked, Mode, Session, SetAside, Stretch};
 
 /// A session as the farmer keeps it through a run, and from one run to the
 /// next: the session itself, and beside it what should outlast a pause.

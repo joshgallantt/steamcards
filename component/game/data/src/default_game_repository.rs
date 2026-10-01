@@ -21,4 +21,8 @@ impl GameRepository for DefaultGameRepository {
     async fn library(&self) -> anyhow::Result<SteamLibrary> {
         Ok(SteamLibrary::new(self.client.games().await?))
     }
+
+    fn replaced(&self) -> bool {
+        self.client.replaced()
+    }
 }

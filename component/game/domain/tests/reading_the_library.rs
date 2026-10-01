@@ -51,3 +51,17 @@ async fn a_library_that_cant_be_read_says_why() {
         ))
     );
 }
+
+#[tokio::test]
+async fn a_read_that_failed_for_another_session_says_so() {
+    let repo = Arc::new(FakeGameRepository::with(Vec::new()));
+    repo.replaced.store(true, Ordering::Relaxed);
+
+    let read = DefaultGetLibraryUseCase::new(repo).call().await.unwrap();
+
+    assert_eq!(
+        read,
+        Err(GameError::Replaced),
+        "not that Steam is down: farming stops for it"
+    );
+}
