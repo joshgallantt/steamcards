@@ -16,7 +16,7 @@ use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, DefaultKeepPricesUpToDateUseCase, DefaultSetGamesToPriceUseCase,
-    KeepPricesUpToDateUseCase, Lookup, Price, PriceEventKind, PriceQuote, PriceRepository,
+    KeepPricesUpToDateUseCase, Lookup, Price, PriceEvent, PriceQuote, PriceRepository,
     PriceSettings, QuoteSource, SetGamesToPriceUseCase, SetPrices, Wallet, system_clock,
 };
 use price_data::{DefaultPriceRepository, FilePriceStore, MarketPace, SteamMarketClient};
@@ -366,11 +366,7 @@ async fn a_market_that_cant_be_asked_marks_no_price_failed() {
     token.cancel();
     watching.await.unwrap();
 
-    assert!(
-        !matches!(event.kind, PriceEventKind::Failed(_)),
-        "{}",
-        event.message
-    );
+    assert!(!matches!(event, PriceEvent::Failed { .. }), "{event:?}");
     assert!(
         market.book().sets.is_empty(),
         "nothing to show as failed for a day"

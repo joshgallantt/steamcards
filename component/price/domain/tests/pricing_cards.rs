@@ -15,8 +15,8 @@ use price::{
     DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
     DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
     GetPricesUseCase, GetWalletUseCase, HeldCard, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
-    MarketPause, Price, PriceError, PriceEvent, PriceEventKind, RefreshPricesUseCase,
-    SetBasisUseCase, SetGamesToPriceUseCase, held_value,
+    MarketPause, Price, PriceError, PriceEvent, RefreshPricesUseCase, SetBasisUseCase,
+    SetGamesToPriceUseCase, held_value,
     test_support::{self, FakePriceRepository},
 };
 use tokio::sync::mpsc;
@@ -28,6 +28,13 @@ const HOUR: Duration = Duration::from_secs(60 * 60);
 const HEAVY_RAIN: u32 = 960_910;
 const HADES: u32 = 1_145_360;
 const CELESTE: u32 = 504_230;
+
+/// How long from `at` until `next`, as the screens count it.
+fn between(at: DateTime<Utc>, next: Option<DateTime<Utc>>) -> Duration {
+    (next.expect("a next round") - at)
+        .to_std()
+        .unwrap_or_default()
+}
 
 /// Someone farming with prices on screen.
 struct Player {
@@ -90,19 +97,19 @@ impl Player {
     }
 
     /// Reads the log until a line of the kind wanted shows up.
-    async fn reads(&mut self, kind: impl Fn(&PriceEventKind) -> bool) -> PriceEvent {
+    async fn reads(&mut self, kind: impl Fn(&PriceEvent) -> bool) -> PriceEvent {
         let mut lines = self.reads_up_to(kind).await;
         lines.pop().expect("the line wanted")
     }
 
     /// Reads the log up to and including a line of the kind wanted.
-    async fn reads_up_to(&mut self, kind: impl Fn(&PriceEventKind) -> bool) -> Vec<PriceEvent> {
+    async fn reads_up_to(&mut self, kind: impl Fn(&PriceEvent) -> bool) -> Vec<PriceEvent> {
         let rx = self.events.as_mut().expect("the watcher started");
         let wait = async {
             let mut lines = Vec::new();
             loop {
                 let event = rx.recv().await.expect("the watcher stopped");
-                let wanted = kind(&event.kind);
+                let wanted = kind(&event);
                 lines.push(event);
                 if wanted {
                     return lines;
@@ -157,21 +164,24 @@ async fn the_farming_game_is_priced_first_then_the_others_in_order() {
     player.starts_farming();
 
     let all = player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
+    let PriceEvent::AllPriced {
+        games,
+        next_round,
+        at,
+    } = all
+    else {
+        unreachable!("read above");
+    };
+    assert_eq!(games, 3);
     assert_eq!(
-        all.message,
-        "Prices: all 3 games looked up; the next round is in 6h."
+        next_round,
+        Some(after(test_support::session_start(), 6 * HOUR)),
+        "what the screens word: \"the next round is at 15:14\""
     );
-    assert_eq!(
-        all.kind,
-        PriceEventKind::AllPriced {
-            games: 3,
-            next_round: Some(after(test_support::session_start(), 6 * HOUR)),
-        },
-        "what the screens write their own line from: \"the next round is at 15:14\""
-    );
+    assert_eq!(between(at, next_round), 6 * HOUR, "\"in 6h\"");
     assert_eq!(
         player.market.looked_up(),
         [
@@ -205,7 +215,7 @@ async fn prices_are_looked_up_again_once_they_are_six_hours_old() {
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
     player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
     player.waits(6 * HOUR - MINUTE).await;
@@ -223,7 +233,7 @@ async fn a_game_that_starts_to_matter_is_priced_within_moments() {
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
     player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
     // A card dropped for Hades: it's shown near the top now.
@@ -247,7 +257,7 @@ async fn a_game_whose_card_dropped_is_priced_again_if_its_prices_are_over_an_hou
     player.is_shown(&[HEAVY_RAIN]);
     player.starts_farming();
     player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
     player.waits(30 * MINUTE).await;
@@ -287,33 +297,28 @@ async fn lookups_wait_while_steam_has_paused_them() {
     player.starts_farming();
 
     let first = player
-        .reads(|k| matches!(k, PriceEventKind::Paused(_)))
+        .reads(|e| matches!(e, PriceEvent::Paused { .. }))
         .await;
     assert_eq!(
-        first.message,
-        "Steam turned down a price lookup: lookups wait 10 minutes. Farming carries on."
-    );
-    assert_eq!(
-        first.kind,
-        PriceEventKind::Paused(MarketPause {
-            until: after(start, 10 * MINUTE),
-            step: 10 * MINUTE,
-        })
+        first,
+        PriceEvent::Paused {
+            pause: MarketPause {
+                until: after(start, 10 * MINUTE),
+                step: 10 * MINUTE,
+            },
+            again: false,
+        }
     );
     let again = player
-        .reads(|k| matches!(k, PriceEventKind::Paused(_)))
+        .reads(|e| matches!(e, PriceEvent::Paused { .. }))
         .await;
-    assert_eq!(
-        again.message,
-        "Steam turned down price lookups again: they wait 20 minutes now. Farming carries on."
+    assert!(
+        matches!(again, PriceEvent::Paused { pause, again: true } if pause.step == 20 * MINUTE),
+        "{again:?}"
     );
-    let resumed = player.reads(|k| *k == PriceEventKind::Resumed).await;
-    assert_eq!(
-        resumed.message,
-        "Steam's pause on price lookups is over: they carry on."
-    );
+    player.reads(|e| *e == PriceEvent::Resumed).await;
     player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
     assert_eq!(
@@ -339,14 +344,14 @@ async fn a_pause_from_before_a_restart_is_waited_out() {
     player.starts_farming();
 
     let paused = player
-        .reads(|k| matches!(k, PriceEventKind::Paused(_)))
+        .reads(|e| matches!(e, PriceEvent::Paused { .. }))
         .await;
-    assert_eq!(
-        paused.message,
-        "Steam turned down a price lookup: lookups wait 40 minutes. Farming carries on."
+    assert!(
+        matches!(paused, PriceEvent::Paused { pause, again: false } if pause.step == 40 * MINUTE),
+        "{paused:?}"
     );
     player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
     assert!(player.market.turned_down().is_empty(), "nothing was asked");
@@ -370,20 +375,19 @@ async fn a_pause_that_outlasts_the_clock_after_a_sleep_is_told_once() {
     player.starts_farming();
 
     let lines = player
-        .reads_up_to(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads_up_to(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
-    let kinds: Vec<&PriceEventKind> = lines.iter().map(|l| &l.kind).collect();
     assert!(
         matches!(
-            kinds[..],
+            lines[..],
             [
-                PriceEventKind::Paused(_),
-                PriceEventKind::Resumed,
-                PriceEventKind::AllPriced { .. }
+                PriceEvent::Paused { .. },
+                PriceEvent::Resumed,
+                PriceEvent::AllPriced { .. }
             ]
         ),
-        "the pause told once: {kinds:?}"
+        "the pause told once: {lines:?}"
     );
     assert_eq!(
         player.market.set_lookups()[0].at,
@@ -401,20 +405,21 @@ async fn a_lookup_whose_answer_cant_be_used_is_tried_again_a_day_later() {
     player.starts_farming();
 
     let failed = player
-        .reads(|k| matches!(k, PriceEventKind::Failed(_)))
+        .reads(|e| matches!(e, PriceEvent::Failed { .. }))
         .await;
-    assert_eq!(failed.kind, PriceEventKind::Failed(AppId(HADES)));
     assert_eq!(
-        failed.message,
-        "Couldn't look up the prices of app 1145360's cards: steamcommunity.com's market said \
-         502 Bad Gateway, twice. They're tried again in 24 hours."
+        failed,
+        PriceEvent::Failed {
+            app_id: AppId(HADES),
+            why: "steamcommunity.com's market said 502 Bad Gateway, twice".into(),
+        }
     );
     let all = player
-        .reads(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
-    assert_eq!(
-        all.message,
-        "Prices: all 2 games looked up; the next round is in 6h."
+    assert!(
+        matches!(all, PriceEvent::AllPriced { games: 2, next_round, at } if between(at, next_round) == 6 * HOUR),
+        "{all:?}"
     );
     assert_eq!(
         player.sees(HADES, "Nyx", false),
@@ -448,27 +453,28 @@ async fn a_market_that_cant_be_asked_is_asked_again_soon_and_nothing_is_failed()
     player.starts_farming();
 
     let lines = player
-        .reads_up_to(|k| matches!(k, PriceEventKind::AllPriced { .. }))
+        .reads_up_to(|e| matches!(e, PriceEvent::AllPriced { .. }))
         .await;
 
-    let waits: Vec<&str> = lines
+    let waits: Vec<(&str, Duration)> = lines
         .iter()
-        .filter(|l| matches!(l.kind, PriceEventKind::Unanswered { .. }))
-        .map(|l| l.message.as_str())
+        .filter_map(|l| match l {
+            PriceEvent::Unanswered { why, wait, .. } => Some((why.as_str(), *wait)),
+            _ => None,
+        })
         .collect();
+    let no_network = "couldn't sign on to Steam: no network";
     assert_eq!(
         waits,
         [
-            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in a minute.",
-            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in 2 minutes.",
-            "Couldn't ask the market for prices: couldn't sign on to Steam: no network. Asking again in 4 minutes.",
+            (no_network, MINUTE),
+            (no_network, 2 * MINUTE),
+            (no_network, 4 * MINUTE),
         ],
         "sooner than a day, and never over and over"
     );
     assert!(
-        !lines
-            .iter()
-            .any(|l| matches!(l.kind, PriceEventKind::Failed(_))),
+        !lines.iter().any(|l| matches!(l, PriceEvent::Failed { .. })),
         "nothing failed"
     );
     assert_eq!(
@@ -531,7 +537,7 @@ async fn prices_from_before_a_failed_lookup_are_still_shown() {
     player.starts_farming();
 
     player
-        .reads(|k| matches!(k, PriceEventKind::Failed(_)))
+        .reads(|e| matches!(e, PriceEvent::Failed { .. }))
         .await;
 
     assert_eq!(player.listed_at(CELESTE, "Badeline", false), Some(6));

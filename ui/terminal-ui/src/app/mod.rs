@@ -25,7 +25,7 @@ use farming::{EventKind, FarmingEvent, FarmingStatus, farm_order};
 use futures::StreamExt;
 use game::{AppId, SteamLibrary};
 use preferences::{Preferences, PreferencesError, Tier};
-use price::{PriceBook, PriceEvent, PriceEventKind, Wallet};
+use price::{PriceBook, PriceEvent, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 use session::Session;
 
@@ -33,7 +33,7 @@ use crate::{
     account::AccountViewModel,
     dashboard::{
         FarmingViewModel, LibraryViewModel, LogEntry, MarketViewModel, Queue, QueueEntry, Section,
-        card_page, dashboard_view, log_view::LogView, open_in_browser, prices_wanted,
+        card_page, dashboard_view, log_view::LogView, open_in_browser, price_words, prices_wanted,
     },
     games::{GameRow, GamesViewModel, games_view::GamesView},
     onboarding::{
@@ -274,24 +274,9 @@ impl App {
         }
     }
 
-    /// The market's word, in the log: with the game's name where it gives
-    /// only its app ID. Routine rounds go in the log only.
+    /// What the pricing reported, in the log, in the dashboard's words.
     fn on_market_event(&mut self, ev: PriceEvent) {
-        let (kind, text) = match ev.kind {
-            PriceEventKind::Paused(_) => (EventKind::Warning, ev.message),
-            PriceEventKind::Failed(app_id) => {
-                let name = self.known_library().game(app_id).map(|g| g.name.clone());
-                let text = match name {
-                    Some(name) => ev.message.replace(&format!("app {app_id}"), &name),
-                    None => ev.message,
-                };
-                (EventKind::Warning, text)
-            }
-            PriceEventKind::Resumed => (EventKind::Info, ev.message),
-            PriceEventKind::AllPriced { .. } | PriceEventKind::Unanswered { .. } => {
-                (EventKind::Progress, ev.message)
-            }
-        };
+        let (kind, text) = price_words::line(&ev, &self.known_library());
         self.push_log(kind, text);
     }
 

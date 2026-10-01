@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Clock, MarketPause, PriceBook, PriceEvent, PriceEventKind, PriceRepository, SetPrices,
+    Clock, MarketPause, PriceBook, PriceEvent, PriceRepository, SetPrices,
     pricing::{Priced, price_set},
     rules::{TICK, UNANSWERED_FIRST, UNANSWERED_LONGEST, between, later},
 };
@@ -73,7 +73,7 @@ impl Watcher {
                 // The same pause, told again, is nothing new.
                 if paused != Some(pause) {
                     let again = paused.is_some();
-                    self.report(PriceEventKind::Paused(pause), paused_line(pause, again));
+                    self.report(PriceEvent::Paused { pause, again });
                 }
                 paused = Some(pause);
                 if !self.wait_out(pause, token).await {
@@ -85,15 +85,11 @@ impl Watcher {
             if let Priced::Unanswered(why) = priced {
                 let wait = unanswered.map_or(UNANSWERED_FIRST, |w| (w * 2).min(UNANSWERED_LONGEST));
                 unanswered = Some(wait);
-                self.report(
-                    PriceEventKind::Unanswered {
-                        retry_at: later((self.clock)(), wait),
-                    },
-                    format!(
-                        "Couldn't ask the market for prices: {why}. Asking again in {}.",
-                        minutes(wait)
-                    ),
-                );
+                self.report(PriceEvent::Unanswered {
+                    why,
+                    wait,
+                    retry_at: later((self.clock)(), wait),
+                });
                 if !sleep(wait, token).await {
                     return;
                 }
@@ -101,19 +97,10 @@ impl Watcher {
             }
             unanswered = None;
             if paused.take().is_some() {
-                self.report(
-                    PriceEventKind::Resumed,
-                    "Steam's pause on price lookups is over: they carry on.".into(),
-                );
+                self.report(PriceEvent::Resumed);
             }
             if let Priced::Failed(why) = priced {
-                self.report(
-                    PriceEventKind::Failed(app_id),
-                    format!(
-                        "Couldn't look up the prices of app {app_id}'s cards: {why}. \
-                         They're tried again in 24 hours."
-                    ),
-                );
+                self.report(PriceEvent::Failed { app_id, why });
             }
             looked_up += 1;
         }
@@ -121,25 +108,16 @@ impl Watcher {
 
     /// Everything wanted is priced: says so, and when the next round is.
     fn all_priced(&self, wanted: &[AppId], book: &PriceBook, now: DateTime<Utc>) {
-        let games = match wanted.len() {
-            1 => "the 1 game".to_owned(),
-            n => format!("all {n} games"),
-        };
         let next_round = wanted
             .iter()
             .filter_map(|id| book.sets.get(id))
             .map(SetPrices::due_at)
             .min();
-        let next = next_round.map_or_else(String::new, |next| {
-            format!("; the next round is in {}", in_words(between(now, next)))
+        self.report(PriceEvent::AllPriced {
+            games: wanted.len(),
+            next_round,
+            at: now,
         });
-        self.report(
-            PriceEventKind::AllPriced {
-                games: wanted.len(),
-                next_round,
-            },
-            format!("Prices: {games} looked up{next}."),
-        );
     }
 
     /// Waits until Steam's pause ends, a tick at a time, so a clock that
@@ -163,8 +141,8 @@ impl Watcher {
 
     // try_send keeps events in order without blocking the watcher; the UI
     // drains continuously, so the buffer only fills if it has gone away.
-    fn report(&self, kind: PriceEventKind, message: String) {
-        let _ = self.events.try_send(PriceEvent { kind, message });
+    fn report(&self, event: PriceEvent) {
+        let _ = self.events.try_send(event);
     }
 }
 
@@ -188,57 +166,9 @@ async fn sleep(d: Duration, token: &CancellationToken) -> bool {
     }
 }
 
-/// The log line for a pause: the first, or one after another.
-fn paused_line(pause: MarketPause, again: bool) -> String {
-    let wait = minutes(pause.step);
-    if again {
-        format!("Steam turned down price lookups again: they wait {wait} now. Farming carries on.")
-    } else {
-        format!("Steam turned down a price lookup: lookups wait {wait}. Farming carries on.")
-    }
-}
-
-/// "10 minutes", "an hour".
-fn minutes(d: Duration) -> String {
-    match d.as_secs() / 60 {
-        60 => "an hour".into(),
-        1 => "a minute".into(),
-        m => format!("{m} minutes"),
-    }
-}
-
-/// A duration in two units at most, as the screens write them: "<1m",
-/// "38m", "5h 58m", "4d 21h".
-fn in_words(d: Duration) -> String {
-    let minutes = d.as_secs() / 60;
-    let (days, hours, minutes) = (minutes / (24 * 60), minutes / 60 % 24, minutes % 60);
-    match (days, hours, minutes) {
-        (0, 0, 0) => "<1m".into(),
-        (0, 0, m) => format!("{m}m"),
-        (0, h, 0) => format!("{h}h"),
-        (0, h, m) => format!("{h}h {m}m"),
-        (d, 0, _) => format!("{d}d"),
-        (d, h, _) => format!("{d}d {h}h"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const MINUTE: Duration = Duration::from_secs(60);
-
-    #[test]
-    fn durations_read_as_the_screens_write_them() {
-        assert_eq!(in_words(Duration::from_secs(20)), "<1m");
-        assert_eq!(in_words(38 * MINUTE), "38m");
-        assert_eq!(in_words(6 * 60 * MINUTE), "6h");
-        assert_eq!(in_words(358 * MINUTE), "5h 58m");
-        assert_eq!(in_words((4 * 24 + 21) * 60 * MINUTE + 5 * MINUTE), "4d 21h");
-        assert_eq!(in_words(2 * 24 * 60 * MINUTE), "2d");
-        assert_eq!(minutes(10 * MINUTE), "10 minutes");
-        assert_eq!(minutes(60 * MINUTE), "an hour");
-    }
 
     #[test]
     fn a_game_wanted_twice_is_priced_once() {

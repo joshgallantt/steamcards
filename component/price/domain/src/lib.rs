@@ -27,8 +27,7 @@ pub mod test_support;
 pub use clock::{Clock, system_clock};
 pub use model::{
     Basis, Estimate, Held, HeldCard, Lookup, MarketPause, Offers, Price, PriceBook, PriceError,
-    PriceEvent, PriceEventKind, PriceQuote, PriceSettings, PricedCard, QuoteSource, SetPrices,
-    Wallet,
+    PriceEvent, PriceQuote, PriceSettings, PricedCard, QuoteSource, SetPrices, Wallet,
 };
 pub use repository::PriceRepository;
 pub use use_cases::{

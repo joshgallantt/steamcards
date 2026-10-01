@@ -7,7 +7,7 @@ mod support;
 
 use game::AppId;
 use money::{Currency, Money};
-use price::{Basis, Price, PriceError, PriceEventKind};
+use price::{Basis, Price, PriceError, PriceEvent};
 use support::Player;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -94,10 +94,7 @@ async fn a_sets_prices_are_shown_once_looked_up_and_kept() {
 
     let event = player.has_prices_looked_up(&[960_910]).await;
 
-    assert!(matches!(
-        event.kind,
-        PriceEventKind::AllPriced { games: 1, .. }
-    ));
+    assert!(matches!(event, PriceEvent::AllPriced { games: 1, .. }));
     let pence = |pence| Some(Money::new(pence, Currency::GBP));
     let heavy_rain = &player.sees().sets[&AppId(960_910)];
     assert_eq!(ask(&heavy_rain.price("Madison", false)), pence(5));

@@ -10,6 +10,7 @@ mod library_view_model;
 mod log_entry;
 pub(crate) mod log_view;
 mod market_view_model;
+pub(crate) mod price_words;
 mod queue;
 mod summary;
 
