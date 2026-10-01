@@ -6,7 +6,7 @@ use std::sync::{
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::{AccountRepository, LoginChallenge};
+use crate::{AccountRepository, LoginChallenge, Wallet};
 
 /// A saved sign-in, held in memory.
 pub struct FakeAccountRepository {
@@ -21,6 +21,8 @@ pub struct FakeAccountRepository {
     pub links_as: Mutex<(Vec<LoginChallenge>, Result<String, String>)>,
     /// The next `unlink` fails, keeping the sign-in.
     pub unlink_fails: AtomicBool,
+    /// The wallet Steam last said; `None` until it has.
+    pub wallet: Mutex<Option<Wallet>>,
 }
 
 impl FakeAccountRepository {
@@ -32,6 +34,7 @@ impl FakeAccountRepository {
             verifies_as: Mutex::new(None),
             links_as: Mutex::new((Vec::new(), Err("not set up".into()))),
             unlink_fails: AtomicBool::new(false),
+            wallet: Mutex::new(None),
         }
     }
 
@@ -83,5 +86,9 @@ impl AccountRepository for FakeAccountRepository {
         self.rejected.store(false, Ordering::Relaxed);
         *self.name.lock().unwrap() = None;
         Ok(())
+    }
+
+    fn wallet(&self) -> Option<Wallet> {
+        *self.wallet.lock().unwrap()
     }
 }

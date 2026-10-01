@@ -1,10 +1,20 @@
-//! Everything asked of the cards, a trait each. Each is done over the
-//! repository by a `Default…UseCase` in `impl/`.
+//! Everything asked of the cards, a trait each: looking at them, telling
+//! which card an item is, and what they're worth on the market. Each is
+//! done over a repository by a `Default…UseCase` in `impl/`.
+//!
+//! Pricing decides what to price, and in what order. How fast requests go
+//! is Steam's business: every lookup waits its turn in the data layer's one
+//! market queue. An answer that can't be used is tried again a day later; a
+//! market that couldn't be asked at all, soon, with nothing taken as
+//! failed.
+
+use std::sync::Arc;
 
 use game::AppId;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
 
-use crate::{AssetId, CardAsset, CardError, CardSet, GameCards};
+use crate::{AssetId, CardAsset, CardError, CardSet, GameCards, PriceBook, PriceError, PriceEvent};
 
 /// Looks at one game's cards afresh, in the background: its card page, with
 /// the game's drops and hours, and its set.
@@ -27,4 +37,31 @@ pub trait LookAtFoilsUseCase: Send + Sync {
 /// doesn't know.
 pub trait IdentifyCardsUseCase: Send + Sync {
     fn call(&self, asset_ids: Vec<AssetId>) -> JoinHandle<Result<Vec<CardAsset>, CardError>>;
+}
+
+/// Every card priced so far.
+pub trait GetCardPricesUseCase: Send + Sync {
+    fn call(&self) -> Arc<PriceBook>;
+}
+
+/// Says which games' cards to price, most urgent first: the game being
+/// farmed, then games with cards this session, then the rest in farm order.
+pub trait SetCardsToPriceUseCase: Send + Sync {
+    fn call(&self, app_ids: Vec<AppId>);
+}
+
+/// Prices the cards of the games to price, normal and foil, until the token
+/// is cancelled, reporting on the channel: each set once, then again once
+/// its prices are 6 hours old, in the order asked for. While Steam has
+/// paused lookups, it waits. Runs detached; the handle resolves once it has
+/// stopped.
+pub trait KeepCardPricesUpToDateUseCase: Send + Sync {
+    fn call(&self, token: CancellationToken, events: mpsc::Sender<PriceEvent>) -> JoinHandle<()>;
+}
+
+/// Prices a game's set again in the background, if its prices are over an
+/// hour old: one of its cards just dropped, or the user asked. Errs when
+/// Steam has paused lookups, or the market couldn't be asked.
+pub trait RefreshCardPricesUseCase: Send + Sync {
+    fn call(&self, app_id: AppId) -> JoinHandle<Result<(), PriceError>>;
 }

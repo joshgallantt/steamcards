@@ -19,5 +19,6 @@ steam-api.workspace = true
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
+money.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
 tokio.workspace = true

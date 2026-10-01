@@ -1,6 +1,6 @@
 [package]
 name = "card-di"
-description = "Builds the card use cases over the Steam session."
+description = "Builds the card use cases over the Steam session and the files the prices are kept in."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,12 +14,15 @@ workspace = true
 [dependencies]
 card.workspace = true
 card-data.workspace = true
+config-file.workspace = true
+debug-log.workspace = true
 steam-api.workspace = true
 
 [dev-dependencies]
-config-file.workspace = true
-debug-log.workspace = true
 game.workspace = true
+money.workspace = true
+serde_json.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
 tokio.workspace = true
+tokio-util.workspace = true
 wiremock.workspace = true

@@ -46,11 +46,11 @@ impl PresentationAssembler {
             LibraryViewModel::new(d.game.get_library.clone()),
             OnboardingViewModel::new(d.account.get_account.clone()),
             MarketViewModel::new(
-                d.price.get_prices.clone(),
-                d.price.set_games_to_price.clone(),
-                d.price.keep_prices_up_to_date.clone(),
-                d.price.refresh_prices.clone(),
-                d.price.get_wallet.clone(),
+                d.card.get_card_prices.clone(),
+                d.card.set_cards_to_price.clone(),
+                d.card.keep_card_prices_up_to_date.clone(),
+                d.card.refresh_card_prices.clone(),
+                d.account.get_wallet.clone(),
             ),
         )
     }

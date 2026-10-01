@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use account::{AccountRepository, LoginChallenge};
+use account::{AccountRepository, LoginChallenge, Wallet};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
@@ -41,5 +41,9 @@ impl AccountRepository for DefaultAccountRepository {
 
     fn unlink(&self) -> anyhow::Result<()> {
         self.client.sign_out()
+    }
+
+    fn wallet(&self) -> Option<Wallet> {
+        self.client.wallet()
     }
 }

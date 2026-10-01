@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::LoginChallenge;
+use crate::{LoginChallenge, Wallet};
 
 /// The saved Steam sign-in. Declared here, beside the use cases that need it;
 /// the data layer is written to fit.
@@ -31,4 +31,7 @@ pub trait AccountRepository: Send + Sync {
     /// forgotten. Telling Steam to end it happens in the background and
     /// doesn't hold this up.
     fn unlink(&self) -> anyhow::Result<()>;
+
+    /// The account's wallet, as Steam last said; `None` until it has.
+    fn wallet(&self) -> Option<Wallet>;
 }

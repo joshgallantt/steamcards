@@ -2,12 +2,16 @@
 //! user meets them, through the card component as steamcards wires it,
 //! against stand-ins for Steam and its site.
 
-mod support;
+// Each test file takes only the support it uses: what it left out would be
+// dead code in it.
+mod support {
+    pub(crate) mod player;
+}
 
 use card::{AssetId, Card, CardAsset, CardError, CardKind};
 use game::AppId;
 use steam_api::{EResult, test_support::HeldItem};
-use support::Player;
+use support::player::Player;
 
 #[tokio::test]
 async fn a_games_cards_are_looked_at_on_its_own_page() {

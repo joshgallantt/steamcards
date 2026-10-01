@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use game::AppId;
-use price::{
-    GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, PriceBook, PriceEvent,
-    RefreshPricesUseCase, SetGamesToPriceUseCase, Wallet,
+use account::{GetWalletUseCase, Wallet};
+use card::{
+    GetCardPricesUseCase, KeepCardPricesUpToDateUseCase, PriceBook, PriceEvent,
+    RefreshCardPricesUseCase, SetCardsToPriceUseCase,
 };
+use game::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -12,10 +13,10 @@ use tokio_util::sync::CancellationToken;
 /// tells it which games to price first, and asks again for a game whose card
 /// just dropped.
 pub struct MarketViewModel {
-    get_prices: Arc<dyn GetPricesUseCase>,
-    set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
-    keep_prices_up_to_date: Arc<dyn KeepPricesUpToDateUseCase>,
-    refresh_prices: Arc<dyn RefreshPricesUseCase>,
+    get_card_prices: Arc<dyn GetCardPricesUseCase>,
+    set_cards_to_price: Arc<dyn SetCardsToPriceUseCase>,
+    keep_card_prices_up_to_date: Arc<dyn KeepCardPricesUpToDateUseCase>,
+    refresh_card_prices: Arc<dyn RefreshCardPricesUseCase>,
     get_wallet: Arc<dyn GetWalletUseCase>,
     tx: mpsc::Sender<PriceEvent>,
     events: mpsc::Receiver<PriceEvent>,
@@ -26,18 +27,18 @@ pub struct MarketViewModel {
 
 impl MarketViewModel {
     pub fn new(
-        get_prices: Arc<dyn GetPricesUseCase>,
-        set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
-        keep_prices_up_to_date: Arc<dyn KeepPricesUpToDateUseCase>,
-        refresh_prices: Arc<dyn RefreshPricesUseCase>,
+        get_card_prices: Arc<dyn GetCardPricesUseCase>,
+        set_cards_to_price: Arc<dyn SetCardsToPriceUseCase>,
+        keep_card_prices_up_to_date: Arc<dyn KeepCardPricesUpToDateUseCase>,
+        refresh_card_prices: Arc<dyn RefreshCardPricesUseCase>,
         get_wallet: Arc<dyn GetWalletUseCase>,
     ) -> Self {
         let (tx, events) = mpsc::channel(256);
         Self {
-            get_prices,
-            set_games_to_price,
-            keep_prices_up_to_date,
-            refresh_prices,
+            get_card_prices,
+            set_cards_to_price,
+            keep_card_prices_up_to_date,
+            refresh_card_prices,
             get_wallet,
             tx,
             events,
@@ -51,7 +52,7 @@ impl MarketViewModel {
         if self.watching.is_none() {
             let token = CancellationToken::new();
             drop(
-                self.keep_prices_up_to_date
+                self.keep_card_prices_up_to_date
                     .call(token.clone(), self.tx.clone()),
             );
             self.watching = Some(token);
@@ -69,7 +70,7 @@ impl MarketViewModel {
     /// change.
     pub fn want(&mut self, games: Vec<AppId>) {
         if games != self.wanted {
-            self.set_games_to_price.call(games.clone());
+            self.set_cards_to_price.call(games.clone());
             self.wanted = games;
         }
     }
@@ -77,7 +78,7 @@ impl MarketViewModel {
     /// One of the game's cards just dropped: its prices are looked at again,
     /// if they're over an hour old.
     pub fn dropped(&self, app_id: AppId) {
-        drop(self.refresh_prices.call(app_id));
+        drop(self.refresh_card_prices.call(app_id));
     }
 
     pub fn try_recv(&mut self) -> Option<PriceEvent> {
@@ -86,7 +87,7 @@ impl MarketViewModel {
 
     /// Everything priced so far.
     pub fn book(&self) -> Arc<PriceBook> {
-        self.get_prices.call()
+        self.get_card_prices.call()
     }
 
     /// The account's wallet: prices are shown in its currency. `None` until
@@ -104,23 +105,24 @@ impl Drop for MarketViewModel {
 
 #[cfg(test)]
 mod tests {
-    use price::test_support::{
-        SpyKeepPricesUpToDateUseCase, SpyRefreshPricesUseCase, SpySetGamesToPriceUseCase,
-        StubGetPricesUseCase, StubGetWalletUseCase,
+    use account::test_support::StubGetWalletUseCase;
+    use card::test_support::{
+        SpyKeepCardPricesUpToDateUseCase, SpyRefreshCardPricesUseCase, SpySetCardsToPriceUseCase,
+        StubGetCardPricesUseCase,
     };
 
     use super::*;
 
     #[derive(Default)]
     struct Spies {
-        told: Arc<SpySetGamesToPriceUseCase>,
-        started: Arc<SpyKeepPricesUpToDateUseCase>,
-        refreshed: Arc<SpyRefreshPricesUseCase>,
+        told: Arc<SpySetCardsToPriceUseCase>,
+        started: Arc<SpyKeepCardPricesUpToDateUseCase>,
+        refreshed: Arc<SpyRefreshCardPricesUseCase>,
     }
 
     fn market(spies: &Spies) -> MarketViewModel {
         MarketViewModel::new(
-            Arc::new(StubGetPricesUseCase::default()),
+            Arc::new(StubGetCardPricesUseCase::default()),
             spies.told.clone(),
             spies.started.clone(),
             spies.refreshed.clone(),

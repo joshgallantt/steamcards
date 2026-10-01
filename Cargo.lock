@@ -9,6 +9,7 @@ dependencies = [
  "account",
  "anyhow",
  "async-trait",
+ "money",
  "tokio",
 ]
 
@@ -21,6 +22,7 @@ dependencies = [
  "async-trait",
  "config-file",
  "debug-log",
+ "money",
  "steam-api",
  "tokio",
 ]
@@ -33,6 +35,7 @@ dependencies = [
  "account-data",
  "config-file",
  "debug-log",
+ "money",
  "steam-api",
  "tokio",
 ]
@@ -259,11 +262,15 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 name = "card"
 version = "0.1.0"
 dependencies = [
+ "account",
  "anyhow",
  "async-trait",
  "card",
+ "chrono",
  "game",
+ "money",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -273,11 +280,18 @@ dependencies = [
  "anyhow",
  "async-trait",
  "card",
+ "chrono",
  "config-file",
  "debug-log",
  "game",
+ "money",
+ "rand 0.10.3",
+ "reqwest",
+ "serde",
+ "serde_json",
  "steam-api",
  "tokio",
+ "tokio-util",
  "wiremock",
 ]
 
@@ -290,8 +304,11 @@ dependencies = [
  "config-file",
  "debug-log",
  "game",
+ "money",
+ "serde_json",
  "steam-api",
  "tokio",
+ "tokio-util",
  "wiremock",
 ]
 
@@ -2174,62 +2191,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "price"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "card",
- "chrono",
- "game",
- "money",
- "price",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "price-data"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "card",
- "chrono",
- "config-file",
- "debug-log",
- "game",
- "money",
- "price",
- "rand 0.10.3",
- "reqwest",
- "serde",
- "serde_json",
- "steam-api",
- "tokio",
- "tokio-util",
- "wiremock",
-]
-
-[[package]]
-name = "price-di"
-version = "0.1.0"
-dependencies = [
- "card",
- "config-file",
- "debug-log",
- "game",
- "money",
- "price",
- "price-data",
- "serde_json",
- "steam-api",
- "tokio",
- "tokio-util",
- "wiremock",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2989,7 +2950,6 @@ dependencies = [
  "game-di",
  "headless",
  "preferences-di",
- "price-di",
  "serde_json",
  "session",
  "session-di",
@@ -3145,7 +3105,6 @@ dependencies = [
  "game",
  "money",
  "preferences",
- "price",
  "qrcode",
  "ratatui",
  "serde_json",

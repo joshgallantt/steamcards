@@ -187,13 +187,12 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 
 ```
 ├── component/     Domain + Data + DI. One folder per business concept.
-│   ├── account/       The one Steam account: signing in with a QR code, and out.
+│   ├── account/       The one Steam account: signing in with a QR code, and out, and its wallet.
 │   ├── game/          Your games with trading cards, and their drops: the Steam library.
-│   ├── card/          Each game's cards, normal and foil: its sets, and the copies you hold.
+│   ├── card/          Each game's cards, normal and foil: its sets, the copies you hold, and what they sell for.
 │   ├── preferences/   What you want farmed first.
 │   ├── session/       This session: every card that dropped, and how long the rest should take.
 │   ├── farming/       What to play, playing it, and stepping aside for another device.
-│   ├── price/         What cards are worth: prices and the wallet.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, the pages several components read.
@@ -360,7 +359,7 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferencesU
 
 ### What that buys
 
-- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `CardPriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
 - **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `game-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the paused-time tests drive the real `DefaultFarmCardsUseCase` over a fake Steam account, and the farmer can't tell the difference.
@@ -375,7 +374,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `steam-api` | Library |
@@ -383,7 +382,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 | App | `steamcards` | Domain, DI, Library, Presentation |
 | Tooling | `xtask` | nothing in the workspace |
 
-The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using one it shouldn't (farming never uses price), and on production code enabling a `test-support` feature.
+The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using a component it shouldn't (`card` never uses `farming`), and on production code enabling a `test-support` feature.
 
 **Rust features this codebase doesn't use:** extension traits, global `static` state, `Deref` as inheritance, reading the environment outside [`app/src/settings.rs`](app/src/settings.rs), glob imports, printing outside presentation, and `unsafe`. [`app/tests/language_rules.rs`](app/tests/language_rules.rs), the workspace lints and [`clippy.toml`](clippy.toml) check them. [docs/architecture.md](docs/architecture.md#rust-features-this-codebase-doesnt-use) says why each one is out, and what to do instead.
 
@@ -417,7 +416,7 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 | --- | --- | --- |
 | Unit | `#[cfg(test)]` next to the code, and `tests/` in each domain crate | the system's terms, and the use cases' rules over the component's fakes |
 | Acceptance | `tests/` in each DI crate, with the driver in `tests/support/` | the user's terms, through the component as the app wires it: `player.signs_in()`, `player.comes_back()` |
-| Paused time | `tests/` in the farming and price domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(dropped)` |
+| Paused time | `tests/` in the farming and card domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(dropped)` |
 | End to end | `tests/` in the data and library crates | real code against local stand-ins for Steam: a CM server over a real WebSocket (`steam-api`'s `test_support`), and [wiremock](https://crates.io/crates/wiremock) for steamcommunity.com |
 | Screens | [`ui/terminal-ui/src/app/preview.rs`](ui/terminal-ui/src/app/preview.rs) | what's on screen, and that nothing is cut off at any size |
 | Architecture | [`app/tests/`](app/tests/) | the rules above |

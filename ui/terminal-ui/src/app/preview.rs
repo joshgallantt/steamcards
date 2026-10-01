@@ -12,23 +12,23 @@ use std::sync::Arc;
 use account::{
     Account as SignedIn, LoginChallenge,
     test_support::{
-        SpyCheckSignInUseCase, SpySignOutUseCase, StubGetAccountUseCase, StubSignInUseCase,
+        SpyCheckSignInUseCase, SpySignOutUseCase, StubGetAccountUseCase, StubGetWalletUseCase,
+        StubSignInUseCase,
     },
 };
-use card::{AssetId, Card, CardAsset, CardKind, CardSet, CardSets};
+use card::{
+    AssetId, Card, CardAsset, CardKind, CardSet, CardSets, PriceBook,
+    test_support::{
+        SpyKeepCardPricesUpToDateUseCase, SpyRefreshCardPricesUseCase, SpySetCardsToPriceUseCase,
+        StubGetCardPricesUseCase, pounds, set_prices,
+    },
+};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyGetLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
     DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
-};
-use price::{
-    PriceBook,
-    test_support::{
-        SpyKeepPricesUpToDateUseCase, SpyRefreshPricesUseCase, SpySetGamesToPriceUseCase,
-        StubGetPricesUseCase, StubGetWalletUseCase, pounds, set_prices,
-    },
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
@@ -272,10 +272,10 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(library())))),
         OnboardingViewModel::new(accounts),
         MarketViewModel::new(
-            Arc::new(StubGetPricesUseCase::new(prices())),
-            Arc::new(SpySetGamesToPriceUseCase::default()),
-            Arc::new(SpyKeepPricesUpToDateUseCase::default()),
-            Arc::new(SpyRefreshPricesUseCase::default()),
+            Arc::new(StubGetCardPricesUseCase::new(prices())),
+            Arc::new(SpySetCardsToPriceUseCase::default()),
+            Arc::new(SpyKeepCardPricesUpToDateUseCase::default()),
+            Arc::new(SpyRefreshCardPricesUseCase::default()),
             Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
         ),
     );
@@ -999,10 +999,10 @@ fn showcase_app() -> App {
         )))),
         OnboardingViewModel::new(accounts),
         MarketViewModel::new(
-            Arc::new(StubGetPricesUseCase::new(showcase_prices())),
-            Arc::new(SpySetGamesToPriceUseCase::default()),
-            Arc::new(SpyKeepPricesUpToDateUseCase::default()),
-            Arc::new(SpyRefreshPricesUseCase::default()),
+            Arc::new(StubGetCardPricesUseCase::new(showcase_prices())),
+            Arc::new(SpySetCardsToPriceUseCase::default()),
+            Arc::new(SpyKeepCardPricesUpToDateUseCase::default()),
+            Arc::new(SpyRefreshCardPricesUseCase::default()),
             Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
         ),
     );

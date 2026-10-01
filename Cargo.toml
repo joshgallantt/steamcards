@@ -26,9 +26,6 @@ members = [
     "component/farming/domain",
     "component/farming/data",
     "component/farming/di",
-    "component/price/domain",
-    "component/price/data",
-    "component/price/di",
     "library/config-file",
     "library/debug-log",
     "library/steam-api",
@@ -102,7 +99,6 @@ card = { path = "component/card/domain" }
 session = { path = "component/session/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
-price = { path = "component/price/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
@@ -110,7 +106,6 @@ game-data = { path = "component/game/data" }
 card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
-price-data = { path = "component/price/data" }
 
 # DI
 account-di = { path = "component/account/di" }
@@ -119,7 +114,6 @@ card-di = { path = "component/card/di" }
 session-di = { path = "component/session/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
-price-di = { path = "component/price/di" }
 
 # Library
 config-file = { path = "library/config-file" }

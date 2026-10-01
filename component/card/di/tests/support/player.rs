@@ -43,9 +43,9 @@ impl Player {
         .unwrap();
         let mut endpoints = steam.endpoints();
         endpoints.community = site.uri();
-        let client = SteamClient::with_endpoints(file, &DebugLog::off(), endpoints);
+        let client = SteamClient::with_endpoints(file.clone(), &DebugLog::off(), endpoints);
         Self {
-            card: CardComponent::new(Arc::new(client)),
+            card: CardComponent::new(Arc::new(client), file, dir.join("prices.json")),
             steam,
             site,
         }

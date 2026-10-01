@@ -1258,6 +1258,6 @@ mod tests {
             },
             badge_level: 0,
         };
-        assert_eq!(value_to_come(&g, &price::PriceBook::default(), None), None);
+        assert_eq!(value_to_come(&g, &card::PriceBook::default(), None), None);
     }
 }

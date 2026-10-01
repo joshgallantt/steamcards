@@ -5,7 +5,7 @@
 //!
 //! Requests keep a polite gap between them, and a busy site is asked again a
 //! couple of times before giving up. The market's requests are asked once
-//! only: its queue, in `price-data`, decides what a busy answer means.
+//! only: its queue, in `card-data`, decides what a busy answer means.
 
 use std::{fmt, time::Duration};
 
@@ -119,7 +119,7 @@ impl Community {
 
     /// One request for `path` (with its query), signed in as `who` or signed
     /// out, and nothing more: whatever the answer, it's not asked again. The
-    /// market's requests come here, and its queue, in `price-data`, decides
+    /// market's requests come here, and its queue, in `card-data`, decides
     /// what a busy answer means.
     pub(crate) async fn get_once(
         &self,

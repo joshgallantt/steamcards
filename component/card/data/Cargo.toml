@@ -1,6 +1,6 @@
 [package]
 name = "card-data"
-description = "The user's cards as the card pages and the inventory show them, through a client of its own, written to fit the card domain's CardRepository."
+description = "The user's cards as the card pages and the inventory show them, and their prices on the Steam market, each through a client of its own, with prices kept on disk through a store, written to fit the card domain's CardRepository and CardPriceRepository."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,13 +14,24 @@ workspace = true
 [dependencies]
 card.workspace = true
 game.workspace = true
+money.workspace = true
+config-file.workspace = true
+debug-log.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+chrono.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
-tokio.workspace = true
+# The market's pace, on paused time.
+tokio = { workspace = true, features = ["test-util"] }
+tokio-util.workspace = true
 wiremock.workspace = true

@@ -1,9 +1,18 @@
-//! Doubles for other crates' tests, a file each, so no test needs Steam:
-//! fakes work as the real thing would, in memory; builders make what a test
-//! needs.
+//! Doubles for this crate's tests and other crates' tests, a file each, so
+//! no test needs Steam: fakes work as the real thing would, in memory; stubs
+//! answer as they're told; spies count what they're asked; builders make
+//! what a test needs.
 
 mod builders;
 mod fakes;
+mod spies;
+mod stubs;
 
-pub use builders::{card, card_asset};
-pub use fakes::FakeCardRepository;
+pub use builders::{
+    card, card_asset, clock_from, listing, pounds, priced_card, session_start, set_prices,
+};
+pub use fakes::{FakeCardPriceRepository, FakeCardRepository, SetLookup};
+pub use spies::{
+    SpyKeepCardPricesUpToDateUseCase, SpyRefreshCardPricesUseCase, SpySetCardsToPriceUseCase,
+};
+pub use stubs::StubGetCardPricesUseCase;

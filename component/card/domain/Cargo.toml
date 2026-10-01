@@ -1,6 +1,6 @@
 [package]
 name = "card"
-description = "The trading cards of the user's games: each game's set and foils, how many of each card the account has, and the copies it holds."
+description = "The trading cards of the user's games: each game's set and foils, how many of each card the account has, the copies it holds, and what they sell for on the market."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,10 +17,15 @@ test-support = []
 
 [dependencies]
 game.workspace = true
+account.workspace = true
+money.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+chrono.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 
 [dev-dependencies]
 card = { path = ".", features = ["test-support"] }
 game = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["test-util"] }

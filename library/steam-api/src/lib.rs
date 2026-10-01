@@ -2,7 +2,7 @@
 //! the Steam app approves, playing games, the pages of steamcommunity.com as
 //! the account's owner sees them, and each game's card page, the items in the
 //! account's inventory, and the account's wallet. The market's requests go
-//! out through here too, one at a time, but `price-data` reads the market.
+//! out through here too, one at a time, but `card-data` reads the market.
 //!
 //! No domain knowledge. The data crates map what this returns onto their
 //! domains; this crate never sees a domain type.

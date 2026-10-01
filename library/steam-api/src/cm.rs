@@ -127,6 +127,19 @@ pub struct WalletInfo {
     pub currency: i32,
 }
 
+impl WalletInfo {
+    /// The currency the account's prices are in, as an `ECurrency` id: the
+    /// wallet's, or dollars for an account with no wallet, as Valve's pages
+    /// ask the market when there's no wallet currency.
+    pub fn priced_in(&self) -> u32 {
+        const DOLLARS: u32 = 1;
+        u32::try_from(self.currency)
+            .ok()
+            .filter(|&id| self.has_wallet && id > 0)
+            .unwrap_or(DOLLARS)
+    }
+}
+
 /// Steam answered a request with anything but OK.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {

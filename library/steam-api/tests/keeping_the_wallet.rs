@@ -87,6 +87,7 @@ async fn the_wallet_is_what_steam_says_as_a_session_signs_on() {
         currency: 2,
     };
     assert_eq!(session.wallet(), Some(pounds));
+    assert_eq!(pounds.priced_in(), 2, "in pounds");
     session.disconnect().await;
     assert_eq!(
         session.wallet(),
@@ -95,4 +96,18 @@ async fn the_wallet_is_what_steam_says_as_a_session_signs_on() {
     );
     session.forget().unwrap();
     assert_eq!(session.wallet(), None, "forgotten with the sign-in");
+}
+
+#[tokio::test]
+async fn an_account_without_a_wallet_is_priced_in_dollars() {
+    let steam = FakeSteam::start().await;
+    steam.wallet_in(0);
+    let site = MockServer::start().await;
+    let session = signed_in(&steam, &site, "no-wallet");
+
+    session.connection().await.unwrap();
+
+    let none = session.wallet().unwrap();
+    assert!(!none.has_wallet);
+    assert_eq!(none.priced_in(), 1, "in dollars, as Valve's pages ask");
 }

@@ -9,7 +9,7 @@ use crate::settings::Settings;
 /// Phase one: the files and the Steam client everything else runs on. One
 /// client, shared, so when Steam rejects the sign-in every screen knows.
 /// Where the market's prices are kept: a file of their own beside the config
-/// file, which the price component opens. And the keeper of this session of
+/// file, which the card component opens. And the keeper of this session of
 /// farming, which holds it in memory alone.
 pub(crate) struct DataAssembler {
     /// This steamcards' hold on its config file, taken before the file is

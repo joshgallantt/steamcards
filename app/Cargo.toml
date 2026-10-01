@@ -22,7 +22,6 @@ account-di.workspace = true
 farming-di.workspace = true
 game-di.workspace = true
 card-di.workspace = true
-price-di.workspace = true
 preferences-di.workspace = true
 session.workspace = true
 session-di.workspace = true

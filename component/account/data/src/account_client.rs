@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use account::LoginChallenge;
+use account::{LoginChallenge, Wallet};
 use async_trait::async_trait;
+use money::Currency;
 use steam_api::{SteamClient, auth};
 use tokio::sync::mpsc;
 
@@ -29,6 +30,9 @@ pub trait AccountClient: Send + Sync {
     /// Forgets the saved sign-in. Steam is told to end it too, in the
     /// background.
     fn sign_out(&self) -> anyhow::Result<()>;
+
+    /// The account's wallet, once Steam has said.
+    fn wallet(&self) -> Option<Wallet>;
 }
 
 /// The sign-in the Steam client holds.
@@ -77,5 +81,14 @@ impl AccountClient for SteamAccountClient {
 
     fn sign_out(&self) -> anyhow::Result<()> {
         self.steam.forget()
+    }
+
+    fn wallet(&self) -> Option<Wallet> {
+        let info = self.steam.wallet()?;
+        // The fees are Valve's defaults for now. The account's own are on a
+        // signed-in inventory page (`g_rgWalletInfo`), which isn't read yet;
+        // the defaults gave the right answer in every example the research
+        // checked (§1.4).
+        Some(Wallet::new(Currency::from_id(info.priced_in())))
     }
 }

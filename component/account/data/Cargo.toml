@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 account.workspace = true
+money.workspace = true
 steam-api.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

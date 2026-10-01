@@ -5,7 +5,7 @@
 
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{Account, LoginChallenge, SignInError, SignOutError};
+use crate::{Account, LoginChallenge, SignInError, SignOutError, Wallet};
 
 /// The signed-in account, or `None` when nobody is signed in.
 pub trait GetAccountUseCase: Send + Sync {
@@ -31,4 +31,10 @@ pub trait SignInUseCase: Send + Sync {
 /// account signs in again.
 pub trait SignOutUseCase: Send + Sync {
     fn call(&self) -> Result<(), SignOutError>;
+}
+
+/// The account's wallet: its currency, and the fees Steam takes. `None`
+/// until Steam has said.
+pub trait GetWalletUseCase: Send + Sync {
+    fn call(&self) -> Option<Wallet>;
 }

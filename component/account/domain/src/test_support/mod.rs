@@ -8,4 +8,4 @@ mod stubs;
 
 pub use fakes::FakeAccountRepository;
 pub use spies::{SpyCheckSignInUseCase, SpySignOutUseCase};
-pub use stubs::{StubGetAccountUseCase, StubSignInUseCase};
+pub use stubs::{StubGetAccountUseCase, StubGetWalletUseCase, StubSignInUseCase};

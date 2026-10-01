@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use account::{
     AccountRepository, CheckSignInUseCase, DefaultCheckSignInUseCase, DefaultGetAccountUseCase,
-    DefaultSignInUseCase, DefaultSignOutUseCase, GetAccountUseCase, SignInUseCase, SignOutUseCase,
+    DefaultGetWalletUseCase, DefaultSignInUseCase, DefaultSignOutUseCase, GetAccountUseCase,
+    GetWalletUseCase, SignInUseCase, SignOutUseCase,
 };
 use account_data::{AccountClient, DefaultAccountRepository, SteamAccountClient};
 use steam_api::SteamClient;
@@ -16,6 +17,7 @@ pub struct AccountComponent {
     pub check_sign_in: Arc<dyn CheckSignInUseCase>,
     pub sign_in: Arc<dyn SignInUseCase>,
     pub sign_out: Arc<dyn SignOutUseCase>,
+    pub get_wallet: Arc<dyn GetWalletUseCase>,
 }
 
 impl AccountComponent {
@@ -31,7 +33,8 @@ impl AccountComponent {
             get_account: Arc::new(DefaultGetAccountUseCase::new(repo.clone())),
             check_sign_in: Arc::new(DefaultCheckSignInUseCase::new(repo.clone())),
             sign_in: Arc::new(DefaultSignInUseCase::new(repo.clone())),
-            sign_out: Arc::new(DefaultSignOutUseCase::new(repo)),
+            sign_out: Arc::new(DefaultSignOutUseCase::new(repo.clone())),
+            get_wallet: Arc::new(DefaultGetWalletUseCase::new(repo)),
         }
     }
 }

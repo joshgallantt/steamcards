@@ -1,7 +1,12 @@
 mod card_use_cases;
 mod r#impl;
 
-pub use card_use_cases::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
+pub use card_use_cases::{
+    GetCardPricesUseCase, IdentifyCardsUseCase, KeepCardPricesUpToDateUseCase, LookAtCardsUseCase,
+    LookAtFoilsUseCase, RefreshCardPricesUseCase, SetCardsToPriceUseCase,
+};
 pub use r#impl::{
-    DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
+    DefaultGetCardPricesUseCase, DefaultIdentifyCardsUseCase, DefaultKeepCardPricesUpToDateUseCase,
+    DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase, DefaultRefreshCardPricesUseCase,
+    DefaultSetCardsToPriceUseCase,
 };
