@@ -9,9 +9,8 @@ use chrono::{DateTime, TimeDelta, Utc};
 use game::{AppId, SteamLibrary, test_support::game};
 use money::{Currency, Money};
 use price::{
-    Basis, HeldCard, Offers, Price, PriceBook, SetPrices, expected_per_drop, held_value,
-    on_completion,
-    test_support::{order_book, pounds, session_start, set_prices},
+    Basis, HeldCard, Price, PriceBook, SetPrices, expected_per_drop, held_value, on_completion,
+    test_support::{pounds, session_start, set_prices},
     value_left,
 };
 
@@ -82,39 +81,6 @@ fn the_book() -> PriceBook {
     for set in sets {
         book.sets.insert(set.app_id, set);
     }
-    // Each held card's order book, looked up as it dropped: what selling it
-    // now pays, from each best offer.
-    let offers = [
-        ("367520-Hornet", 9, 7),
-        ("367520-Zote", 7, 5),
-        ("367520-The Knight", 11, 9),
-        ("1092790-Leshy", 6, 4),
-        ("1092790-Stoat", 5, 3),
-        ("1092790-Stinkbug", 5, 3),
-        ("1145360-Zagreus", 8, 6),
-        ("1145360-Thanatos (Foil)", 62, 41),
-        ("1145360-Nyx", 9, 7),
-        ("504230-Badeline", 6, 4),
-        ("557600-The Boy", 4, 3),
-        ("960910-Madison", 5, 4),
-    ];
-    let looked_up_at = now() - TimeDelta::minutes(5);
-    for (hash, ask, bid) in offers {
-        book.offers.insert(
-            hash.into(),
-            Offers {
-                price: order_book(ask, bid, looked_up_at),
-                looked_up_at,
-            },
-        );
-    }
-    book.offers.insert(
-        "557600-The Fruit".into(),
-        Offers {
-            price: Price::NoMarket,
-            looked_up_at,
-        },
-    );
     book
 }
 
@@ -164,10 +130,6 @@ fn this_sessions_cards_are_worth_at_least_their_prices_and_say_whats_missing() {
         "£1.14",
         "≥ £1.14 after fees"
     );
-    let sold_now = at(Basis::Instant);
-    assert_eq!(sold_now.total.to_string(), "£0.74", "≥ £0.74 if sold now");
-    assert_eq!(sold_now.unpriced, 3);
-    assert_eq!(sold_now.oldest, None, "the offers are fresh");
 }
 
 #[test]
@@ -204,21 +166,8 @@ fn a_card_known_only_by_name_is_priced_from_its_set() {
     let by_name = HeldCard::named(AppId(HEAVY_RAIN), "Madison", CardKind::Normal);
 
     assert_eq!(
-        held_value(
-            std::slice::from_ref(&by_name),
-            0,
-            &book,
-            Basis::List,
-            &pounds(),
-            now()
-        )
-        .total,
+        held_value(&[by_name], 0, &book, Basis::List, &pounds(), now()).total,
         pence(5)
-    );
-    assert_eq!(
-        held_value(&[by_name], 0, &book, Basis::Instant, &pounds(), now()).total,
-        pence(2),
-        "its offers, by the hash name its set gives it"
     );
 }
 
@@ -261,7 +210,7 @@ fn a_price_in_another_currency_is_shown_but_left_out_of_totals() {
     );
     let the_boy = HeldCard::named(AppId(GOROGOA), "The Boy", CardKind::Normal);
 
-    let Price::Known(quote) = book.price(&the_boy, Basis::List) else {
+    let Price::Known(quote) = book.price(&the_boy) else {
         panic!("it has a price");
     };
     assert_eq!(quote.ask.unwrap().to_string(), "$0.07");
@@ -339,7 +288,6 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
     );
     assert!(left.excl_foils, "LIMBO's foil isn't in it");
     assert_eq!(left.unpriced_games, 1, "one game isn't priced yet");
-    assert_eq!(left.basis, Basis::List);
 
     let (cards, identifying) = the_haul();
     let held = held_value(&cards, identifying, &book, Basis::List, &pounds(), now());
@@ -351,25 +299,4 @@ fn whats_still_to_drop_is_estimated_without_foils_and_says_whats_missing() {
     );
     assert_eq!(done.unpriced_games, 1);
     assert!(done.excl_foils);
-}
-
-#[test]
-fn on_the_instant_basis_cards_still_to_drop_stay_after_fees() {
-    let book = the_book();
-    let library = SteamLibrary::new(vec![game(HEAVY_RAIN, 4.0, 3, 1)]);
-
-    let left = value_left(
-        &library,
-        &[AppId(HEAVY_RAIN)],
-        &book,
-        Basis::Instant,
-        &pounds(),
-    );
-
-    assert_eq!(left.basis, Basis::Net, "and the estimate says so");
-    assert_eq!(
-        left.value,
-        pence(3),
-        "no offers to sell a card to before it drops"
-    );
 }

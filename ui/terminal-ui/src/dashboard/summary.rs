@@ -188,7 +188,7 @@ pub fn session_cards(
                 (_, None) => CardName::Unknown,
             };
             let price = match (held, wallet) {
-                (Some(h), Some(w)) => CardPrice::of(&book.price(&h, BASIS), w),
+                (Some(h), Some(w)) => CardPrice::of(&book.price(&h), w),
                 (None, _) if drop.card == DropCard::Unknown => CardPrice::None,
                 _ => CardPrice::Waiting,
             };
@@ -267,7 +267,7 @@ mod tests {
     use game::CardDrops;
     use money::Currency;
     use price::{
-        PriceQuote, PricedCard, QuoteSource, SetPrices,
+        PriceQuote, PricedCard, SetPrices,
         test_support::{listing, pounds},
     };
     use session::{Drop, Mode, Stretch};
@@ -520,10 +520,7 @@ mod tests {
         let mut book = book();
         book.sets.get_mut(&AppId(960_910)).unwrap().normal[0].price = Price::Known(PriceQuote {
             ask: None,
-            bid: None,
             ask_depth: None,
-            bid_depth: None,
-            source: QuoteSource::Search,
             fetched_at: at(17, 0),
         });
         assert_eq!(

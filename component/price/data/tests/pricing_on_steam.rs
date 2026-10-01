@@ -16,9 +16,9 @@ use debug_log::DebugLog;
 use game::AppId;
 use money::{Currency, Money};
 use price::{
-    Basis, DefaultKeepPricesUpToDateUseCase, DefaultSetGamesToPriceUseCase,
-    KeepPricesUpToDateUseCase, Lookup, Price, PriceEvent, PriceQuote, PriceRepository,
-    PriceSettings, QuoteSource, SetGamesToPriceUseCase, SetPrices, Wallet, system_clock,
+    DefaultKeepPricesUpToDateUseCase, DefaultSetGamesToPriceUseCase, KeepPricesUpToDateUseCase,
+    Lookup, Price, PriceEvent, PriceQuote, PriceRepository, SetGamesToPriceUseCase, SetPrices,
+    Wallet, system_clock,
 };
 use price_data::{DefaultPriceRepository, FilePriceStore, MarketPace, SteamMarketClient};
 use steam_api::{
@@ -207,7 +207,6 @@ async fn a_sets_cards_are_priced_in_the_wallets_currency() {
         panic!("priced");
     };
     assert_eq!(madison.ask_depth, Some(1_204));
-    assert_eq!(madison.source, QuoteSource::Search);
     assert_eq!(cards[0].market_hash_name, "960910-Madison");
 }
 
@@ -299,31 +298,6 @@ async fn the_wallet_is_the_one_steam_tells_of_with_valves_fees() {
 }
 
 #[tokio::test]
-async fn an_order_book_is_priced_as_its_listing_and_its_offer() {
-    let steam = FakeSteam::start().await;
-    let site = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/market/orderbook"))
-        .and(query_param("qp", r#"[753,"220-G-Man"]"#))
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            r#"{"data":{"success":true,"data":{"amtMaxBuyOrder":8,"amtMinSellOrder":11,"eCurrency":2,"cBuyOrders":34378,"cSellOrders":2005}}}"#,
-        ))
-        .mount(&site)
-        .await;
-    let disk = Disk::new("offers");
-    let (market, _) = disk.market(&steam, &site);
-
-    let Lookup::Found(Price::Known(quote)) = market.look_up_offers("220-G-Man").await.unwrap()
-    else {
-        panic!("an order book");
-    };
-
-    assert_eq!(quote.ask, Some(Money::new(11, Currency::GBP)));
-    assert_eq!(quote.bid, Some(Money::new(8, Currency::GBP)));
-    assert_eq!(quote.source, QuoteSource::OrderBook);
-}
-
-#[tokio::test]
 async fn steams_pause_is_kept_across_a_restart() {
     let steam = FakeSteam::start().await;
     steam.wallet_in(2);
@@ -349,7 +323,11 @@ async fn steams_pause_is_kept_across_a_restart() {
 
     // steamcards starts again.
     let (again, _) = disk.market(&steam, &site);
-    let Lookup::Paused(still) = again.look_up_offers("620-Chell").await.unwrap() else {
+    let Lookup::Paused(still) = again
+        .look_up_set(AppId(620), CardKind::Normal)
+        .await
+        .unwrap()
+    else {
         panic!("still paused");
     };
     assert_eq!(still.until.timestamp(), pause.until.timestamp());
@@ -391,23 +369,6 @@ async fn a_market_that_cant_be_asked_marks_no_price_failed() {
 }
 
 #[tokio::test]
-async fn the_basis_is_kept_in_the_config_file() {
-    let steam = FakeSteam::start().await;
-    let site = MockServer::start().await;
-    let disk = Disk::new("basis");
-    let (market, _) = disk.market(&steam, &site);
-    assert_eq!(market.settings().basis, Basis::List, "the default");
-
-    market
-        .save_settings(PriceSettings { basis: Basis::Net })
-        .unwrap();
-
-    let (again, _) = disk.market(&steam, &site);
-    assert_eq!(again.settings().basis, Basis::Net);
-    assert_eq!(on_disk(&disk.config)["market"]["basis"], "net");
-}
-
-#[tokio::test]
 async fn prices_are_kept_for_a_week_across_restarts() {
     let steam = FakeSteam::start().await;
     let site = MockServer::start().await;
@@ -423,10 +384,7 @@ async fn prices_are_kept_for_a_week_across_restarts() {
                 market_hash_name: format!("{app_id}-Madison"),
                 price: Price::Known(PriceQuote {
                     ask: Some(Money::new(5, Currency::GBP)),
-                    bid: None,
                     ask_depth: Some(1_204),
-                    bid_depth: None,
-                    source: QuoteSource::Search,
                     fetched_at: at,
                 }),
             }],

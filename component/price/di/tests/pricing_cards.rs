@@ -8,7 +8,7 @@ mod support;
 use card::CardKind;
 use game::AppId;
 use money::{Currency, Money};
-use price::{Basis, Price, PriceError, PriceEvent};
+use price::{Price, PriceEvent};
 use support::Player;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -110,23 +110,6 @@ async fn a_sets_prices_are_shown_once_looked_up_and_kept() {
         pence(5),
         "kept when steamcards starts again"
     );
-}
-
-#[tokio::test]
-async fn money_is_shown_at_list_prices_until_the_user_picks_another_basis() {
-    let player = Player::new("basis").await;
-    assert_eq!(player.basis(), Basis::List);
-
-    player.picks_the_basis(Basis::Net).unwrap();
-    let player = player.comes_back();
-    assert_eq!(player.basis(), Basis::Net, "kept");
-
-    player.runs_out_of_disk();
-    assert_eq!(
-        player.picks_the_basis(Basis::Instant),
-        Err(PriceError::Unavailable)
-    );
-    assert_eq!(player.basis(), Basis::Net, "nothing changed");
 }
 
 #[tokio::test]

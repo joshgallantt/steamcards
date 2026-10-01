@@ -20,7 +20,7 @@ use steam_api::{
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{header, header_exists, header_regex, method, path, query_param},
+    matchers::{header_regex, method, path, query_param},
 };
 
 /// The market's pace, a thousand times over or more. Its pause is long
@@ -207,102 +207,6 @@ async fn a_market_that_doesnt_list_the_cards_says_so() {
 }
 
 #[tokio::test]
-async fn order_books_are_read_in_either_shape() {
-    let steam = FakeSteam::start().await;
-    let site = MockServer::start().await;
-    let book = |hash: &str| {
-        Mock::given(method("GET"))
-            .and(path("/market/orderbook"))
-            .and(query_param("q", "Load"))
-            .and(query_param("qp", format!(r#"[753,"{hash}"]"#)))
-            .and(header("x-valve-request-type", "queryAction"))
-    };
-    book("620-Chell")
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            r#"{"data":{"success":true,"data":{"amtMaxBuyOrder":4,"amtMinSellOrder":5,"eCurrency":2,"cBuyOrders":41763,"cSellOrders":4662}}}"#,
-        ))
-        .mount(&site)
-        .await;
-    book("220-G-Man")
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            r#"{"success":true,"data":{"amtMaxBuyOrder":8,"amtMinSellOrder":11,"eCurrency":2,"cBuyOrders":34378,"cSellOrders":2005}}"#,
-        ))
-        .mount(&site)
-        .await;
-    book("730-SAS")
-        .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"data":{"success":false}}"#))
-        .mount(&site)
-        .await;
-    let market = signed_in(&steam, &site, "books");
-    let offers = |book: Lookup<Price>| {
-        let Lookup::Found(price) = book else {
-            panic!("found");
-        };
-        let quote = quote(&price);
-        (quote.ask, quote.bid, quote.ask_depth, quote.bid_depth)
-    };
-    let pounds = |pence| Some(Money::new(pence, Currency::GBP));
-
-    assert_eq!(
-        offers(market.look_up_offers("620-Chell").await.unwrap()),
-        (pounds(5), pounds(4), Some(4662), Some(41763)),
-        "wrapped in an outer data"
-    );
-    assert_eq!(
-        offers(market.look_up_offers("220-G-Man").await.unwrap()),
-        (pounds(11), pounds(8), Some(2005), Some(34378)),
-        "bare"
-    );
-    assert!(
-        market.look_up_offers("730-SAS").await.is_err(),
-        "a name it doesn't know"
-    );
-}
-
-#[tokio::test]
-async fn an_order_book_that_comes_as_a_page_signed_in_is_asked_for_signed_out() {
-    let steam = FakeSteam::start().await;
-    let site = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/market/orderbook"))
-        .and(header_exists("cookie"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "text/html; charset=UTF-8")
-                .set_body_string("<!DOCTYPE html><html><body>Steam Community</body></html>"),
-        )
-        .mount(&site)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/market/orderbook"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(
-            r#"{"data":{"success":true,"data":{"amtMaxBuyOrder":3,"amtMinSellOrder":4,"eCurrency":1,"cBuyOrders":2,"cSellOrders":156076}}}"#,
-        ))
-        .mount(&site)
-        .await;
-    let market = signed_in(&steam, &site, "fallback");
-
-    let Lookup::Found(price) = market.look_up_offers("730-FBI").await.unwrap() else {
-        panic!("found");
-    };
-
-    let fbi = quote(&price);
-    assert_eq!(
-        (fbi.ask, fbi.bid, fbi.ask_depth, fbi.bid_depth),
-        (Some(dollars(4)), Some(dollars(3)), Some(156_076), Some(2)),
-        "in whichever currency the signed-out answer says"
-    );
-    let asked = site.received_requests().await.unwrap();
-    assert_eq!(asked.len(), 2);
-    assert!(asked[0].headers.contains_key("cookie"), "signed in first");
-    assert!(!asked[1].headers.contains_key("cookie"), "then signed out");
-    assert_eq!(
-        asked[1].headers.get("x-valve-request-type").unwrap(),
-        "queryAction"
-    );
-}
-
-#[tokio::test]
 async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     let steam = FakeSteam::start().await;
     let site = MockServer::start().await;
@@ -327,7 +231,10 @@ async fn a_request_the_market_turns_down_pauses_it_and_the_pause_doubles() {
     };
     assert_eq!(first.step, Duration::from_millis(400));
     assert!(matches!(
-        market.look_up_offers("620-Chell").await.unwrap(),
+        market
+            .look_up_set(AppId(620), CardKind::Foil)
+            .await
+            .unwrap(),
         Lookup::Paused(_)
     ));
     assert_eq!(

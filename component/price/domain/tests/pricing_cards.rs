@@ -10,14 +10,12 @@ use std::{sync::Arc, time::Duration};
 use card::CardKind;
 use chrono::{DateTime, TimeDelta, Utc};
 use game::AppId;
-use money::{Currency, Money};
+use money::Currency;
 use price::{
-    Basis, Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
-    DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
-    DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
-    GetPricesUseCase, GetWalletUseCase, HeldCard, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
-    MarketPause, Price, PriceError, PriceEvent, RefreshPricesUseCase, SetBasisUseCase,
-    SetGamesToPriceUseCase, held_value,
+    Clock, DefaultGetPricesUseCase, DefaultGetWalletUseCase, DefaultKeepPricesUpToDateUseCase,
+    DefaultRefreshPricesUseCase, DefaultSetGamesToPriceUseCase, GetPricesUseCase, GetWalletUseCase,
+    KeepPricesUpToDateUseCase, MarketPause, Price, PriceError, PriceEvent, RefreshPricesUseCase,
+    SetGamesToPriceUseCase,
     test_support::{self, FakePriceRepository},
 };
 use tokio::sync::mpsc;
@@ -44,7 +42,6 @@ struct Player {
     want: Arc<dyn SetGamesToPriceUseCase>,
     prices: Arc<dyn GetPricesUseCase>,
     refresh: Arc<dyn RefreshPricesUseCase>,
-    offers: Arc<dyn LookUpOffersUseCase>,
     token: CancellationToken,
     events: Option<mpsc::Receiver<PriceEvent>>,
 }
@@ -70,10 +67,6 @@ impl Player {
             want: Arc::new(DefaultSetGamesToPriceUseCase::new(market.clone())),
             prices: Arc::new(DefaultGetPricesUseCase::new(market.clone())),
             refresh: Arc::new(DefaultRefreshPricesUseCase::new(
-                market.clone(),
-                Arc::clone(&clock),
-            )),
-            offers: Arc::new(DefaultLookUpOffersUseCase::new(
                 market.clone(),
                 Arc::clone(&clock),
             )),
@@ -509,25 +502,15 @@ async fn prices_from_before_stay_while_the_market_cant_be_asked() {
         &[],
         eight_hours_ago,
     )]);
-    player.market.cant_be_asked(2, "no network");
+    player.market.cant_be_asked(1, "no network");
 
     let refreshed = player.refresh.call(AppId(CELESTE)).await.unwrap();
-    let offers = player
-        .offers
-        .call(vec!["504230-Badeline".into()])
-        .await
-        .unwrap();
 
     assert_eq!(refreshed, Err(PriceError::Unanswered));
-    assert_eq!(offers, Err(PriceError::Unanswered));
     assert_eq!(
         player.listed_at(CELESTE, "Badeline", CardKind::Normal),
         Some(6),
-        "stale, and still shown"
-    );
-    assert!(
-        player.prices.call().offers.is_empty(),
-        "no order book taken as failed"
+        "stale, and still shown, not taken as failed"
     );
 }
 
@@ -567,99 +550,7 @@ async fn prices_from_before_a_failed_lookup_are_still_shown() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn best_offers_are_looked_up_once_for_each_card_held() {
-    let player = Player::new();
-    player.market.offers("960910-Madison", 5, 4);
-
-    player
-        .offers
-        .call(vec![
-            "960910-Madison".into(),
-            "960910-Madison".into(),
-            "1145360-Zagreus".into(),
-        ])
-        .await
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(
-        player.market.offer_lookups(),
-        ["960910-Madison", "1145360-Zagreus"],
-        "each card once"
-    );
-    let book = player.prices.call();
-    assert_eq!(book.offers["1145360-Zagreus"].price, Price::NoMarket);
-    let madison = HeldCard {
-        market_hash_name: Some("960910-Madison".into()),
-        ..HeldCard::named(AppId(HEAVY_RAIN), "Madison", CardKind::Normal)
-    };
-    let sold_now = held_value(
-        &[madison],
-        0,
-        &book,
-        Basis::Instant,
-        &test_support::pounds(),
-        player.now(),
-    );
-    assert_eq!(
-        sold_now.total,
-        Money::new(2, Currency::GBP),
-        "a 4p offer pays 2p"
-    );
-
-    player.waits(29 * MINUTE).await;
-    player
-        .offers
-        .call(vec!["960910-Madison".into()])
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(player.market.offer_lookups().len(), 2, "still fresh");
-    player.waits(2 * MINUTE).await;
-    player
-        .offers
-        .call(vec!["960910-Madison".into()])
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(player.market.offer_lookups().len(), 3, "half an hour old");
-}
-
-#[tokio::test(start_paused = true)]
-async fn an_order_book_nobody_is_on_is_looked_up_again_only_after_half_an_hour() {
-    let player = Player::new();
-
-    player
-        .offers
-        .call(vec!["1145360-Zagreus".into()])
-        .await
-        .unwrap()
-        .unwrap();
-    player.waits(29 * MINUTE).await;
-    player
-        .offers
-        .call(vec!["1145360-Zagreus".into()])
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        player.market.offer_lookups().len(),
-        1,
-        "nobody buying or selling is an answer too"
-    );
-
-    player.waits(2 * MINUTE).await;
-    player
-        .offers
-        .call(vec!["1145360-Zagreus".into()])
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(player.market.offer_lookups().len(), 2);
-}
-
-#[tokio::test(start_paused = true)]
-async fn offers_wait_while_steam_has_paused_lookups() {
+async fn a_refresh_waits_while_steam_has_paused_lookups() {
     let player = Player::new();
     let pause = MarketPause {
         until: after(player.now(), 20 * MINUTE),
@@ -667,34 +558,11 @@ async fn offers_wait_while_steam_has_paused_lookups() {
     };
     player.market.paused(pause);
 
-    let asked = player
-        .offers
-        .call(vec!["960910-Madison".into()])
-        .await
-        .unwrap();
-
-    assert_eq!(asked, Err(PriceError::Paused(pause)));
-    assert!(player.market.offer_lookups().is_empty());
     assert_eq!(
         player.refresh.call(AppId(HEAVY_RAIN)).await.unwrap(),
         Err(PriceError::Paused(pause))
     );
-}
-
-#[tokio::test]
-async fn money_is_shown_at_list_prices_until_the_user_picks_another_basis() {
-    let clock = test_support::clock_from(test_support::session_start());
-    let market = Arc::new(FakePriceRepository::new(clock));
-    let settings = DefaultGetPriceSettingsUseCase::new(market.clone());
-    let basis = DefaultSetBasisUseCase::new(market.clone());
-    assert_eq!(settings.call().basis, Basis::List);
-
-    basis.call(Basis::Net).unwrap();
-    assert_eq!(settings.call().basis, Basis::Net);
-
-    market.disk_full();
-    assert_eq!(basis.call(Basis::Instant), Err(PriceError::Unavailable));
-    assert_eq!(settings.call().basis, Basis::Net, "nothing changed");
+    assert!(player.market.set_lookups().is_empty(), "nothing asked");
 }
 
 #[tokio::test]

@@ -5,13 +5,10 @@ use card::CardKind;
 use chrono::{DateTime, Utc};
 use game::AppId;
 use money::{Currency, Money};
-use price::{Lookup, MarketPause, Price, PriceQuote, PricedCard, QuoteSource, Wallet};
+use price::{Lookup, MarketPause, Price, PriceQuote, PricedCard, Wallet};
 use steam_api::SteamClient;
 
-use crate::market::{
-    Listed, MAX_SET_PAGES, MarketPace, MarketQueue, OrderBook, QUERY_ACTION, orderbook_path,
-    read_order_book, read_search, search_path,
-};
+use crate::market::{Listed, MAX_SET_PAGES, MarketPace, MarketQueue, read_search, search_path};
 
 /// How long to wait for Steam to tell of the wallet once signed on, a tenth
 /// of a second at a time: it comes as a session signs on.
@@ -28,10 +25,6 @@ pub trait MarketClient: Send + Sync {
         app_id: AppId,
         kind: CardKind,
     ) -> anyhow::Result<Lookup<Vec<PricedCard>>>;
-
-    /// A card's order book, by its market hash name: its lowest listing and
-    /// its best offer.
-    async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>>;
 
     /// The account's wallet, once Steam has said.
     fn wallet(&self) -> Option<Wallet>;
@@ -124,44 +117,6 @@ impl SteamMarketClient {
         }
         Ok(Lookup::Found(listed))
     }
-
-    /// A card's order book, by its market hash name: asked for signed in,
-    /// since only then is it expected to answer in the wallet's currency,
-    /// and signed out when the answer to that is a web page, as it is for
-    /// some sessions (research §1.1, D5).
-    async fn order_book(&self, market_hash_name: &str) -> anyhow::Result<Lookup<OrderBook>> {
-        let path = orderbook_path(market_hash_name);
-        let who = match self.steam.web_login(false).await {
-            Ok(who) => who,
-            Err(e) => return Ok(Lookup::Unanswered(e.to_string())),
-        };
-        let signed_in = self
-            .queue
-            .send(true, || {
-                self.steam.get_once(&path, Some(&who), &[QUERY_ACTION])
-            })
-            .await?;
-        let reply = match signed_in {
-            Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
-            Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
-            Lookup::Found(reply) if !reply.html => reply,
-            Lookup::Found(_) => {
-                self.steam
-                    .log()
-                    .line("the order book came as a web page signed in: asking signed out");
-                match self
-                    .queue
-                    .send(false, || self.steam.get_once(&path, None, &[QUERY_ACTION]))
-                    .await?
-                {
-                    Lookup::Found(reply) => reply,
-                    Lookup::Paused(pause) => return Ok(Lookup::Paused(pause)),
-                    Lookup::Unanswered(why) => return Ok(Lookup::Unanswered(why)),
-                }
-            }
-        };
-        read_order_book(&reply.body).map(Lookup::Found)
-    }
 }
 
 #[async_trait]
@@ -188,14 +143,6 @@ impl MarketClient for SteamMarketClient {
                 .map(|card| to_priced_card(card, currency, now))
                 .collect(),
         ))
-    }
-
-    async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
-        Ok(match self.order_book(market_hash_name).await? {
-            Lookup::Found(book) => Lookup::Found(to_offers(book, Utc::now())),
-            Lookup::Paused(pause) => Lookup::Paused(pause),
-            Lookup::Unanswered(why) => Lookup::Unanswered(why),
-        })
     }
 
     fn wallet(&self) -> Option<Wallet> {
@@ -253,10 +200,7 @@ fn to_priced_card(card: Listed, currency: Currency, now: DateTime<Utc>) -> Price
         match written_in {
             Some(c) => Price::Known(PriceQuote {
                 ask: Some(Money::new(card.sell_price, c)),
-                bid: None,
                 ask_depth: Some(card.sell_listings),
-                bid_depth: None,
-                source: QuoteSource::Search,
                 fetched_at: now,
             }),
             None => Price::failed(now),
@@ -278,27 +222,6 @@ fn is_written_as(money: Money, text: &str) -> bool {
         _ => &text,
     };
     text == money.to_string() || text == money.grouped()
-}
-
-/// A card's order book, priced: its lowest listing and its best offer. As
-/// SteamDB's extension reads it, a side counts only with orders on it.
-fn to_offers(book: OrderBook, now: DateTime<Utc>) -> Price {
-    let currency = Currency::from_id(book.currency);
-    let ask = (book.sell_orders > 0 && book.lowest_ask > 0)
-        .then(|| Money::new(book.lowest_ask, currency));
-    let bid = (book.buy_orders > 0 && book.highest_bid > 0)
-        .then(|| Money::new(book.highest_bid, currency));
-    if ask.is_none() && bid.is_none() {
-        return Price::NoMarket;
-    }
-    Price::Known(PriceQuote {
-        ask,
-        bid,
-        ask_depth: Some(book.sell_orders),
-        bid_depth: Some(book.buy_orders),
-        source: QuoteSource::OrderBook,
-        fetched_at: now,
-    })
 }
 
 #[cfg(test)]
@@ -389,42 +312,5 @@ mod tests {
             is_kind(&other, CardKind::Foil) && is_kind(&other, CardKind::Normal),
             "taken as asked"
         );
-    }
-
-    #[test]
-    fn an_order_book_is_a_listing_and_an_offer() {
-        let now = at(1_790_700_000);
-        let chell = OrderBook {
-            lowest_ask: 5,
-            highest_bid: 4,
-            sell_orders: 4662,
-            buy_orders: 41763,
-            currency: 2,
-        };
-        let Price::Known(quote) = to_offers(chell, now) else {
-            panic!("known");
-        };
-        assert_eq!(quote.ask, Some(Money::new(5, Currency::GBP)));
-        assert_eq!(quote.bid, Some(Money::new(4, Currency::GBP)));
-        assert_eq!(
-            (quote.ask_depth, quote.bid_depth),
-            (Some(4662), Some(41763))
-        );
-        assert_eq!(quote.source, QuoteSource::OrderBook);
-
-        let only_offers = OrderBook {
-            sell_orders: 0,
-            lowest_ask: 0,
-            ..chell
-        };
-        let Price::Known(quote) = to_offers(only_offers, now) else {
-            panic!("known");
-        };
-        assert_eq!(quote.ask, None, "nobody selling, but someone buying");
-        let nothing = OrderBook {
-            buy_orders: 0,
-            ..only_offers
-        };
-        assert_eq!(to_offers(nothing, now), Price::NoMarket);
     }
 }

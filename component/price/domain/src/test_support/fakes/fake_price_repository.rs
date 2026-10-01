@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicU32, Ordering},
     },
     time::Duration,
 };
@@ -13,17 +13,16 @@ use chrono::{DateTime, TimeDelta, Utc};
 use game::AppId;
 
 use crate::{
-    Clock, Lookup, MarketPause, Offers, Price, PriceBook, PriceRepository, PriceSettings,
-    PricedCard, SetPrices, Wallet,
-    test_support::{SetLookup, listing, order_book, pounds, priced_card},
+    Clock, Lookup, MarketPause, PriceBook, PriceRepository, PricedCard, SetPrices, Wallet,
+    test_support::{SetLookup, listing, pounds, priced_card},
 };
 
 /// What a set lookup finds, by game and kind: each card's name and list
 /// price.
 type Listings = HashMap<(u32, CardKind), Vec<(String, i64)>>;
 
-/// The market in memory: the prices it lists, and the book, the wallet and
-/// the settings as a real one keeps them. Its lookups behave as Steam's
+/// The market in memory: the prices it lists, and the book and the wallet
+/// as a real one keeps them. Its lookups behave as Steam's
 /// market queue does: while Steam has paused lookups, one is turned away
 /// without asking; once the pause is over, one goes, and if Steam turns
 /// that down too, the pause doubles, to an hour at most.
@@ -32,9 +31,6 @@ pub struct FakePriceRepository {
     book: Mutex<Arc<PriceBook>>,
     /// A game that isn't here has nothing listed.
     listed: Mutex<Listings>,
-    /// What an order book lookup finds, by hash name: a lowest listing and a
-    /// best offer. A card that isn't here has none.
-    books: Mutex<HashMap<String, (i64, i64)>>,
     /// Games whose lookups get an answer that can't be used.
     failing: Mutex<HashSet<u32>>,
     /// How many more lookups can't reach the market, and why.
@@ -46,14 +42,10 @@ pub struct FakePriceRepository {
     /// the clock says.
     held: AtomicU32,
     wallet: Mutex<Option<Wallet>>,
-    settings: Mutex<PriceSettings>,
     wanted: Mutex<Vec<AppId>>,
     set_lookups: Mutex<Vec<SetLookup>>,
-    offer_lookups: Mutex<Vec<String>>,
     /// Lookups Steam turned down, and when.
     turned_down: Mutex<Vec<DateTime<Utc>>>,
-    /// Saving the settings fails, as if the disk were full.
-    full_disk: AtomicBool,
 }
 
 impl FakePriceRepository {
@@ -63,19 +55,15 @@ impl FakePriceRepository {
             clock,
             book: Mutex::default(),
             listed: Mutex::default(),
-            books: Mutex::default(),
             failing: Mutex::default(),
             unreachable: Mutex::default(),
             pause: Mutex::default(),
             turn_down: AtomicU32::new(0),
             held: AtomicU32::new(0),
             wallet: Mutex::new(Some(pounds())),
-            settings: Mutex::default(),
             wanted: Mutex::default(),
             set_lookups: Mutex::default(),
-            offer_lookups: Mutex::default(),
             turned_down: Mutex::default(),
-            full_disk: AtomicBool::new(false),
         }
     }
 
@@ -91,14 +79,6 @@ impl FakePriceRepository {
         let mut listed = self.listed.lock().unwrap();
         listed.insert((app_id, CardKind::Normal), own(normal));
         listed.insert((app_id, CardKind::Foil), own(foil));
-    }
-
-    /// A card's order book has these: a lowest listing and a best offer.
-    pub fn offers(&self, market_hash_name: &str, ask: i64, bid: i64) {
-        self.books
-            .lock()
-            .unwrap()
-            .insert(market_hash_name.to_owned(), (ask, bid));
     }
 
     /// Lookups of `app_id`'s set get an answer that can't be used.
@@ -145,11 +125,6 @@ impl FakePriceRepository {
         *self.wallet.lock().unwrap() = wallet;
     }
 
-    /// Saving the settings fails from now on.
-    pub fn disk_full(&self) {
-        self.full_disk.store(true, Ordering::Relaxed);
-    }
-
     /// Every set lookup Steam answered, in order.
     pub fn set_lookups(&self) -> Vec<SetLookup> {
         self.set_lookups.lock().unwrap().clone()
@@ -161,11 +136,6 @@ impl FakePriceRepository {
             .into_iter()
             .map(|l| (l.app_id, l.kind))
             .collect()
-    }
-
-    /// Every order book Steam answered for, in order.
-    pub fn offer_lookups(&self) -> Vec<String> {
-        self.offer_lookups.lock().unwrap().clone()
     }
 
     /// When each lookup Steam turned down went.
@@ -226,13 +196,6 @@ impl PriceRepository for FakePriceRepository {
         self.knows(vec![set]);
     }
 
-    fn keep_offers(&self, market_hash_name: &str, offers: Offers) {
-        let mut book = self.book.lock().unwrap();
-        let mut next = PriceBook::clone(&book);
-        next.offers.insert(market_hash_name.to_owned(), offers);
-        *book = Arc::new(next);
-    }
-
     async fn look_up_set(
         &self,
         app_id: AppId,
@@ -269,39 +232,8 @@ impl PriceRepository for FakePriceRepository {
         ))
     }
 
-    async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
-        if let Some(why) = self.unreachable() {
-            return Ok(Lookup::Unanswered(why));
-        }
-        if let Some(pause) = self.queue() {
-            return Ok(Lookup::Paused(pause));
-        }
-        self.offer_lookups
-            .lock()
-            .unwrap()
-            .push(market_hash_name.to_owned());
-        let found = self.books.lock().unwrap().get(market_hash_name).copied();
-        Ok(Lookup::Found(
-            found.map_or(Price::NoMarket, |(ask, bid)| {
-                order_book(ask, bid, (self.clock)())
-            }),
-        ))
-    }
-
     fn wallet(&self) -> Option<Wallet> {
         *self.wallet.lock().unwrap()
-    }
-
-    fn settings(&self) -> PriceSettings {
-        *self.settings.lock().unwrap()
-    }
-
-    fn save_settings(&self, settings: PriceSettings) -> anyhow::Result<()> {
-        if self.full_disk.load(Ordering::Relaxed) {
-            anyhow::bail!("disk full");
-        }
-        *self.settings.lock().unwrap() = settings;
-        Ok(())
     }
 
     fn wanted(&self) -> Vec<AppId> {

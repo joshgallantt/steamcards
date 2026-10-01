@@ -7,28 +7,23 @@ use chrono::{DateTime, Utc};
 use game::{AppId, SteamLibrary};
 use money::Money;
 
-use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, QuoteSource, SetPrices, Wallet};
+use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, SetPrices, Wallet};
 
 /// What a card with this price is worth on `basis`, in the wallet's
-/// currency: its lowest listing (list), what that pays the seller (net), or
-/// what its best offer pays the seller (instant, from an order book only).
+/// currency: its lowest listing (list), or what that pays the seller (net).
 /// `None` when that isn't known, or is in another currency: money in
 /// different currencies is never added or converted.
 pub fn value_of(price: &Price, basis: Basis, wallet: &Wallet) -> Option<Money> {
     let Price::Known(quote) = price else {
         return None;
     };
-    let buyer_pays = match basis {
-        Basis::List | Basis::Net => quote.ask?,
-        Basis::Instant if quote.source == QuoteSource::OrderBook => quote.bid?,
-        Basis::Instant => return None,
-    };
+    let buyer_pays = quote.ask?;
     if buyer_pays.currency != wallet.currency {
         return None;
     }
     let minor = match basis {
         Basis::List => buyer_pays.minor,
-        Basis::Net | Basis::Instant => wallet.seller_gets(buyer_pays.minor),
+        Basis::Net => wallet.seller_gets(buyer_pays.minor),
     };
     Some(Money::new(minor, wallet.currency))
 }
@@ -55,7 +50,7 @@ pub fn held_value(
         oldest: None,
     };
     for card in cards {
-        let price = book.price(card, basis);
+        let price = book.price(card);
         if price == Price::NotMarketable {
             held.not_marketable += 1;
             continue;
@@ -80,8 +75,7 @@ pub fn held_value(
 /// valued first, then the mean of those that have a value, to the nearest
 /// hundredth. Drops are taken to be spread evenly over the set (research
 /// §3.3). Foils are left out until how often one drops is known, so
-/// estimates built on this are "excl. foils". On the instant basis it's the
-/// value after fees (see [`Basis::still_to_drop`]).
+/// estimates built on this are "excl. foils".
 pub fn expected_per_drop(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Option<Money> {
     let (sum, n) = normal_values(set, basis, wallet)?;
     Some(Money::new(nearest(sum, n)?, wallet.currency))
@@ -92,9 +86,7 @@ pub fn expected_per_drop(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Opti
 /// game, not for each drop. `order` is the farm order, as farming's own
 /// forecast takes it: a game not in it (skipped, a sale's badge, not a
 /// priority with "only priority" on) isn't farmed, so drops nothing. Games
-/// whose sets aren't priced are left out, and counted. On the instant
-/// basis, the cards still to drop are valued after fees, and the estimate
-/// says so.
+/// whose sets aren't priced are left out, and counted.
 pub fn value_left(
     library: &SteamLibrary,
     order: &[AppId],
@@ -106,7 +98,6 @@ pub fn value_left(
         value: Money::zero(wallet.currency),
         excl_foils: true,
         unpriced_games: 0,
-        basis: basis.still_to_drop(),
     };
     let farmed = order
         .iter()
@@ -128,9 +119,8 @@ pub fn value_left(
 }
 
 /// A set's normal cards that have a value on `basis`, each valued on its
-/// own: the sum, and how many there are. On the instant basis, after fees.
+/// own: the sum, and how many there are.
 fn normal_values(set: &SetPrices, basis: Basis, wallet: &Wallet) -> Option<(i64, i64)> {
-    let basis = basis.still_to_drop();
     let values: Vec<i64> = set
         .normal
         .iter()
@@ -180,22 +170,14 @@ mod tests {
         Wallet::new(Currency::GBP)
     }
 
-    fn quote(ask: Option<i64>, bid: Option<i64>, source: QuoteSource) -> Price {
-        quote_in(Currency::GBP, ask, bid, source)
+    fn quote(ask: Option<i64>) -> Price {
+        quote_in(Currency::GBP, ask)
     }
 
-    fn quote_in(
-        currency: Currency,
-        ask: Option<i64>,
-        bid: Option<i64>,
-        source: QuoteSource,
-    ) -> Price {
+    fn quote_in(currency: Currency, ask: Option<i64>) -> Price {
         Price::Known(PriceQuote {
             ask: ask.map(|a| Money::new(a, currency)),
-            bid: bid.map(|b| Money::new(b, currency)),
             ask_depth: ask.map(|_| 5),
-            bid_depth: bid.map(|_| 5),
-            source,
             fetched_at: noon(),
         })
     }
@@ -213,7 +195,7 @@ mod tests {
                 .map(|(i, &ask)| PricedCard {
                     name: format!("Card {i}"),
                     market_hash_name: format!("{app_id}-Card {i}"),
-                    price: quote_in(currency, Some(ask), None, QuoteSource::Search),
+                    price: quote_in(currency, Some(ask)),
                 })
                 .collect(),
             foil: Vec::new(),
@@ -236,23 +218,14 @@ mod tests {
     }
 
     #[test]
-    fn a_card_is_worth_its_listing_what_that_pays_or_what_an_offer_pays() {
+    fn a_card_is_worth_its_listing_or_what_that_pays() {
         let wallet = pounds();
         let gbp = |minor| Some(Money::new(minor, Currency::GBP));
-        // G-Man, 2026-09-29: an ask of 11p and a bid of 8p (research §1.4).
-        let book = quote(Some(11), Some(8), QuoteSource::OrderBook);
-        assert_eq!(value_of(&book, Basis::List, &wallet), gbp(11));
-        assert_eq!(value_of(&book, Basis::Net, &wallet), gbp(9));
-        assert_eq!(value_of(&book, Basis::Instant, &wallet), gbp(6));
-
-        let search = quote(Some(11), None, QuoteSource::Search);
-        assert_eq!(
-            value_of(&search, Basis::Instant, &wallet),
-            None,
-            "no offers"
-        );
-        let no_offers = quote(Some(11), None, QuoteSource::OrderBook);
-        assert_eq!(value_of(&no_offers, Basis::Instant, &wallet), None);
+        // G-Man, 2026-09-29: an ask of 11p (research §1.4).
+        let listed = quote(Some(11));
+        assert_eq!(value_of(&listed, Basis::List, &wallet), gbp(11));
+        assert_eq!(value_of(&listed, Basis::Net, &wallet), gbp(9));
+        assert_eq!(value_of(&quote(None), Basis::List, &wallet), None);
         assert_eq!(value_of(&Price::Pending, Basis::List, &wallet), None);
         assert_eq!(value_of(&Price::NoMarket, Basis::List, &wallet), None);
     }
@@ -261,10 +234,7 @@ mod tests {
     fn a_price_in_another_currency_is_never_converted() {
         let dollars = Price::Known(PriceQuote {
             ask: Some(Money::new(7, Currency::USD)),
-            bid: None,
             ask_depth: Some(3),
-            bid_depth: None,
-            source: QuoteSource::Search,
             fetched_at: noon(),
         });
         assert_eq!(value_of(&dollars, Basis::List, &pounds()), None);
@@ -283,7 +253,6 @@ mod tests {
         let each = |basis| expected_per_drop(&hl2, basis, &dollars).map(|m| m.minor);
         assert_eq!(each(Basis::List), Some(14), "13.75¢ to the nearest cent");
         assert_eq!(each(Basis::Net), Some(12), "11.75¢");
-        assert_eq!(each(Basis::Instant), Some(12), "after fees");
 
         let sets_with_halves = set(1, &[4, 5]);
         assert_eq!(
@@ -332,10 +301,12 @@ mod tests {
             "game 30 isn't priced; game 50, never farmed, never is"
         );
         assert!(left.excl_foils);
-        assert_eq!(left.basis, Basis::List);
-        let instant = value_left(&library, &order, &book, Basis::Instant, &pounds());
-        assert_eq!(instant.basis, Basis::Net, "cards to drop stay after fees");
-        assert_eq!(instant.value, Money::new(3 * 3 + 2 * 6, Currency::GBP));
+        let net = value_left(&library, &order, &book, Basis::Net, &pounds());
+        assert_eq!(
+            net.value,
+            Money::new(3 * 3 + 2 * 6, Currency::GBP),
+            "after fees"
+        );
     }
 
     #[test]
@@ -397,7 +368,6 @@ mod tests {
             value: Money::new(1_534, Currency::GBP),
             excl_foils: true,
             unpriced_games: 2,
-            basis: Basis::List,
         };
         assert_eq!(
             on_completion(&held, &left),

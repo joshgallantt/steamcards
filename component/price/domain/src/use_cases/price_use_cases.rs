@@ -14,7 +14,7 @@ use game::AppId;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{Basis, PriceBook, PriceError, PriceEvent, PriceSettings, Wallet};
+use crate::{PriceBook, PriceError, PriceEvent, Wallet};
 
 /// Everything priced so far.
 pub trait GetPricesUseCase: Send + Sync {
@@ -43,27 +43,8 @@ pub trait RefreshPricesUseCase: Send + Sync {
     fn call(&self, app_id: AppId) -> JoinHandle<Result<(), PriceError>>;
 }
 
-/// Looks up the order books of these cards, by market hash name, in the
-/// background: their best offers, which only the instant basis uses. A card
-/// whose order book was looked up under half an hour ago isn't looked up
-/// again, whatever it said. Errs when Steam has paused lookups, or the
-/// market couldn't be asked; the rest wait for the next ask.
-pub trait LookUpOffersUseCase: Send + Sync {
-    fn call(&self, market_hash_names: Vec<String>) -> JoinHandle<Result<(), PriceError>>;
-}
-
 /// The account's wallet: its currency, and the fees Steam takes. `None`
 /// until Steam has said.
 pub trait GetWalletUseCase: Send + Sync {
     fn call(&self) -> Option<Wallet>;
-}
-
-/// The market's settings: the value basis.
-pub trait GetPriceSettingsUseCase: Send + Sync {
-    fn call(&self) -> PriceSettings;
-}
-
-/// Values money on this basis from now on.
-pub trait SetBasisUseCase: Send + Sync {
-    fn call(&self, basis: Basis) -> Result<(), PriceError>;
 }

@@ -1,7 +1,6 @@
 //! The Steam market on steamcommunity.com, in its own terms: a game's cards
-//! with their lowest listings (`search/render`), and one card's order book
-//! (`orderbook`), read as Steam's own pages, SteamDB's extension and Steam
-//! Economy Enhancer read them (research §1.1). Only prices read the market,
+//! with their lowest listings (`search/render`), read as Steam's own pages,
+//! SteamDB's extension and Steam Economy Enhancer read them (research §1.1). Only prices read the market,
 //! so it's read here, beside them.
 //!
 //! The market limits requests harder than the rest of the site, and meets
@@ -21,10 +20,8 @@
 
 mod market_pace;
 mod market_queue;
-mod order_book;
 mod search;
 
 pub use market_pace::MarketPace;
 pub(crate) use market_queue::MarketQueue;
-pub(crate) use order_book::{OrderBook, QUERY_ACTION, orderbook_path, read_order_book};
 pub(crate) use search::{Listed, MAX_SET_PAGES, read_search, search_path};

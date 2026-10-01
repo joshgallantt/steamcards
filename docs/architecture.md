@@ -92,11 +92,10 @@ The domain starts from its entities:
 - **`Price`** and **`PriceQuote`**: what's known of a card's price (pending,
   known, no market, not marketable, failed), and what the market said, when.
   A game's **`SetPrices`** hold its cards of each kind as the market lists
-  them; the **`PriceBook`** holds every set, and each card's best
-  offers looked up.
-- **`Basis`** (list, net or instant) in **`PriceSettings`**, the price
-  component's own settings; **`MarketPause`**, Steam's pause on price lookups, which outlasts
-  a restart.
+  them; the **`PriceBook`** holds every set.
+- **`Basis`**, list or net: a card valued at what a buyer pays for it, or at
+  what selling it pays after Steam's fees. **`MarketPause`**, Steam's pause
+  on price lookups, which outlasts a restart.
 - **`HeldCard`**: a card held, as far as its value goes: from a `CardAsset`,
   or just a name and a kind. **`Held`** is what cards held are worth, at
   least; **`Estimate`**, what cards still to drop are likely worth.
@@ -158,8 +157,7 @@ basis, wallet)`, `held_value(cards, unidentified, book, basis, wallet, now)`,
 basis, wallet)` and `on_completion(held, left)`. A card that isn't priced
 never counts as nothing, fees come off card by card, what's left to drop is
 counted over the farm order (games never farmed drop nothing) and rounded
-once for each game, and on the instant basis, cards still to drop are
-valued after fees and say so.
+once for each game.
 
 ### Use cases
 
@@ -193,18 +191,14 @@ state.
 | | `SetGamesToPriceUseCase` | Which games to price, most urgent first. |
 | | `KeepPricesUpToDateUseCase` | Prices those games' sets until cancelled, each again once 6 hours old; waits out Steam's pause, and a market it couldn't ask (a minute, doubling to half an hour, nothing taken as failed); reports `PriceEvent`s. |
 | | `RefreshPricesUseCase` | Prices a game's set again if it's over an hour old: a card of it dropped, or the user asked. |
-| | `LookUpOffersUseCase` | Order books for cards held and the chosen game's cards: the only use of the instant basis. |
 | | `GetWalletUseCase` | The wallet, once Steam has said. |
-| | `GetPriceSettingsUseCase`, `SetBasisUseCase` | The value basis, and choosing it. |
 
 The market's use cases that keep time take a `Clock`: the system's, or in a
 test, one that moves with tokio's paused time.
 
-The dashboard values cards at their market price: the list basis, with
-`GetPricesUseCase`, `SetGamesToPriceUseCase`, `KeepPricesUpToDateUseCase`,
-`RefreshPricesUseCase` and `GetWalletUseCase`. The other bases,
-`LookUpOffersUseCase` and the settings are there for selling
-later (see [the research](research/market-and-session.md), section 4).
+The dashboard values cards at their market price, on the list basis.
+Selling (see [the research](research/market-and-session.md), section 4)
+adds what it needs when it's built: an order book's best offer, for one.
 
 ### Use cases that call other use cases
 

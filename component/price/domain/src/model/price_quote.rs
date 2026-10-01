@@ -3,24 +3,16 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use money::Money;
 
-use crate::{
-    QuoteSource,
-    rules::{FRESH_FOR, between},
-};
+use crate::rules::{FRESH_FOR, between};
 
-/// What the market said a card sells for, and when. Both prices are what a
-/// buyer pays, fees included.
+/// What the market said a card sells for, and when: its lowest listing,
+/// what a buyer pays, fees included.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PriceQuote {
     /// The lowest listing.
     pub ask: Option<Money>,
-    /// The best offer: what someone is waiting to pay for it.
-    pub bid: Option<Money>,
     /// How many are listed.
     pub ask_depth: Option<u32>,
-    /// How many are wanted.
-    pub bid_depth: Option<u32>,
-    pub source: QuoteSource,
     pub fetched_at: DateTime<Utc>,
 }
 
@@ -55,10 +47,7 @@ mod tests {
     fn a_quote_over_six_hours_old_is_stale() {
         let quote = PriceQuote {
             ask: Some(Money::new(5, Currency::GBP)),
-            bid: None,
             ask_depth: Some(10),
-            bid_depth: None,
-            source: QuoteSource::Search,
             fetched_at: noon(),
         };
         let at = |hours: i64| noon() + TimeDelta::hours(hours);

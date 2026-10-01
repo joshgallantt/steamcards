@@ -88,7 +88,7 @@ mod tests {
     use money::{Currency, Money};
 
     use super::*;
-    use crate::{PriceQuote, QuoteSource};
+    use crate::PriceQuote;
 
     fn noon() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-09-29T12:00:00Z")
@@ -102,10 +102,7 @@ mod tests {
             market_hash_name: hash.into(),
             price: Price::Known(PriceQuote {
                 ask: Some(Money::new(ask, Currency::GBP)),
-                bid: None,
                 ask_depth: Some(10),
-                bid_depth: None,
-                source: QuoteSource::Search,
                 fetched_at: noon(),
             }),
         }

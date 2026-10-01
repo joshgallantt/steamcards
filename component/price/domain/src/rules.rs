@@ -12,10 +12,6 @@ use chrono::{DateTime, TimeDelta, Utc};
 /// §1.3's cache).
 pub(crate) const FRESH_FOR: Duration = Duration::from_secs(6 * 60 * 60);
 
-/// An order book is looked up again once it's half an hour old (research
-/// §1.3's cache).
-pub(crate) const OFFERS_FRESH_FOR: Duration = Duration::from_secs(30 * 60);
-
 /// A lookup whose answer couldn't be used is tried again a day later
 /// (research §1.3 and §1.5).
 pub(crate) const RETRY_FAILED: Duration = Duration::from_secs(24 * 60 * 60);

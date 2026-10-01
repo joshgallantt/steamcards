@@ -5,9 +5,7 @@ use card::CardKind;
 use chrono::{DateTime, TimeDelta, Utc};
 use debug_log::DebugLog;
 use game::AppId;
-use price::{
-    Lookup, Offers, Price, PriceBook, PriceRepository, PriceSettings, PricedCard, SetPrices, Wallet,
-};
+use price::{Lookup, PriceBook, PriceRepository, PricedCard, SetPrices, Wallet};
 
 use crate::{MarketClient, PriceStore};
 
@@ -79,13 +77,6 @@ impl PriceRepository for DefaultPriceRepository {
         }
     }
 
-    fn keep_offers(&self, market_hash_name: &str, offers: Offers) {
-        let mut book = self.book.lock().unwrap();
-        let mut next = PriceBook::clone(&book);
-        next.offers.insert(market_hash_name.to_owned(), offers);
-        *book = Arc::new(next);
-    }
-
     async fn look_up_set(
         &self,
         app_id: AppId,
@@ -96,22 +87,8 @@ impl PriceRepository for DefaultPriceRepository {
         answer
     }
 
-    async fn look_up_offers(&self, market_hash_name: &str) -> anyhow::Result<Lookup<Price>> {
-        let answer = self.client.look_up_offers(market_hash_name).await;
-        self.keep_pause();
-        answer
-    }
-
     fn wallet(&self) -> Option<Wallet> {
         self.client.wallet()
-    }
-
-    fn settings(&self) -> PriceSettings {
-        self.store.settings()
-    }
-
-    fn save_settings(&self, settings: PriceSettings) -> anyhow::Result<()> {
-        self.store.save_settings(settings)
     }
 
     fn wanted(&self) -> Vec<AppId> {

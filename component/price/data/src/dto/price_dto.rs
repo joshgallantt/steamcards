@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use money::{Currency, Money};
-use price::{Price, PriceQuote, QuoteSource};
+use price::{Price, PriceQuote};
 use serde::{Deserialize, Serialize};
 
 /// A price, as kept. `state` is "known", "no market", "not marketable",
@@ -12,17 +12,10 @@ pub(crate) struct PriceDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ask: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    bid: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     ask_depth: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    bid_depth: Option<u32>,
     /// Steam's `ECurrency` id for the amounts.
     #[serde(default)]
     currency: u32,
-    /// "search" or "order book".
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    source: String,
     /// In seconds since the epoch.
     #[serde(default)]
     fetched_at: i64,
@@ -46,15 +39,8 @@ impl PriceDto {
             },
             Price::Known(quote) => Self {
                 ask: quote.ask.map(|m| m.minor),
-                bid: quote.bid.map(|m| m.minor),
                 ask_depth: quote.ask_depth,
-                bid_depth: quote.bid_depth,
-                currency: quote.ask.or(quote.bid).map_or(0, |m| m.currency.id()),
-                source: match quote.source {
-                    QuoteSource::Search => "search",
-                    QuoteSource::OrderBook => "order book",
-                }
-                .to_owned(),
+                currency: quote.ask.map_or(0, |m| m.currency.id()),
                 fetched_at: quote.fetched_at.timestamp(),
                 ..state("known")
             },
@@ -75,13 +61,7 @@ impl PriceDto {
                 let currency = Currency::from_id(self.currency);
                 Price::Known(PriceQuote {
                     ask: self.ask.map(|minor| Money::new(minor, currency)),
-                    bid: self.bid.map(|minor| Money::new(minor, currency)),
                     ask_depth: self.ask_depth,
-                    bid_depth: self.bid_depth,
-                    source: match self.source.as_str() {
-                        "order book" => QuoteSource::OrderBook,
-                        _ => QuoteSource::Search,
-                    },
                     fetched_at: time(self.fetched_at)?,
                 })
             }
@@ -100,13 +80,10 @@ mod tests {
         DateTime::from_timestamp(seconds, 0).unwrap()
     }
 
-    fn known(ask: Option<i64>, bid: Option<i64>, source: QuoteSource) -> Price {
+    fn known(ask: Option<i64>) -> Price {
         Price::Known(PriceQuote {
             ask: ask.map(|minor| Money::new(minor, Currency::GBP)),
-            bid: bid.map(|minor| Money::new(minor, Currency::GBP)),
             ask_depth: Some(2005),
-            bid_depth: bid.map(|_| 34378),
-            source,
             fetched_at: at(1_790_700_000),
         })
     }
@@ -118,8 +95,8 @@ mod tests {
             Price::NoMarket,
             Price::NotMarketable,
             Price::failed(at(1_790_700_000)),
-            known(Some(11), Some(8), QuoteSource::OrderBook),
-            known(Some(6), None, QuoteSource::Search),
+            known(Some(11)),
+            known(None),
         ];
         for price in prices {
             assert_eq!(

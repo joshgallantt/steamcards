@@ -13,7 +13,7 @@ use std::{
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use game::AppId;
-use price::{Basis, PriceBook, PriceError, PriceEvent, Wallet, system_clock};
+use price::{PriceBook, PriceEvent, Wallet, system_clock};
 use price_data::{FilePriceStore, MarketPace, SteamMarketClient};
 use price_di::PriceComponent;
 use steam_api::{
@@ -60,14 +60,6 @@ impl Player {
         }
     }
 
-    pub(crate) fn basis(&self) -> Basis {
-        self.price.get_price_settings.call().basis
-    }
-
-    pub(crate) fn picks_the_basis(&self, basis: Basis) -> Result<(), PriceError> {
-        self.price.set_basis.call(basis)
-    }
-
     pub(crate) fn wallet(&self) -> Option<Wallet> {
         self.price.get_wallet.call()
     }
@@ -107,13 +99,6 @@ impl Player {
             price,
             ..self
         }
-    }
-
-    /// The disk fills up: nothing more can be written to the config file.
-    pub(crate) fn runs_out_of_disk(&self) {
-        let config = self.dir.join("config.json");
-        fs::remove_file(&config).unwrap();
-        fs::create_dir_all(&config).unwrap();
     }
 }
 

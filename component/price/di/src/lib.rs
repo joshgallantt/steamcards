@@ -8,11 +8,10 @@ use std::{path::PathBuf, sync::Arc};
 use config_file::ConfigFile;
 use debug_log::DebugLog;
 use price::{
-    Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
-    DefaultKeepPricesUpToDateUseCase, DefaultLookUpOffersUseCase, DefaultRefreshPricesUseCase,
-    DefaultSetBasisUseCase, DefaultSetGamesToPriceUseCase, GetPriceSettingsUseCase,
-    GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, LookUpOffersUseCase,
-    PriceRepository, RefreshPricesUseCase, SetBasisUseCase, SetGamesToPriceUseCase, system_clock,
+    Clock, DefaultGetPricesUseCase, DefaultGetWalletUseCase, DefaultKeepPricesUpToDateUseCase,
+    DefaultRefreshPricesUseCase, DefaultSetGamesToPriceUseCase, GetPricesUseCase, GetWalletUseCase,
+    KeepPricesUpToDateUseCase, PriceRepository, RefreshPricesUseCase, SetGamesToPriceUseCase,
+    system_clock,
 };
 use price_data::{
     DefaultPriceRepository, FilePriceStore, MarketClient, PriceStore, SteamMarketClient,
@@ -24,10 +23,7 @@ pub struct PriceComponent {
     pub set_games_to_price: Arc<dyn SetGamesToPriceUseCase>,
     pub keep_prices_up_to_date: Arc<dyn KeepPricesUpToDateUseCase>,
     pub refresh_prices: Arc<dyn RefreshPricesUseCase>,
-    pub look_up_offers: Arc<dyn LookUpOffersUseCase>,
     pub get_wallet: Arc<dyn GetWalletUseCase>,
-    pub get_price_settings: Arc<dyn GetPriceSettingsUseCase>,
-    pub set_basis: Arc<dyn SetBasisUseCase>,
 }
 
 impl PriceComponent {
@@ -59,14 +55,8 @@ impl PriceComponent {
                 repo.clone(),
                 clock.clone(),
             )),
-            refresh_prices: Arc::new(DefaultRefreshPricesUseCase::new(
-                repo.clone(),
-                clock.clone(),
-            )),
-            look_up_offers: Arc::new(DefaultLookUpOffersUseCase::new(repo.clone(), clock)),
-            get_wallet: Arc::new(DefaultGetWalletUseCase::new(repo.clone())),
-            get_price_settings: Arc::new(DefaultGetPriceSettingsUseCase::new(repo.clone())),
-            set_basis: Arc::new(DefaultSetBasisUseCase::new(repo)),
+            refresh_prices: Arc::new(DefaultRefreshPricesUseCase::new(repo.clone(), clock)),
+            get_wallet: Arc::new(DefaultGetWalletUseCase::new(repo)),
         }
     }
 }
