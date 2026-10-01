@@ -5,13 +5,18 @@
 //! drives the real `DefaultFarmCardsUseCase` over a fake Steam account, on
 //! tokio's paused time.
 
-use std::{sync::Arc, time::Duration};
+use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
 use card::{
     AssetId, DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase,
 };
 use farming::{
-    DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
+    DefaultFarmCardsUseCase, FarmCardsUseCase,
+    FarmingEvent::{
+        self, AllDropped, AskFailed, BuildingHours, ByCardPage, Dropped, FarmingCards, Identified,
+        Looked, Stalled, Untold,
+    },
+    FarmingStatus, FarmingUpdate, Status,
     test_support::FakeSteamAccount,
 };
 use game::{AppId, DefaultReadLibraryUseCase};
@@ -35,8 +40,8 @@ struct Player {
     farm: Arc<dyn FarmCardsUseCase>,
     end_session: Arc<dyn EndSessionUseCase>,
     token: CancellationToken,
-    tx: mpsc::Sender<FarmingEvent>,
-    events: mpsc::Receiver<FarmingEvent>,
+    tx: mpsc::Sender<FarmingUpdate>,
+    updates: mpsc::Receiver<FarmingUpdate>,
     farmer: Option<JoinHandle<()>>,
 }
 
@@ -45,7 +50,7 @@ impl Player {
         let steam = Arc::new(FakeSteamAccount::new());
         let prefs = Arc::new(StubGetPreferencesUseCase::default());
         let sessions = Arc::new(SessionKeeper::default());
-        let (tx, events) = mpsc::channel(8192);
+        let (tx, updates) = mpsc::channel(8192);
         Self {
             farm: Arc::new(DefaultFarmCardsUseCase::new(
                 Arc::new(DefaultReadLibraryUseCase::new(steam.clone())),
@@ -61,7 +66,7 @@ impl Player {
             prefs,
             token: CancellationToken::new(),
             tx,
-            events,
+            updates,
             farmer: None,
         }
     }
@@ -103,35 +108,38 @@ impl Player {
         if let Some(farmer) = self.farmer.take() {
             farmer.await.unwrap();
         }
-        while self.events.try_recv().is_ok() {}
+        while self.updates.try_recv().is_ok() {}
     }
 
     fn signs_out(&self) {
         self.end_session.call();
     }
 
-    /// Reads the log until a line of `kind` shows up, and returns it.
-    async fn reads(&mut self, kind: EventKind) -> String {
+    /// Reads what happens until something `that` is about shows up, and
+    /// returns it.
+    async fn reads(&mut self, that: impl Fn(&FarmingEvent) -> bool) -> FarmingEvent {
         let wait = async {
             loop {
-                let e = self.events.recv().await.expect("the farmer stopped");
-                if e.kind == kind && !e.message.is_empty() {
-                    return e.message;
+                let update = self.updates.recv().await.expect("the farmer stopped");
+                if let FarmingUpdate::Event(e) = update
+                    && that(&e)
+                {
+                    return e;
                 }
             }
         };
         tokio::time::timeout(48 * HOUR, wait)
             .await
-            .unwrap_or_else(|_| panic!("no {kind:?} line within two days"))
+            .unwrap_or_else(|_| panic!("no {} within two days", type_name_of_val(&that)))
     }
 
     /// The next status, whatever it says.
     async fn status(&mut self) -> FarmingStatus {
         let wait = async {
             loop {
-                let e = self.events.recv().await.expect("the farmer stopped");
-                if let Some(s) = e.status {
-                    return s;
+                let update = self.updates.recv().await.expect("the farmer stopped");
+                if let FarmingUpdate::Status(s) = update {
+                    return *s;
                 }
             }
         };
@@ -162,6 +170,45 @@ impl Drop for Player {
     }
 }
 
+/// The farmer started playing: a game on its own, or games together for
+/// their hours.
+fn playing(e: &FarmingEvent) -> bool {
+    matches!(e, FarmingCards { .. } | BuildingHours { .. })
+}
+
+fn dropped(e: &FarmingEvent) -> bool {
+    matches!(e, Dropped { .. })
+}
+
+fn identified(e: &FarmingEvent) -> bool {
+    matches!(e, Identified { .. })
+}
+
+/// A look at the cards that found no new drop.
+fn looked(e: &FarmingEvent) -> bool {
+    matches!(e, Looked { .. })
+}
+
+/// `card` named as it dropped for `game`: the `copy`th of it held.
+fn named(card: &str, game: &str, copy: u32) -> FarmingEvent {
+    told(card, false, game, copy)
+}
+
+/// A foil `card` named as it dropped for `game`: the `copy`th foil of it
+/// held.
+fn named_foil(card: &str, game: &str, copy: u32) -> FarmingEvent {
+    told(card, true, game, copy)
+}
+
+fn told(card: &str, foil: bool, game: &str, copy: u32) -> FarmingEvent {
+    Identified {
+        game: game.into(),
+        card: card.into(),
+        foil,
+        copy: Some(copy),
+    }
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_card_that_drops_is_told_at_once_and_named_a_moment_later() {
     let mut player = Player::new();
@@ -169,16 +216,23 @@ async fn a_card_that_drops_is_told_at_once_and_named_a_moment_later() {
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.starts_farming();
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Heavy Rain — 2 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Heavy Rain".into(),
+            cards_left: 2
+        }
     );
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Heavy Rain — 1 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Heavy Rain".into(),
+            count: 1,
+            left: 1
+        }
     );
     let dropped = player.status().await.session.drops;
     assert_eq!(dropped.len(), 1);
@@ -189,8 +243,8 @@ async fn a_card_that_drops_is_told_at_once_and_named_a_moment_later() {
     );
 
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2)
     );
     let named = player.status().await.session.drops;
     let madison = player.steam.held()[0].clone();
@@ -210,22 +264,26 @@ async fn two_cards_in_one_look_are_two_drops_numbered_in_turn() {
     player.has_heavy_rain(4, 7 * MINUTE);
     player.steam.will_drop(HEAVY_RAIN, &["Madison", "Madison"]);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(15 * MINUTE).await;
     player.steam.announce();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "2 cards dropped for Heavy Rain — 2 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Heavy Rain".into(),
+            count: 2,
+            left: 2
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2)
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 3rd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 3)
     );
     let drops = player.status().await.session.drops;
     let held = player.steam.held();
@@ -248,26 +306,32 @@ async fn when_steam_gives_only_a_count_the_card_page_names_the_card() {
     player.has_heavy_rain(4, 7 * MINUTE);
     player.steam.will_drop(HEAVY_RAIN, &["Scott", "Madison"]);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(15 * MINUTE).await;
     player.steam.new_items();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "2 cards dropped for Heavy Rain — 2 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Heavy Rain".into(),
+            count: 2,
+            left: 2
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Progress).await,
-        "Steam didn't say which card dropped for Heavy Rain: going by its card page"
+        player.reads(|e| matches!(e, ByCardPage { .. })).await,
+        ByCardPage {
+            game: "Heavy Rain".into()
+        }
     );
-    let first = player.reads(EventKind::Identified).await;
-    let second = player.reads(EventKind::Identified).await;
+    let first = player.reads(identified).await;
+    let second = player.reads(identified).await;
     assert_eq!(
         [first, second],
         [
-            "Madison dropped for Heavy Rain (a 2nd copy)",
-            "Scott dropped for Heavy Rain (a 2nd copy)"
+            named("Madison", "Heavy Rain", 2),
+            named("Scott", "Heavy Rain", 2)
         ],
         "in the set's order: the page doesn't say which came first"
     );
@@ -289,19 +353,21 @@ async fn when_steam_cant_say_which_card_the_card_page_does() {
     player.steam.will_drop(HEAVY_RAIN, &["Scott"]);
     player.steam.cant_describe();
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
 
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     assert_eq!(
-        player.reads(EventKind::Warning).await,
-        "Couldn't ask Steam which card it was: Steam didn't answer in time"
+        player.reads(|e| matches!(e, AskFailed { .. })).await,
+        AskFailed {
+            why: "Steam didn't answer in time".into()
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Scott dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Scott", "Heavy Rain", 2)
     );
 }
 
@@ -312,15 +378,17 @@ async fn a_card_nothing_can_tell_is_unknown() {
     player.has_heavy_rain(2, 20 * MINUTE);
     player.steam.will_drop_foil(HEAVY_RAIN, "Madison");
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.new_items();
 
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     assert_eq!(
-        player.reads(EventKind::Warning).await,
-        "Couldn't tell which card dropped for Heavy Rain"
+        player.reads(|e| matches!(e, Untold { .. })).await,
+        Untold {
+            game: "Heavy Rain".into()
+        }
     );
     let drops = player.status().await.session.drops;
     assert_eq!((&drops[0].card, drops[0].copy), (&DropCard::Unknown, None));
@@ -336,21 +404,21 @@ async fn foils_are_counted_by_their_own_badge() {
     player.steam.will_drop_foil(HADES, "Thanatos");
     player.steam.will_drop_foil(HADES, "Zagreus");
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Thanatos (foil) dropped for Hades (a 2nd copy)",
+        player.reads(identified).await,
+        named_foil("Thanatos", "Hades", 2),
         "a foil Thanatos was held already; the set's normal ones don't count"
     );
 
     player.waits(20 * MINUTE).await;
     player.steam.announce();
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Zagreus (foil) dropped for Hades"
+        player.reads(identified).await,
+        named_foil("Zagreus", "Hades", 1)
     );
     let drops = player.status().await.session.drops;
     assert!(drops[0].is_spare() && !drops[1].is_spare());
@@ -362,7 +430,7 @@ async fn items_steam_says_came_from_another_game_are_kept_for_it() {
     player.has_heavy_rain(2, 20 * MINUTE);
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(10 * MINUTE).await;
     player.steam.announce_items(vec![
@@ -381,8 +449,8 @@ async fn items_steam_says_came_from_another_game_are_kept_for_it() {
     player.steam.announce();
 
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2)
     );
     assert_eq!(
         player.steam.describes(),
@@ -401,20 +469,27 @@ async fn a_card_that_drops_while_building_hours_is_recorded() {
     player.steam.will_drop(HADES, &["Zagreus"]);
     player.starts_farming();
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Playing Hades until it has 3 hours, when its cards can start dropping"
+        player.reads(playing).await,
+        BuildingHours {
+            lead: "Hades".into(),
+            games: 1
+        }
     );
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Hades — 1 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Hades".into(),
+            count: 1,
+            left: 1
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Zagreus dropped for Hades (a 2nd copy)",
+        player.reads(identified).await,
+        named("Zagreus", "Hades", 2),
         "its set was never read, so its card page is, after it"
     );
     let session = player.status().await.session;
@@ -434,8 +509,11 @@ async fn a_card_that_drops_while_another_device_plays_is_recorded_after() {
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.starts_farming();
     assert_eq!(
-        player.reads(EventKind::Progress).await,
-        "Heavy Rain: 2 cards still to drop",
+        player.reads(looked).await,
+        Looked {
+            game: "Heavy Rain".into(),
+            cards_left: 2
+        },
         "its set is read first"
     );
 
@@ -451,12 +529,16 @@ async fn a_card_that_drops_while_another_device_plays_is_recorded_after() {
     player.steam.unblock();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Heavy Rain — 1 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Heavy Rain".into(),
+            count: 1,
+            left: 1
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2)
     );
 }
 
@@ -466,7 +548,7 @@ async fn a_card_found_after_another_device_played_is_told_by_its_card_page() {
     player.has_heavy_rain(3, HOUR);
     player.steam.will_drop(HEAVY_RAIN, &["Madison", "Scott"]);
     player.starts_farming();
-    player.reads(EventKind::Progress).await;
+    player.reads(looked).await;
 
     // Another device plays it, and Madison drops meanwhile: Steam gives only
     // a count.
@@ -478,12 +560,16 @@ async fn a_card_found_after_another_device_played_is_told_by_its_card_page() {
     player.steam.unblock();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Heavy Rain — 2 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Heavy Rain".into(),
+            count: 1,
+            left: 2
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)",
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2),
         "its card page is looked at straight away"
     );
 
@@ -491,8 +577,8 @@ async fn a_card_found_after_another_device_played_is_told_by_its_card_page() {
     player.steam.drops_now(HEAVY_RAIN);
     player.steam.new_items();
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Scott dropped for Heavy Rain (a 2nd copy)",
+        player.reads(identified).await,
+        named("Scott", "Heavy Rain", 2),
         "not Madison again: Madison's copy was counted"
     );
 }
@@ -505,7 +591,7 @@ async fn an_item_steam_announces_late_names_its_own_card_and_no_later_one() {
         .steam
         .will_drop(HEAVY_RAIN, &["Madison", "Scott", "Ethan"]);
     player.starts_farming();
-    player.reads(EventKind::Progress).await;
+    player.reads(looked).await;
     let item = |asset_id| NewItem {
         asset_id: AssetId(asset_id),
         app_id: Some(AppId(HEAVY_RAIN)),
@@ -518,12 +604,12 @@ async fn an_item_steam_announces_late_names_its_own_card_and_no_later_one() {
     player.steam.drops_now(HEAVY_RAIN);
     player.steam.announce_items(vec![item(30_001)]);
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Madison dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Madison", "Heavy Rain", 2)
     );
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Scott dropped for Heavy Rain (a 2nd copy)"
+        player.reads(identified).await,
+        named("Scott", "Heavy Rain", 2)
     );
 
     // Steam announces the second after; then Ethan drops.
@@ -533,8 +619,8 @@ async fn an_item_steam_announces_late_names_its_own_card_and_no_later_one() {
     player.steam.announce_items(vec![item(30_003)]);
 
     assert_eq!(
-        player.reads(EventKind::Identified).await,
-        "Ethan dropped for Heavy Rain",
+        player.reads(identified).await,
+        named("Ethan", "Heavy Rain", 1),
         "not a 3rd Scott"
     );
     let drops = player.status().await.session.drops;
@@ -567,8 +653,10 @@ async fn the_session_counts_from_its_first_read_and_marks_each_game_finished() {
     assert!(first.drops.is_empty() && first.finished.is_empty());
 
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Every card has dropped for Game 620."
+        player.reads(|e| matches!(e, AllDropped { .. })).await,
+        AllDropped {
+            game: "Game 620".into()
+        }
     );
     let session = player.status().await.session;
     assert_eq!(session.drops.len(), 2);
@@ -610,16 +698,16 @@ async fn the_first_forecast_is_made_when_the_second_drop_lands() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 4, Some(20 * MINUTE));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.new_items();
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     assert_eq!(player.status().await.session.first_forecast, None);
 
     player.waits(20 * MINUTE).await;
     player.steam.new_items();
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     let forecast = player
         .status()
         .await
@@ -637,10 +725,10 @@ async fn the_session_carries_on_across_a_pause() {
     player.has_heavy_rain(3, 20 * MINUTE);
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
-    player.reads(EventKind::Identified).await;
+    player.reads(identified).await;
     let before = player.status().await.session;
 
     player.pauses().await;
@@ -669,10 +757,10 @@ async fn after_a_pause_the_first_word_is_the_session_going_on() {
     player.has_heavy_rain(3, 20 * MINUTE);
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
-    player.reads(EventKind::Identified).await;
+    player.reads(identified).await;
     let before = player.status().await;
 
     player.pauses().await;
@@ -699,10 +787,10 @@ async fn a_pause_while_a_card_is_told_stops_at_once() {
     player.steam.will_drop(HEAVY_RAIN, &["Madison"]);
     player.steam.describes_after(Duration::from_secs(15));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.announce();
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
 
     // Steam is asked which card it was, and takes its time.
     let paused = Instant::now();
@@ -723,12 +811,19 @@ async fn a_game_set_aside_stays_behind_through_a_pause() {
     player.steam.add_game(2, 5.0, 4, Some(3 * HOUR));
     player.starts_farming();
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 1 — 2 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 1".into(),
+            cards_left: 2
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Warning).await,
-        "No card from Game 1 in 10 hours — trying the others first"
+        player.reads(|e| matches!(e, Stalled { .. })).await,
+        Stalled {
+            game: "Game 1".into(),
+            after: 10 * HOUR,
+            for_good: false
+        }
     );
     let aside = player.sees(Status::Farming).await.set_aside;
     assert_eq!(
@@ -743,8 +838,11 @@ async fn a_game_set_aside_stays_behind_through_a_pause() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 2 — 4 cards to drop",
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 2".into(),
+            cards_left: 4
+        },
         "Game 1 is still behind the others"
     );
     let status = player.sees(Status::Farming).await;
@@ -757,10 +855,10 @@ async fn signing_out_ends_the_session() {
     let mut player = Player::new();
     player.has_heavy_rain(3, 20 * MINUTE);
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.new_items();
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     let before = player.status().await.session;
 
     player.pauses().await;
@@ -786,11 +884,14 @@ async fn the_last_card_is_looked_for_every_five_minutes() {
         Some(15 * MINUTE + Duration::from_secs(15))
     );
 
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     let dropped = Instant::now();
     assert_eq!(
-        player.reads(EventKind::Progress).await,
-        "Game 620: 1 card still to drop"
+        player.reads(looked).await,
+        Looked {
+            game: "Game 620".into(),
+            cards_left: 1
+        }
     );
     assert_eq!(dropped.elapsed(), 5 * MINUTE);
     let last_card = player.sees(Status::Farming).await;

@@ -1,5 +1,5 @@
 //! Presentation without a screen: farms, and prints every event as a line of
-//! plain text, for logs and servers.
+//! plain text, for logs and servers, in the dashboard's words.
 
 #![expect(
     clippy::print_stdout,
@@ -9,7 +9,7 @@
 use std::{sync::Arc, time::Duration};
 
 use account::GetAccountUseCase;
-use farming::{FarmCardsUseCase, FarmingEvent, FarmingStatus};
+use farming::{FarmCardsUseCase, FarmingStatus, FarmingUpdate};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -48,11 +48,11 @@ pub async fn run(
         });
     }
 
-    let (tx, mut rx) = mpsc::channel::<FarmingEvent>(256);
+    let (tx, mut rx) = mpsc::channel::<FarmingUpdate>(256);
     let printer = tokio::spawn(async move {
         let mut last = None;
-        while let Some(ev) = rx.recv().await {
-            print_event(&ev, &mut last);
+        while let Some(update) = rx.recv().await {
+            print_update(&update, &mut last);
         }
     });
     let _ = farm.call(token, tx).await;
@@ -62,28 +62,28 @@ pub async fn run(
 /// What a status line says, to print it only when that changes.
 type Said = (String, Vec<String>, String);
 
-fn print_event(e: &FarmingEvent, last: &mut Option<Said>) {
+fn print_update(update: &FarmingUpdate, last: &mut Option<Said>) {
     let ts = chrono::Local::now().format("%H:%M:%S");
-    if let Some(s) = &e.status {
-        let said = said(s);
-        if last.as_ref() != Some(&said) {
-            let (status, playing, note) = &said;
-            let playing = if playing.is_empty() {
-                String::new()
-            } else {
-                format!(" playing={}", playing.join(", "))
-            };
-            let note = if note.is_empty() {
-                String::new()
-            } else {
-                format!(" ({note})")
-            };
-            println!("{ts} STATUS {status}{playing}{note}");
-            *last = Some(said);
+    match update {
+        FarmingUpdate::Status(s) => {
+            let said = said(s);
+            if last.as_ref() != Some(&said) {
+                let (status, playing, note) = &said;
+                let playing = if playing.is_empty() {
+                    String::new()
+                } else {
+                    format!(" playing={}", playing.join(", "))
+                };
+                let note = if note.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({note})")
+                };
+                println!("{ts} STATUS {status}{playing}{note}");
+                *last = Some(said);
+            }
         }
-    }
-    if !e.message.is_empty() {
-        println!("{ts} {}", e.message);
+        FarmingUpdate::Event(e) => println!("{ts} {}", farming_words::event(e)),
     }
 }
 
@@ -97,5 +97,6 @@ fn said(s: &FarmingStatus) -> Said {
                 .map_or_else(|| format!("app {id}"), |g| g.name.clone())
         })
         .collect();
-    (s.status.to_string(), playing, s.note.clone())
+    let note = farming_words::note(s, chrono::Utc::now()).unwrap_or_default();
+    (farming_words::status(s.status).to_owned(), playing, note)
 }

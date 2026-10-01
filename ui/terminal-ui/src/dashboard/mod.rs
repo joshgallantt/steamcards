@@ -5,6 +5,8 @@
 mod card_page;
 pub(crate) mod dashboard_view;
 pub(crate) mod detail_view;
+mod event_kind;
+pub(crate) mod farming_log;
 mod farming_view_model;
 mod library_view_model;
 mod log_entry;
@@ -15,6 +17,7 @@ mod queue;
 mod summary;
 
 pub use card_page::{card_page, open_in_browser};
+pub(crate) use event_kind::EventKind;
 pub use farming_view_model::FarmingViewModel;
 pub use library_view_model::LibraryViewModel;
 pub(crate) use log_entry::LogEntry;

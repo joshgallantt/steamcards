@@ -1,14 +1,19 @@
 //! Paused-time tier: the farmer as the user meets it, over hours of play
 //! that pass in moments. Every test drives the real `DefaultFarmCardsUseCase`
 //! over a fake Steam account on tokio's paused time, which a real connection
-//! to Steam couldn't run on, and reads only what the user would read: the
-//! log and the status line.
+//! to Steam couldn't run on, and reads only what the screens are told: what
+//! happened, and where farming stands. The words are the screens'.
 
-use std::{sync::Arc, time::Duration};
+use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
 use card::{DefaultIdentifyCardsUseCase, DefaultLookAtCardsUseCase, DefaultLookAtFoilsUseCase};
 use farming::{
-    DefaultFarmCardsUseCase, EventKind, FarmCardsUseCase, FarmingEvent, FarmingStatus, Status,
+    DefaultFarmCardsUseCase, FarmCardsUseCase,
+    FarmingEvent::{
+        self, BuildingHours, Dropped, ElsewhereStopped, FarmingCards, HoursBuilt, MovedOn,
+        PlayedElsewhere, Stalled, TakenOver, WentWrong,
+    },
+    FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble,
     test_support::FakeSteamAccount,
 };
 use game::{AppId, DefaultReadLibraryUseCase};
@@ -25,7 +30,7 @@ struct Player {
     steam: Arc<FakeSteamAccount>,
     prefs: Arc<StubGetPreferencesUseCase>,
     token: CancellationToken,
-    events: Option<mpsc::Receiver<FarmingEvent>>,
+    updates: Option<mpsc::Receiver<FarmingUpdate>>,
     farmer: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -35,7 +40,7 @@ impl Player {
             steam: Arc::new(FakeSteamAccount::new()),
             prefs: Arc::default(),
             token: CancellationToken::new(),
-            events: None,
+            updates: None,
             farmer: None,
         }
     }
@@ -56,33 +61,38 @@ impl Player {
         );
         let (tx, rx) = mpsc::channel(8192);
         self.farmer = Some(farm.call(self.token.clone(), tx));
-        self.events = Some(rx);
+        self.updates = Some(rx);
     }
 
-    /// Reads the log until a line of `kind` shows up, and returns it.
-    async fn reads(&mut self, kind: EventKind) -> String {
-        let rx = self.events.as_mut().unwrap();
+    /// Reads what happens until something `that` is about shows up, and
+    /// returns it.
+    async fn reads(&mut self, that: impl Fn(&FarmingEvent) -> bool) -> FarmingEvent {
+        let rx = self.updates.as_mut().unwrap();
         let wait = async {
             loop {
-                let e = rx.recv().await.expect("the farmer stopped");
-                if e.kind == kind && !e.message.is_empty() {
-                    return e.message;
+                let update = rx.recv().await.expect("the farmer stopped");
+                if let FarmingUpdate::Event(e) = update
+                    && that(&e)
+                {
+                    return e;
                 }
             }
         };
         tokio::time::timeout(Duration::from_secs(48 * 60 * 60), wait)
             .await
-            .unwrap_or_else(|_| panic!("no {kind:?} line within two days"))
+            .unwrap_or_else(|_| panic!("no {} within two days", type_name_of_val(&that)))
     }
 
     /// Reads until the status says `status`, and returns it.
     async fn sees(&mut self, status: Status) -> FarmingStatus {
-        let rx = self.events.as_mut().unwrap();
+        let rx = self.updates.as_mut().unwrap();
         let wait = async {
             loop {
-                let e = rx.recv().await.expect("the farmer stopped");
-                if let Some(s) = e.status.filter(|s| s.status == status) {
-                    return s;
+                let update = rx.recv().await.expect("the farmer stopped");
+                if let FarmingUpdate::Status(s) = update
+                    && s.status == status
+                {
+                    return *s;
                 }
             }
         };
@@ -114,6 +124,28 @@ impl Drop for Player {
     }
 }
 
+/// The farmer started playing: a game on its own, or games together for
+/// their hours.
+fn playing(e: &FarmingEvent) -> bool {
+    matches!(e, FarmingCards { .. } | BuildingHours { .. })
+}
+
+fn dropped(e: &FarmingEvent) -> bool {
+    matches!(e, Dropped { .. })
+}
+
+/// Farming waits for another device, or carries on after it.
+fn elsewhere(e: &FarmingEvent) -> bool {
+    matches!(
+        e,
+        PlayedElsewhere { .. } | TakenOver | ElsewhereStopped { .. }
+    )
+}
+
+fn went_wrong(e: &FarmingEvent) -> bool {
+    matches!(e, WentWrong { .. })
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
     let mut player = Player::new();
@@ -123,21 +155,35 @@ async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 620 — 3 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 620".into(),
+            cards_left: 3
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Game 620 — 2 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Game 620".into(),
+            count: 1,
+            left: 2
+        }
     );
-    player.reads(EventKind::Dropped).await;
+    player.reads(dropped).await;
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Game 620 — that's all of them"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Game 620".into(),
+            count: 1,
+            left: 0
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Playing Game 440 until it has 3 hours, when its cards can start dropping"
+        player.reads(playing).await,
+        BuildingHours {
+            lead: "Game 440".into(),
+            games: 1
+        }
     );
     assert_eq!(player.steam.played(), [vec![620], vec![440]]);
 }
@@ -153,8 +199,11 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
 
     let started = Instant::now();
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Playing 3 games together until Game 10 has 3 hours, when its cards can start dropping"
+        player.reads(playing).await,
+        BuildingHours {
+            lead: "Game 10".into(),
+            games: 3
+        }
     );
     let building = player.sees(Status::Farming).await;
     assert_eq!(building.mode, Some(Mode::Hours));
@@ -165,8 +214,10 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
     );
 
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Game 10 has 3 hours now: its cards can drop."
+        player.reads(|e| matches!(e, HoursBuilt { .. })).await,
+        HoursBuilt {
+            game: "Game 10".into()
+        }
     );
     let waited = started.elapsed();
     assert!(
@@ -174,8 +225,11 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
         "half an hour to go from 2.5 hours, counted here: {waited:?}"
     );
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 10 — 2 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 10".into(),
+            cards_left: 2
+        }
     );
     assert_eq!(player.steam.played()[..2], [vec![10, 20, 30], vec![10]]);
 }
@@ -192,8 +246,11 @@ async fn the_users_first_choice_is_farmed_first() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 620 — 3 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 620".into(),
+            cards_left: 3
+        }
     );
 }
 
@@ -209,7 +266,7 @@ async fn a_first_choice_short_of_three_hours_leads_the_group() {
     });
     player.starts_farming();
 
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert_eq!(
         player.steam.played(),
         [vec![440, 220]],
@@ -229,7 +286,7 @@ async fn a_skipped_game_is_never_played() {
     player.starts_farming();
 
     let idle = player.sees(Status::Idle).await;
-    assert_eq!(idle.note, "every game with cards left is skipped");
+    assert_eq!(idle.nothing_to_farm, Some(NothingToFarm::AllSkipped));
     assert_eq!(player.steam.played(), [vec![440]]);
 }
 
@@ -246,10 +303,7 @@ async fn only_priority_stops_after_the_priorities() {
     player.starts_farming();
 
     let idle = player.sees(Status::Idle).await;
-    assert_eq!(
-        idle.note,
-        "\"only priority\" is on, and your priority games are done"
-    );
+    assert_eq!(idle.nothing_to_farm, Some(NothingToFarm::PrioritiesDone));
     assert_eq!(player.steam.played(), [vec![620]]);
     assert!(player.steam.stops() >= 1, "nothing to play: signed off");
 }
@@ -259,7 +313,7 @@ async fn playing_elsewhere_pauses_farming_until_a_minute_after_it_stops() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.block(Some(730));
     let blocked = player.sees(Status::Blocked).await;
@@ -275,10 +329,12 @@ async fn playing_elsewhere_pauses_farming_until_a_minute_after_it_stops() {
     player.steam.unblock();
     let unblocked = Instant::now();
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Playing elsewhere stopped: farming carries on in a minute."
+        player.reads(elsewhere).await,
+        ElsewhereStopped {
+            carry_on_in: MINUTE
+        }
     );
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert!(unblocked.elapsed() >= MINUTE, "a minute's grace first");
     assert_eq!(player.steam.played(), [vec![620], vec![620]]);
 }
@@ -288,16 +344,13 @@ async fn another_device_taking_over_is_waited_out_signed_on_without_playing() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     // A game started on another device, whose Steam client closed
     // steamcards' game to let it play.
     player.steam.take_over();
     player.steam.block(Some(730));
-    assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Another device took over playing: farming waits until it stops."
-    );
+    assert_eq!(player.reads(elsewhere).await, TakenOver);
     player.sees_waiting_for(730).await;
 
     player.waits(2 * HOUR).await;
@@ -316,10 +369,12 @@ async fn another_device_taking_over_is_waited_out_signed_on_without_playing() {
     player.steam.unblock();
     let unblocked = Instant::now();
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Playing elsewhere stopped: farming carries on in a minute."
+        player.reads(elsewhere).await,
+        ElsewhereStopped {
+            carry_on_in: MINUTE
+        }
     );
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert!(unblocked.elapsed() >= MINUTE, "a minute's grace first");
     assert_eq!(player.steam.played(), [vec![620], vec![620]]);
 }
@@ -329,7 +384,7 @@ async fn after_a_takeover_the_other_devices_game_is_given_minutes_to_start() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.take_over();
     let waiting = player.sees(Status::Blocked).await;
@@ -350,7 +405,7 @@ async fn after_a_takeover_the_other_devices_game_is_given_minutes_to_start() {
     assert_eq!(player.steam.played().len(), 1, "nothing played meanwhile");
 
     player.steam.unblock();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert_eq!(player.steam.played(), [vec![620], vec![620]]);
 }
 
@@ -359,12 +414,12 @@ async fn after_a_takeover_with_no_game_started_farming_carries_on_in_five_minute
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.take_over();
     let taken = Instant::now();
 
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert!(taken.elapsed() >= 5 * MINUTE);
     assert_eq!(player.steam.played(), [vec![620], vec![620]]);
 }
@@ -377,8 +432,8 @@ async fn farming_that_starts_while_another_device_plays_plays_nothing_until_it_s
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Another device is playing: farming waits until it stops."
+        player.reads(elsewhere).await,
+        PlayedElsewhere { game: None }
     );
     player.sees_waiting_for(730).await;
     player.waits(HOUR).await;
@@ -389,7 +444,7 @@ async fn farming_that_starts_while_another_device_plays_plays_nothing_until_it_s
     assert_eq!(player.steam.sign_ons(), 1);
 
     player.steam.unblock();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert_eq!(player.steam.played(), [vec![620]]);
 }
 
@@ -400,13 +455,15 @@ async fn a_game_played_on_another_device_is_named_when_its_in_the_library() {
     player.steam.add_game(440, 1.0, 2, Some(HOUR));
     player.steam.name(440, "Team Fortress 2");
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.block(Some(440));
 
     assert_eq!(
-        player.reads(EventKind::Info).await,
-        "Team Fortress 2 is being played on another device: farming waits until it stops."
+        player.reads(elsewhere).await,
+        PlayedElsewhere {
+            game: Some("Team Fortress 2".into())
+        }
     );
 }
 
@@ -415,15 +472,19 @@ async fn a_new_item_is_looked_at_straight_away() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 3, Some(20 * MINUTE));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     let started = Instant::now();
 
     player.waits(20 * MINUTE + Duration::from_secs(5)).await;
     player.steam.new_items();
 
     assert_eq!(
-        player.reads(EventKind::Dropped).await,
-        "A card dropped for Game 620 — 2 to go"
+        player.reads(dropped).await,
+        Dropped {
+            game: "Game 620".into(),
+            count: 1,
+            left: 2
+        }
     );
     assert!(
         started.elapsed() < 21 * MINUTE,
@@ -439,16 +500,26 @@ async fn a_game_that_drops_nothing_for_ten_hours_waits_behind_the_others() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 1 — 2 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 1".into(),
+            cards_left: 2
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Warning).await,
-        "No card from Game 1 in 10 hours — trying the others first"
+        player.reads(|e| matches!(e, Stalled { .. })).await,
+        Stalled {
+            game: "Game 1".into(),
+            after: 10 * HOUR,
+            for_good: false
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 2 — 2 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 2".into(),
+            cards_left: 2
+        }
     );
 }
 
@@ -457,7 +528,7 @@ async fn appearing_online_follows_the_preference() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert_eq!(
         player.steam.plays(),
         [(vec![620], false)],
@@ -484,8 +555,13 @@ async fn badges_that_cant_be_read_are_tried_again_in_five_minutes() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Error).await,
-        "Couldn't read your badges: steamcommunity.com didn't answer (503 Service Unavailable)"
+        player.reads(went_wrong).await,
+        WentWrong {
+            trouble: Trouble::BadgesUnread(
+                "steamcommunity.com didn't answer (503 Service Unavailable)".into()
+            ),
+            again_in: Some(5 * MINUTE)
+        }
     );
     let again = player.sees(Status::Error).await.next_look;
     assert!(
@@ -494,7 +570,7 @@ async fn badges_that_cant_be_read_are_tried_again_in_five_minutes() {
     );
     let failed = Instant::now();
     player.steam.go_down(false);
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert!(failed.elapsed() >= 5 * MINUTE);
     assert!(
         player.steam.played().len() == 1,
@@ -507,15 +583,21 @@ async fn a_lost_connection_is_tried_again_after_a_minute() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.lose("the connection to Steam dropped");
     assert_eq!(
-        player.reads(EventKind::Warning).await,
-        "the connection to Steam dropped — trying again in a minute"
+        player.reads(went_wrong).await,
+        WentWrong {
+            trouble: Trouble::Lost("the connection to Steam dropped".into()),
+            again_in: Some(MINUTE)
+        }
     );
     let status = player.sees(Status::Error).await;
-    assert_eq!(status.note, "the connection to Steam dropped");
+    assert_eq!(
+        status.trouble,
+        Some(Trouble::Lost("the connection to Steam dropped".into()))
+    );
     let wait = status.next_look.map(|at| at - chrono::Utc::now());
     assert!(
         wait.is_some_and(
@@ -524,7 +606,7 @@ async fn a_lost_connection_is_tried_again_after_a_minute() {
         "it says when it tries again: {wait:?}"
     );
     let lost = Instant::now();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
     assert!(lost.elapsed() >= MINUTE);
 }
 
@@ -533,15 +615,16 @@ async fn another_session_taking_over_stops_farming() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
     player.starts_farming();
-    player.reads(EventKind::Playing).await;
+    player.reads(playing).await;
 
     player.steam.replace();
 
-    assert!(
-        player
-            .reads(EventKind::Error)
-            .await
-            .starts_with("Another session signed in")
+    assert_eq!(
+        player.reads(went_wrong).await,
+        WentWrong {
+            trouble: Trouble::Replaced,
+            again_in: None
+        }
     );
     player.farmer.take().unwrap().await.unwrap();
     assert!(player.steam.stops() >= 1);
@@ -559,8 +642,11 @@ async fn a_new_first_choice_takes_over_within_moments() {
     player.steam.add_game(2, 5.0, 5, Some(HOUR));
     player.starts_farming();
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 1 — 5 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 1".into(),
+            cards_left: 5
+        }
     );
 
     player.wants(Preferences {
@@ -569,12 +655,18 @@ async fn a_new_first_choice_takes_over_within_moments() {
     });
 
     assert_eq!(
-        player.reads(EventKind::Switched).await,
-        "Moving on from Game 1: something is ranked higher now"
+        player.reads(|e| matches!(e, MovedOn { .. })).await,
+        MovedOn {
+            game: "Game 1".into(),
+            outranked: true
+        }
     );
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 2 — 5 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 2".into(),
+            cards_left: 5
+        }
     );
 }
 
@@ -585,7 +677,7 @@ async fn nothing_to_farm_says_why() {
     player.starts_farming();
 
     let idle = player.sees(Status::Idle).await;
-    assert_eq!(idle.note, "every card has dropped");
+    assert_eq!(idle.nothing_to_farm, Some(NothingToFarm::AllDropped));
     assert!(idle.next_look.is_some(), "it says when it'll look again");
     assert!(player.steam.played().is_empty());
 }
@@ -597,6 +689,6 @@ async fn sale_event_badges_are_never_played() {
     player.starts_farming();
 
     let idle = player.sees(Status::Idle).await;
-    assert_eq!(idle.note, "Steam isn't dropping cards for the games left");
+    assert_eq!(idle.nothing_to_farm, Some(NothingToFarm::NotDropping));
     assert!(player.steam.played().is_empty());
 }

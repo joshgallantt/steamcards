@@ -8,7 +8,8 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-# Domain crates only, like terminal-ui.
+# Domain crates, and farming-words for what the farmer says, like
+# terminal-ui.
 
 [lints]
 workspace = true
@@ -16,6 +17,7 @@ workspace = true
 [dependencies]
 account.workspace = true
 farming.workspace = true
+farming-words.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

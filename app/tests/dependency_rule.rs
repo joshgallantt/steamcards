@@ -46,7 +46,9 @@ fn allowed(from: Layer) -> &'static [Layer] {
         Data => &[Domain, Library],
         Di => &[Domain, Data, Library],
         Library => &[Library],
-        Presentation => &[Domain],
+        // A presentation may share another's words, as both screens share
+        // farming-words; never a repository, Steam or the config file.
+        Presentation => &[Domain, Presentation],
         App => &[Domain, Di, Library, Presentation],
         // Tooling runs cargo and git; it uses none of steamcards.
         Tooling => &[],
@@ -104,7 +106,7 @@ fn every_dependency_points_inward() {
         .collect();
     assert_eq!(
         layers.len(),
-        29,
+        30,
         "a crate was added or removed; place it in a layer above"
     );
 

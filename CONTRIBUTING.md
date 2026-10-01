@@ -190,7 +190,8 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── config-file/   The one JSON file: the saved sign-in and preferences.
 │   ├── debug-log/     The opt-in debug log.
 │   └── keep-awake/    Keeping the computer awake while games play.
-├── ui/            Presentation. Depends on domain crates only.
+├── ui/            Presentation. Depends on domain crates, and farming-words.
+│   ├── farming-words/ What the farmer says happened, in words, for both screens.
 │   ├── terminal-ui/   View models and the ratatui dashboard.
 │   └── headless/      --headless: events as plain text.
 ├── app/           The composition root: the one crate that names concrete types.
@@ -369,13 +370,15 @@ None of these are conventions to remember. Break one and the build, a test or CI
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
-| Presentation | `terminal-ui`, `headless` | Domain |
+| Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
 | Tooling | `xtask` | nothing in the workspace |
 
 The compiler enforces it, because a crate can only `use` what its `Cargo.toml` lists. [`app/tests/dependency_rule.rs`](app/tests/dependency_rule.rs) reads every manifest and fails on any arrow the table doesn't allow, on a domain crate using one it shouldn't (farming never uses price), and on production code enabling a `test-support` feature.
 
 **Rust features this codebase doesn't use:** extension traits, global `static` state, `Deref` as inheritance, reading the environment outside [`app/src/settings.rs`](app/src/settings.rs), glob imports, printing outside presentation, and `unsafe`. [`app/tests/language_rules.rs`](app/tests/language_rules.rs), the workspace lints and [`clippy.toml`](clippy.toml) check them. [docs/architecture.md](docs/architecture.md#rust-features-this-codebase-doesnt-use) says why each one is out, and what to do instead.
+
+**The domain says what happened; the screens choose the words.** The farmer reports `FarmingEvent::Dropped { game, count, left }`, never *"A card dropped for Hades — 1 to go"*: [`ui/farming-words`](ui/farming-words) words it for both the dashboard and `--headless`, and the dashboard's `price_words` words the market's `PriceEvent`s. A domain test checks the event; the sentence is tested where it's written.
 
 **Use cases are traits.** Each is named for what the user wants and has one method, `call`, like `pub trait SignOutUseCase: Send + Sync { fn call(&self) -> Result<(), SignOutError>; }`. All of a component's are declared in `use_cases/<name>_use_cases.rs`, and each is done by a `Default…UseCase` in a file of its own under `use_cases/impl/` (`impl` is a keyword, so the module is `r#impl`). Callers hold `Arc<dyn SignOutUseCase>`. Its test doubles are types too, a file each: `StubGetAccountUseCase` in `test_support/stubs/`, `SpySignOutUseCase` in `test_support/spies/`.
 
@@ -403,7 +406,7 @@ The compiler enforces it, because a crate can only `use` what its `Cargo.toml` l
 | --- | --- | --- |
 | Unit | `#[cfg(test)]` next to the code, and `tests/` in each domain crate | the system's terms, and the use cases' rules over the component's fakes |
 | Acceptance | `tests/` in each DI crate, with the driver in `tests/support/` | the user's terms, through the component as the app wires it: `player.signs_in()`, `player.comes_back()` |
-| Paused time | `tests/` in the farming and price domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(EventKind::Dropped)` |
+| Paused time | `tests/` in the farming and price domain crates | the user's terms, over hours of play: `player.starts_farming()`, `player.reads(dropped)` |
 | End to end | `tests/` in the data and library crates | real code against local stand-ins for Steam: a CM server over a real WebSocket (`steam-api`'s `test_support`), and [wiremock](https://crates.io/crates/wiremock) for steamcommunity.com |
 | Screens | [`ui/terminal-ui/src/app/preview.rs`](ui/terminal-ui/src/app/preview.rs) | what's on screen, and that nothing is cut off at any size |
 | Architecture | [`app/tests/`](app/tests/) | the rules above |
@@ -437,14 +440,17 @@ async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
     player.starts_farming();
 
     assert_eq!(
-        player.reads(EventKind::Playing).await,
-        "Farming Game 620 — 3 cards to drop"
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 620".into(),
+            cards_left: 3
+        }
     );
     ...
 }
 ```
 
-This runs the real farmer through hours of drops in milliseconds, on paused time, with no network.
+This runs the real farmer through hours of drops in milliseconds, on paused time, with no network. It checks what the farmer says happened; how the log puts it is `farming-words`' to test.
 
 - **Doubles** come from the domain crates' `test-support` features, which production builds never enable: a file each, named for their kind (`FakeGameRepository`, `StubGetAccountUseCase`, `SpySignOutUseCase`), and builders like `game()`.
 - **No test touches the real Steam.** End-to-end tests point `steam-api` at a local stand-in through its `Endpoints`.

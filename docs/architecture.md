@@ -16,7 +16,7 @@ is: the same layers, the same rules, and the same checks that keep them.
 | Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
 | DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
-| Presentation | `terminal-ui`, `headless` | Domain |
+| Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
 
 Two things enforce this table:
@@ -184,7 +184,7 @@ state.
 | | `SetGameTierUseCase` | Moves a game between priority (at a rank), indifferent and skip. |
 | | `SetOnlyPriorityUseCase` | Farm priority games only. |
 | | `SetAppearOnlineUseCase` | Show as online while farming, or appear offline. |
-| farming | `FarmCardsUseCase` | Farms until cancelled, reporting `FarmingEvent`s. Each run carries on the session. |
+| farming | `FarmCardsUseCase` | Farms until cancelled, telling what happened (`FarmingEvent`) and where farming stands (`FarmingStatus`), in order, as `FarmingUpdate`s. Each run carries on the session. |
 | session | `EndSessionUseCase` | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | price | `GetPricesUseCase` | The price book now. |
 | | `SetGamesToPriceUseCase` | Which games to price, most urgent first. |
@@ -292,6 +292,13 @@ builds its repository itself.
 
 ## Presentation layer
 
+The domain says what happened; the presentation chooses the words. The
+farmer reports a `FarmingEvent` (a card dropped for Heavy Rain, two to go)
+and a `FarmingStatus` whose reasons are data too (`NothingToFarm`,
+`Trouble`); the price watcher a `PriceEvent`. No domain crate writes a
+sentence for the user, so a change of words never touches a rule, and the
+domain's tests check what happened, not how it's put.
+
 ### `terminal-ui`
 
 A feature to a module, each holding its view models and, beside them, the
@@ -310,7 +317,9 @@ Neither holds a business rule, and the crate depends on domain crates only.
   the market's own valuations. `MarketViewModel` runs the market's use
   cases: pricing in the background, the games wanted first, and a game's
   set again when one of its cards drops. The log and a game's details are
-  its pop-ups.
+  its pop-ups. `farming_log` and `price_words` give each line of the log
+  its words and what it's about (`EventKind`), to highlight the ones that
+  matter.
 - **`theme.rs`, `widgets.rs` and `popup.rs`** are what every feature draws
   with, each named for what it is. Each piece of text comes in a few lengths
   and the longest that fits is drawn; `widgets::fitted` fails a test on any
@@ -319,10 +328,18 @@ Neither holds a business rule, and the crate depends on domain crates only.
   the domain crates' test doubles, and sweeps every state across sizes from
   60×16 to 240×70. The design is in [docs/design/ui.md](design/ui.md).
 
+### `farming-words`
+
+Farming in words, for both presentations: `event` gives a `FarmingEvent`'s
+line in the log, and `status` and `note` the status line. The dashboard and
+the headless log share it, so they say the same thing the same way. It's
+the one crate a presentation may share with another.
+
 ### `headless`
 
-The same `FarmCardsUseCase`, printed as lines. Its own crate, so `--headless` can't
-grow a dependency the dashboard doesn't have.
+The same `FarmCardsUseCase`, printed as lines in `farming-words`' words.
+Its own crate, so `--headless` can't grow a dependency the dashboard doesn't
+have.
 
 ---
 
@@ -353,7 +370,7 @@ opens; `Settings` works out where.
 | --- | --- | --- | --- |
 | Unit | `#[cfg(test)]` beside the code, and each domain crate's `tests/` | the system's terms (`farm_order`, `unpack_multi`), and the use cases' rules | the component's fakes, stubs and spies |
 | Acceptance | `component/*/di/tests/`, with the driver in `tests/support/` | the user's terms: `Player::signs_in`, `has_prices_looked_up` | only Steam: the stand-in Steam server and wiremock for steamcommunity.com, with real files in a folder of their own |
-| Paused time | `component/farming/domain/tests/`, `component/price/domain/tests/pricing_cards.rs` | the user's terms, over hours of play: `Player::starts_farming`, `reads(EventKind::Dropped)` | fakes of Steam and the market, on tokio's paused time |
+| Paused time | `component/farming/domain/tests/`, `component/price/domain/tests/pricing_cards.rs` | the user's terms, over hours of play: `Player::starts_farming`, `reads(dropped)`, and what the farmer says happened | fakes of Steam and the market, on tokio's paused time |
 | Data | `component/*/data/tests/`, `library/steam-api/tests/` | Steam's terms | a stand-in Steam server over a real WebSocket, and wiremock for steamcommunity.com |
 | Screens | `ui/terminal-ui/src/app/preview.rs` | what's on screen | `test-support` doubles |
 | Architecture | `app/tests/dependency_rule.rs`, `app/tests/language_rules.rs` | the table at the top of this page, and the section below | none |
@@ -400,6 +417,7 @@ graph TD
     subgraph UI["ui/"]
         TUI[terminal-ui]
         HL[headless]
+        FW[farming-words]
     end
 
     subgraph DI["component/*/di"]
@@ -440,8 +458,9 @@ graph TD
     end
 
     APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
-    TUI --> ACC & GAME & CARD & SES & PREF & FARM & PRICE & MON
-    HL --> ACC & FARM
+    TUI --> FW & ACC & GAME & CARD & SES & PREF & FARM & PRICE & MON
+    HL --> FW & ACC & FARM
+    FW --> FARM & GAME
     ADI --> AD
     GDI --> GD
     CDI --> CD

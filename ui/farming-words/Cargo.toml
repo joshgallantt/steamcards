@@ -1,0 +1,20 @@
+[package]
+name = "farming-words"
+description = "Farming in words, for every presentation alike: what each event says in the log, and what the status line says."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# Domain crates only: the farmer says what happened; this says it in words,
+# so the dashboard and the headless log say it the same way.
+
+[lints]
+workspace = true
+
+[dependencies]
+farming.workspace = true
+game.workspace = true
+chrono.workspace = true

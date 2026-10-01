@@ -21,7 +21,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use farming::{EventKind, FarmingEvent, FarmingStatus, farm_order};
+use farming::{FarmingStatus, FarmingUpdate, farm_order};
 use futures::StreamExt;
 use game::{AppId, SteamLibrary};
 use preferences::{Preferences, PreferencesError, Tier};
@@ -32,8 +32,9 @@ use session::Session;
 use crate::{
     account::AccountViewModel,
     dashboard::{
-        FarmingViewModel, LibraryViewModel, LogEntry, MarketViewModel, Queue, QueueEntry, Section,
-        card_page, dashboard_view, log_view::LogView, open_in_browser, price_words, prices_wanted,
+        EventKind, FarmingViewModel, LibraryViewModel, LogEntry, MarketViewModel, Queue,
+        QueueEntry, Section, card_page, dashboard_view, farming_log, log_view::LogView,
+        open_in_browser, price_words, prices_wanted,
     },
     games::{GameRow, GamesViewModel, games_view::GamesView},
     onboarding::{
@@ -240,8 +241,8 @@ impl App {
         while let Some(u) = self.login.try_recv() {
             self.on_login_update(u);
         }
-        while let Some(ev) = self.farming.try_recv() {
-            self.on_farming_event(ev);
+        while let Some(u) = self.farming.try_recv() {
+            self.on_farming_update(u);
         }
         while let Some(ev) = self.market.try_recv() {
             self.on_market_event(ev);
@@ -265,12 +266,15 @@ impl App {
         self.sync_selection();
     }
 
-    fn on_farming_event(&mut self, ev: FarmingEvent) {
-        if let Some(s) = ev.status {
-            self.status = Some(s);
-        }
-        if !ev.message.is_empty() {
-            self.push_log(ev.kind, ev.message);
+    /// Where farming stands, for the dashboard; what happened, in the log,
+    /// in farming-words' words.
+    fn on_farming_update(&mut self, u: FarmingUpdate) {
+        match u {
+            FarmingUpdate::Status(s) => self.status = Some(*s),
+            FarmingUpdate::Event(e) => {
+                let (kind, text) = farming_log::line(&e);
+                self.push_log(kind, text);
+            }
         }
     }
 

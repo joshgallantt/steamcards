@@ -17,7 +17,7 @@ use account::{
 };
 use card::{AssetId, Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
-use farming::{EventKind, FarmingStatus, Status, test_support::SpyFarmCardsUseCase};
+use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
@@ -36,7 +36,7 @@ use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessio
 use super::{App, Clock, LogView, Overlay, SignInView};
 use crate::{
     account::AccountViewModel,
-    dashboard::{FarmingViewModel, LibraryViewModel, MarketViewModel},
+    dashboard::{EventKind, FarmingViewModel, LibraryViewModel, MarketViewModel},
     games::GamesViewModel,
     onboarding::{OnboardingViewModel, Step},
     sign_in::SignInViewModel,
@@ -296,7 +296,6 @@ fn farming_portal() -> FarmingStatus {
         mode: Some(Mode::Cards),
         blocked_by: None,
         next_look: Some(now() + chrono::Duration::minutes(12)),
-        note: String::new(),
         session: session(),
         ..Default::default()
     }
@@ -456,7 +455,6 @@ async fn previews() {
         mode: None,
         blocked_by: Some(AppId(730)),
         next_look: None,
-        note: "playing on another device — farming waits until it stops".into(),
         ..farming_portal()
     });
     let text = show("playing elsewhere 120×30", render(&mut blocked, 120, 30));
@@ -469,7 +467,6 @@ async fn previews() {
         playing: Vec::new(),
         mode: None,
         next_look: Some(now() + chrono::Duration::seconds(60)),
-        note: "carrying on in a minute…".into(),
         ..farming_portal()
     });
     let text = show(
@@ -486,7 +483,7 @@ async fn previews() {
         playing: Vec::new(),
         mode: None,
         next_look: Some(now() + chrono::Duration::hours(8)),
-        note: "every card has dropped".into(),
+        nothing_to_farm: Some(NothingToFarm::AllDropped),
         ..farming_portal()
     });
     let text = show("nothing to farm 120×30", render(&mut idle, 120, 30));

@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use chrono::{DateTime, FixedOffset};
-use farming::EventKind;
+
+use crate::dashboard::EventKind;
 
 /// One line of the log: what was said, and when.
 pub(crate) struct LogEntry {

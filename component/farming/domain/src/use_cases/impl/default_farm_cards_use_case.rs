@@ -7,7 +7,7 @@ use session::SessionKeeper;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{FarmCardsUseCase, FarmingEvent, FarmingRepository, farmer::Farmer};
+use crate::{FarmCardsUseCase, FarmingRepository, FarmingUpdate, farmer::Farmer};
 
 pub struct DefaultFarmCardsUseCase {
     farmer: Arc<Farmer>,
@@ -38,8 +38,12 @@ impl DefaultFarmCardsUseCase {
 }
 
 impl FarmCardsUseCase for DefaultFarmCardsUseCase {
-    fn call(&self, token: CancellationToken, events: mpsc::Sender<FarmingEvent>) -> JoinHandle<()> {
+    fn call(
+        &self,
+        token: CancellationToken,
+        updates: mpsc::Sender<FarmingUpdate>,
+    ) -> JoinHandle<()> {
         let farmer = Arc::clone(&self.farmer);
-        tokio::spawn(async move { farmer.farm(token, events).await })
+        tokio::spawn(async move { farmer.farm(token, updates).await })
     }
 }

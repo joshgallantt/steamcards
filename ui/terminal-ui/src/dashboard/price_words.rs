@@ -4,9 +4,10 @@
 
 use std::time::Duration;
 
-use farming::EventKind;
 use game::SteamLibrary;
 use price::PriceEvent;
+
+use crate::dashboard::EventKind;
 
 /// The log's line for what the pricing reported, and what it's about.
 pub(crate) fn line(event: &PriceEvent, library: &SteamLibrary) -> (EventKind, String) {

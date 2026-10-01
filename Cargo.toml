@@ -33,6 +33,7 @@ members = [
     "library/debug-log",
     "library/keep-awake",
     "library/steam-api",
+    "ui/farming-words",
     "ui/terminal-ui",
     "ui/headless",
     "xtask",
@@ -126,6 +127,7 @@ keep-awake = { path = "library/keep-awake" }
 steam-api = { path = "library/steam-api" }
 
 # Presentation
+farming-words = { path = "ui/farming-words" }
 terminal-ui = { path = "ui/terminal-ui" }
 headless = { path = "ui/headless" }
 

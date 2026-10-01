@@ -856,6 +856,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "farming-words"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "farming",
+ "game",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1154,6 +1163,7 @@ dependencies = [
  "account",
  "chrono",
  "farming",
+ "farming-words",
  "tokio",
  "tokio-util",
 ]
@@ -3137,6 +3147,7 @@ dependencies = [
  "chrono",
  "crossterm",
  "farming",
+ "farming-words",
  "futures",
  "game",
  "money",

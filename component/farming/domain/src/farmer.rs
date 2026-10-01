@@ -18,7 +18,7 @@ use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    EventKind, FarmingEvent, FarmingRepository, FarmingStatus, Signal, Status,
+    FarmingEvent, FarmingRepository, FarmingStatus, FarmingUpdate, Signal, Status, Trouble,
     ranking::{Plan, farm_order, plan, why_nothing},
     reporter::Reporter,
     rules::{
@@ -146,8 +146,12 @@ impl Farmer {
     /// One run of the farmer: carries on the session the last run left,
     /// farms until the token is cancelled, reporting on the channel, then
     /// stops playing.
-    pub(crate) async fn farm(&self, token: CancellationToken, events: mpsc::Sender<FarmingEvent>) {
-        let r = Reporter::new(events);
+    pub(crate) async fn farm(
+        &self,
+        token: CancellationToken,
+        updates: mpsc::Sender<FarmingUpdate>,
+    ) {
+        let r = Reporter::new(updates);
         let run = Run {
             kept: self.sessions.current(Utc::now()),
         };
@@ -161,7 +165,7 @@ impl Farmer {
             if token.is_cancelled() {
                 return;
             }
-            r.stage(Status::Checking, "reading your badges…");
+            r.stage(Status::Checking);
             let read = tokio::select! {
                 _ = token.cancelled() => return,
                 read = self.read_library.call() => read,
@@ -185,15 +189,12 @@ impl Farmer {
                         Err(e) => e.to_string(),
                         Ok(Ok(_)) => String::new(),
                     };
-                    r.event(
-                        EventKind::Error,
-                        format!("Couldn't read your badges: {why}"),
-                    );
-                    r.stage_until(
-                        Status::Error,
-                        "couldn't read your badges — trying again in 5 minutes",
-                        when(Instant::now() + RETRY_READ),
-                    );
+                    let trouble = Trouble::BadgesUnread(why);
+                    r.event(FarmingEvent::WentWrong {
+                        trouble: trouble.clone(),
+                        again_in: Some(RETRY_READ),
+                    });
+                    r.stage_trouble(trouble, Some(when(Instant::now() + RETRY_READ)));
                     if !pause(RETRY_READ, token).await {
                         return;
                     }
@@ -220,7 +221,7 @@ impl Farmer {
                 Outcome::Stopped => return,
                 Outcome::Replaced => return replaced(r),
                 Outcome::Lost(why) => {
-                    if !lost(&why, r, token).await {
+                    if !lost(Trouble::Lost(why), r, token).await {
                         return;
                     }
                 }
@@ -264,14 +265,10 @@ impl Farmer {
         token: &CancellationToken,
     ) -> Outcome {
         let app_id = game.app_id;
-        r.event(
-            EventKind::Playing,
-            format!(
-                "Farming {} — {} to drop",
-                game.name,
-                cards(game.drops.remaining)
-            ),
-        );
+        r.event(FarmingEvent::FarmingCards {
+            game: game.name.clone(),
+            cards_left: game.drops.remaining,
+        });
         let mut last_drop = Instant::now();
         // A set not read yet is looked at first, as ASF looks at a game as it
         // starts on it: then a card that drops can be told by the set's
@@ -298,7 +295,7 @@ impl Farmer {
                     Signal::Unblocked => continue,
                     Signal::NewItems(items) => {
                         run.kept().keep_announced(items);
-                        r.event(EventKind::Progress, "Steam says new items arrived".into());
+                        r.event(FarmingEvent::NewItems);
                         if !pause(AFTER_NEW_ITEMS, token).await {
                             return Outcome::Stopped;
                         }
@@ -314,7 +311,10 @@ impl Farmer {
                         plan(&kept.library, &latest, &kept.set_aside)
                     };
                     if planned != Plan::Cards(app_id) {
-                        r.event(EventKind::Switched, switching(&game.name, app_id, &latest));
+                        r.event(FarmingEvent::MovedOn {
+                            game: game.name.clone(),
+                            outranked: latest.wants(app_id),
+                        });
                         return Outcome::Again;
                     }
                     if latest.appear_online != prefs.appear_online
@@ -342,46 +342,37 @@ impl Farmer {
                             self.dropped(vec![found], &prefs, run, r, token).await;
                         }
                         None => {
-                            r.event(
-                                EventKind::Progress,
-                                format!(
-                                    "{}: {} still to drop",
-                                    game.name,
-                                    cards(game.drops.remaining)
-                                ),
-                            );
+                            r.event(FarmingEvent::Looked {
+                                game: game.name.clone(),
+                                cards_left: game.drops.remaining,
+                            });
                             if run.kept().has_items_for(app_id) {
                                 self.described_late(app_id, run, r, token).await;
                             }
                         }
                     }
                     if !game.has_drops_left() {
-                        r.info(format!("Every card has dropped for {}.", game.name));
+                        r.event(FarmingEvent::AllDropped { game: game.name });
                         return Outcome::Again;
                     }
                 }
-                Ok(Err(e)) => r.event(
-                    EventKind::Warning,
-                    format!("Couldn't look at {}'s cards: {e}", game.name),
-                ),
-                Err(e) => r.event(
-                    EventKind::Warning,
-                    format!("Couldn't look at {}'s cards: {e}", game.name),
-                ),
+                Ok(Err(e)) => r.event(FarmingEvent::CardsUnread {
+                    game: game.name.clone(),
+                    why: e.to_string(),
+                }),
+                Err(e) => r.event(FarmingEvent::CardsUnread {
+                    game: game.name.clone(),
+                    why: e.to_string(),
+                }),
             }
 
             if last_drop.elapsed() >= GIVE_UP_AFTER {
                 let times = run.kept().set_aside(app_id, Utc::now());
-                let what_now = if times >= GIVE_UP_TIMES {
-                    "leaving it be: Steam may not drop its cards (a family-shared or \
-                     free-to-play game, or one marked private)"
-                } else {
-                    "trying the others first"
-                };
-                r.event(
-                    EventKind::Warning,
-                    format!("No card from {} in 10 hours — {what_now}", game.name),
-                );
+                r.event(FarmingEvent::Stalled {
+                    game: game.name,
+                    after: GIVE_UP_AFTER,
+                    for_good: times >= GIVE_UP_TIMES,
+                });
                 return Outcome::Again;
             }
             next_look = Instant::now() + look_every(&game);
@@ -420,19 +411,10 @@ impl Farmer {
         r: &Reporter,
         token: &CancellationToken,
     ) -> Outcome {
-        let lead = run.kept().name(app_ids[0]);
-        r.event(
-            EventKind::Playing,
-            if app_ids.len() == 1 {
-                format!("Playing {lead} until it has 3 hours, when its cards can start dropping")
-            } else {
-                format!(
-                    "Playing {} games together until {lead} has 3 hours, when its cards can \
-                     start dropping",
-                    app_ids.len()
-                )
-            },
-        );
+        r.event(FarmingEvent::BuildingHours {
+            lead: run.kept().name(app_ids[0]),
+            games: app_ids.len(),
+        });
         let mut counted_to = Instant::now();
         loop {
             let ready_at = Instant::now() + until_ready(&run.kept().library, app_ids);
@@ -451,7 +433,7 @@ impl Farmer {
                     // A card may have dropped for one of them: read again.
                     Signal::NewItems(items) => {
                         run.kept().keep_announced(items);
-                        r.event(EventKind::Progress, "Steam says new items arrived".into());
+                        r.event(FarmingEvent::NewItems);
                         if !pause(AFTER_NEW_ITEMS, token).await {
                             return Outcome::Stopped;
                         }
@@ -468,7 +450,7 @@ impl Farmer {
                     .map(|g| g.name.clone())
             };
             if let Some(ready) = ready {
-                r.info(format!("{ready} has 3 hours now: its cards can drop."));
+                r.event(FarmingEvent::HoursBuilt { game: ready });
                 return Outcome::Again;
             }
             let latest = self.get_preferences.call();
@@ -478,10 +460,7 @@ impl Farmer {
                     plan(&kept.library, &latest, &kept.set_aside)
                 };
                 if planned != Plan::Hours(app_ids.to_vec()) {
-                    r.event(
-                        EventKind::Switched,
-                        "Your choices changed: farming in the new order".into(),
-                    );
+                    r.event(FarmingEvent::ChoicesChanged);
                     return Outcome::Again;
                 }
                 if latest.appear_online != prefs.appear_online
@@ -510,7 +489,7 @@ impl Farmer {
                 next_look: Some(when(until)),
                 session: kept.session.clone(),
                 set_aside: kept.set_aside.clone(),
-                note: why_nothing(&kept.library, &prefs).into(),
+                nothing_to_farm: Some(why_nothing(&kept.library, &prefs)),
                 ..Default::default()
             }
         };
@@ -541,14 +520,14 @@ impl Farmer {
         r: &Reporter,
         token: &CancellationToken,
     ) -> Waited {
-        r.info(waiting_for(why, &run.kept()));
+        r.event(waiting_for(why, &run.kept()));
         let mut grace = match why {
             Elsewhere::Playing(_) => AFTER_BLOCK,
             Elsewhere::TookOver => AFTER_TAKEN_OVER,
         };
         'listening: loop {
             if let Err(e) = self.play.listen().await {
-                if !lost(&e.to_string(), r, token).await {
+                if !lost(Trouble::Lost(e.to_string()), r, token).await {
                     return Waited::Stopped;
                 }
                 continue;
@@ -560,7 +539,7 @@ impl Farmer {
                         _ = token.cancelled() => return Waited::Stopped,
                         signal = self.play.next_signal() => signal,
                     };
-                    let why = match signal {
+                    let trouble = match signal {
                         Signal::Unblocked => break,
                         Signal::Blocked(by) => {
                             self.waiting(by, None, run, r);
@@ -571,20 +550,17 @@ impl Farmer {
                             continue;
                         }
                         Signal::Replaced => return Waited::Replaced,
-                        Signal::Lost(why) => why,
-                        Signal::TakenOver => "Steam signed this session off".to_owned(),
+                        Signal::Lost(why) => Trouble::Lost(why),
+                        Signal::TakenOver => Trouble::SignedOff,
                     };
                     // Signing on again says whether it still plays.
-                    if !lost(&why, r, token).await {
+                    if !lost(trouble, r, token).await {
                         return Waited::Stopped;
                     }
                     continue 'listening;
                 }
                 grace = AFTER_BLOCK;
-                r.info(format!(
-                    "Playing elsewhere stopped: farming carries on in {}.",
-                    minutes(grace)
-                ));
+                r.event(FarmingEvent::ElsewhereStopped { carry_on_in: grace });
             }
             // A while more, in case it plays again.
             let until = Instant::now() + grace;
@@ -623,13 +599,6 @@ impl Farmer {
                 next_look: until.map(when),
                 session: kept.session.clone(),
                 set_aside: kept.set_aside.clone(),
-                note: match until {
-                    Some(until) => format!(
-                        "carrying on in {}…",
-                        minutes(until.saturating_duration_since(Instant::now()))
-                    ),
-                    None => "playing on another device — farming waits until it stops".into(),
-                },
                 ..Default::default()
             }
         };
@@ -652,25 +621,25 @@ impl Farmer {
         if found.is_empty() {
             return;
         }
-        let (lines, ask) = {
+        let (events, ask) = {
             let mut kept = run.kept();
             kept.first_forecast(
                 |library, aside| farm_order(library, prefs, aside),
                 Utc::now(),
             );
-            let lines: Vec<String> = found
+            let events: Vec<FarmingEvent> = found
                 .iter()
                 .filter_map(|f| {
                     kept.library
                         .game(f.app_id)
-                        .map(|g| dropped_message(g, f.count()))
+                        .map(|g| dropped_for(g, f.count()))
                 })
                 .collect();
             let games: Vec<AppId> = found.iter().map(|f| f.app_id).collect();
-            (lines, kept.take_announced(&games))
+            (events, kept.take_announced(&games))
         };
-        for line in lines {
-            r.event(EventKind::Dropped, line);
+        for event in events {
+            r.event(event);
         }
         run.tell(r);
 
@@ -683,10 +652,7 @@ impl Farmer {
                 Ok(Ok(fresh)) => {
                     let looked = run.kept().update(fresh, Utc::now());
                     if let Some(more) = &looked.found {
-                        r.event(
-                            EventKind::Dropped,
-                            dropped_message(&looked.game, more.count()),
-                        );
+                        r.event(dropped_for(&looked.game, more.count()));
                     }
                     f.join(looked);
                     continue;
@@ -695,10 +661,7 @@ impl Farmer {
                 Err(e) => e.to_string(),
             };
             let game = run.kept().name(f.app_id);
-            r.event(
-                EventKind::Warning,
-                format!("Couldn't look at {game}'s cards: {why}"),
-            );
+            r.event(FarmingEvent::CardsUnread { game, why });
         }
 
         let asked = ask.iter().map(|i| i.asset_id).collect();
@@ -727,14 +690,11 @@ impl Farmer {
                 Err(e) => e.to_string(),
             };
             let game = run.kept().name(app_id);
-            r.event(
-                EventKind::Warning,
-                format!("Couldn't look at {game}'s foils: {why}"),
-            );
+            r.event(FarmingEvent::FoilsUnread { game, why });
         }
-        let lines = told_lines(&told, &run.kept());
-        for (kind, line) in lines {
-            r.event(kind, line);
+        let events = which_cards(&told, &run.kept());
+        for event in events {
+            r.event(event);
         }
         run.tell(r);
     }
@@ -775,15 +735,9 @@ impl Farmer {
         if token.is_cancelled() {
             return None;
         }
-        r.event(
-            EventKind::Progress,
-            if asset_ids.len() == 1 {
-                "Asking Steam which card it was"
-            } else {
-                "Asking Steam which cards they were"
-            }
-            .into(),
-        );
+        r.event(FarmingEvent::Asking {
+            items: asset_ids.len(),
+        });
         let answer = tokio::select! {
             _ = token.cancelled() => return None,
             answer = self.identify_cards.call(asset_ids) => answer,
@@ -793,10 +747,7 @@ impl Farmer {
             Ok(Err(e)) => e.to_string(),
             Err(e) => e.to_string(),
         };
-        r.event(
-            EventKind::Warning,
-            format!("Couldn't ask Steam which card it was: {why}"),
-        );
+        r.event(FarmingEvent::AskFailed { why });
         None
     }
 
@@ -843,48 +794,44 @@ impl Farmer {
                 look_every: alone.map(look_every),
                 session: kept.session.clone(),
                 set_aside: kept.set_aside.clone(),
-                note: String::new(),
+                nothing_to_farm: None,
+                trouble: None,
             }
         };
         r.status(status);
     }
 }
 
-/// Says the connection to Steam went, and why, and waits a minute before
-/// trying again; false when stopped meanwhile.
-async fn lost(why: &str, r: &Reporter, token: &CancellationToken) -> bool {
-    r.event(
-        EventKind::Warning,
-        format!("{why} — trying again in a minute"),
-    );
-    r.stage_until(Status::Error, why, when(Instant::now() + RETRY_CONNECT));
+/// Says Steam was lost, and why, and waits a minute before trying again;
+/// false when stopped meanwhile.
+async fn lost(trouble: Trouble, r: &Reporter, token: &CancellationToken) -> bool {
+    r.event(FarmingEvent::WentWrong {
+        trouble: trouble.clone(),
+        again_in: Some(RETRY_CONNECT),
+    });
+    r.stage_trouble(trouble, Some(when(Instant::now() + RETRY_CONNECT)));
     pause(RETRY_CONNECT, token).await
 }
 
-/// What to say as farming starts waiting for another device.
-fn waiting_for(why: Elsewhere, kept: &KeptSession) -> String {
+/// What happened, as farming starts waiting for another device.
+fn waiting_for(why: Elsewhere, kept: &KeptSession) -> FarmingEvent {
     match why {
-        Elsewhere::TookOver => {
-            "Another device took over playing: farming waits until it stops.".into()
-        }
-        Elsewhere::Playing(by) => match by.and_then(|id| kept.library.game(id)) {
-            Some(game) => format!(
-                "{} is being played on another device: farming waits until it stops.",
-                game.name
-            ),
-            None => "Another device is playing: farming waits until it stops.".into(),
+        Elsewhere::TookOver => FarmingEvent::TakenOver,
+        Elsewhere::Playing(by) => FarmingEvent::PlayedElsewhere {
+            game: by
+                .and_then(|id| kept.library.game(id))
+                .map(|g| g.name.clone()),
         },
     }
 }
 
+/// Stops for good: another session signed on in this one's place.
 fn replaced(r: &Reporter) {
-    r.event(
-        EventKind::Error,
-        "Another session signed in with this account's login in steamcards' place, so \
-         farming stopped rather than knock it off. Press p to start again."
-            .into(),
-    );
-    r.stage(Status::Error, "stopped: another session took over");
+    r.event(FarmingEvent::WentWrong {
+        trouble: Trouble::Replaced,
+        again_in: None,
+    });
+    r.stage_trouble(Trouble::Replaced, None);
 }
 
 /// Sleeps for `d`; false when stopped meanwhile.
@@ -919,109 +866,36 @@ fn when(at: Instant) -> chrono::DateTime<Utc> {
     Utc::now() + chrono::Duration::from_std(left).unwrap_or_default()
 }
 
-/// "a minute", "5 minutes": how long, to the minute.
-fn minutes(d: Duration) -> String {
-    match d.as_secs().div_ceil(60) {
-        0 | 1 => "a minute".into(),
-        n => format!("{n} minutes"),
+/// Cards that dropped for `game`, `count` at once: its drops count them.
+fn dropped_for(game: &Game, count: usize) -> FarmingEvent {
+    FarmingEvent::Dropped {
+        game: game.name.clone(),
+        count,
+        left: game.drops.remaining,
     }
 }
 
-/// "1 card", "3 cards".
-fn cards(n: u32) -> String {
-    if n == 1 {
-        "1 card".into()
-    } else {
-        format!("{n} cards")
-    }
-}
-
-/// "A card dropped for Portal 2 — 2 to go", or that it was the last.
-fn dropped_message(game: &Game, dropped: usize) -> String {
-    let what = if dropped == 1 {
-        "A card".to_owned()
-    } else {
-        format!("{dropped} cards")
-    };
-    match game.drops.remaining {
-        0 => format!("{what} dropped for {} — that's all of them", game.name),
-        left => format!("{what} dropped for {} — {left} to go", game.name),
-    }
-}
-
-/// What to say of drops just told: which card each was, and which copy
-/// ("Madison dropped for Heavy Rain (a 2nd copy)"), or that it can't be
+/// Which card each drop just told was, and which copy, or that it can't be
 /// told. A card only the card page could name says so first.
-fn told_lines(told: &[usize], kept: &KeptSession) -> Vec<(EventKind, String)> {
-    let mut lines = Vec::new();
+fn which_cards(told: &[usize], kept: &KeptSession) -> Vec<FarmingEvent> {
+    let mut events = Vec::new();
     let mut by_page = Vec::new();
     for drop in told.iter().filter_map(|&i| kept.session.drops.get(i)) {
         let game = kept.name(drop.app_id);
         let Some(card) = drop.card.name() else {
-            lines.push((
-                EventKind::Warning,
-                format!("Couldn't tell which card dropped for {game}"),
-            ));
+            events.push(FarmingEvent::Untold { game });
             continue;
         };
         if matches!(drop.card, DropCard::NameOnly { .. }) && !by_page.contains(&drop.app_id) {
             by_page.push(drop.app_id);
-            lines.push((
-                EventKind::Progress,
-                format!("Steam didn't say which card dropped for {game}: going by its card page"),
-            ));
+            events.push(FarmingEvent::ByCardPage { game: game.clone() });
         }
-        let foil = if drop.card.is_foil() { " (foil)" } else { "" };
-        let copy = match drop.copy {
-            Some(1) => String::new(),
-            Some(copy) => format!(" (a {} copy)", ordinal(copy)),
-            None => " (which copy isn't known)".into(),
-        };
-        lines.push((
-            EventKind::Identified,
-            format!("{card}{foil} dropped for {game}{copy}"),
-        ));
+        events.push(FarmingEvent::Identified {
+            game,
+            card: card.to_owned(),
+            foil: drop.card.is_foil(),
+            copy: drop.copy,
+        });
     }
-    lines
-}
-
-/// "2nd", "3rd", "11th", "21st".
-fn ordinal(n: u32) -> String {
-    let suffix = match (n % 10, n % 100) {
-        (_, 11..=13) => "th",
-        (1, _) => "st",
-        (2, _) => "nd",
-        (3, _) => "rd",
-        _ => "th",
-    };
-    format!("{n}{suffix}")
-}
-
-/// Why farming moved on from `name` after the user's choices changed.
-fn switching(name: &str, app_id: AppId, prefs: &Preferences) -> String {
-    if prefs.wants(app_id) {
-        format!("Moving on from {name}: something is ranked higher now")
-    } else {
-        format!("Moving on from {name}: it isn't to be farmed now")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn copies_are_counted_as_people_say_them() {
-        let said: Vec<String> = [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111]
-            .into_iter()
-            .map(ordinal)
-            .collect();
-        assert_eq!(
-            said,
-            [
-                "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd",
-                "101st", "111th"
-            ]
-        );
-    }
+    events
 }

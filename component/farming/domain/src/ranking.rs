@@ -5,7 +5,10 @@ use game::{AppId, Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
 use preferences::Preferences;
 use session::SetAside;
 
-use crate::rules::{GIVE_UP_TIMES, SALE_EVENTS};
+use crate::{
+    NothingToFarm,
+    rules::{GIVE_UP_TIMES, SALE_EVENTS},
+};
 
 /// What to play next.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,19 +93,19 @@ pub(crate) fn plan(library: &SteamLibrary, prefs: &Preferences, set_aside: &[Set
 }
 
 /// Why nothing is being farmed, in the user's words.
-pub(crate) fn why_nothing(library: &SteamLibrary, prefs: &Preferences) -> &'static str {
+pub(crate) fn why_nothing(library: &SteamLibrary, prefs: &Preferences) -> NothingToFarm {
     if library.is_empty() {
-        "no games with trading cards on this account"
+        NothingToFarm::NoGames
     } else if library.drops_left() == 0 {
-        "every card has dropped"
+        NothingToFarm::AllDropped
     } else if library.with_drops_left().all(|g| !prefs.wants(g.app_id)) {
         if prefs.only_priority {
-            "\"only priority\" is on, and your priority games are done"
+            NothingToFarm::PrioritiesDone
         } else {
-            "every game with cards left is skipped"
+            NothingToFarm::AllSkipped
         }
     } else {
-        "Steam isn't dropping cards for the games left"
+        NothingToFarm::NotDropping
     }
 }
 
@@ -240,18 +243,15 @@ mod tests {
         assert_eq!(plan(&SteamLibrary::default(), &prefs, &[]), Plan::Nothing);
         assert_eq!(
             why_nothing(&SteamLibrary::default(), &prefs),
-            "no games with trading cards on this account"
+            NothingToFarm::NoGames
         );
         let done = library(vec![game(1, 5.0, 0)]);
-        assert_eq!(why_nothing(&done, &prefs), "every card has dropped");
+        assert_eq!(why_nothing(&done, &prefs), NothingToFarm::AllDropped);
         let skipped = Preferences {
             skipped_games: ids(&[1]),
             ..Default::default()
         };
         let left = library(vec![game(1, 5.0, 2)]);
-        assert_eq!(
-            why_nothing(&left, &skipped),
-            "every game with cards left is skipped"
-        );
+        assert_eq!(why_nothing(&left, &skipped), NothingToFarm::AllSkipped);
     }
 }

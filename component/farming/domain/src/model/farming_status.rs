@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use game::{AppId, SteamLibrary};
 use session::{Mode, Session, SetAside};
 
-use crate::Status;
+use crate::{NothingToFarm, Status, Trouble};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FarmingStatus {
@@ -36,5 +36,8 @@ pub struct FarmingStatus {
     pub session: Session,
     /// The games put behind the others after a long while without a drop.
     pub set_aside: Vec<SetAside>,
-    pub note: String,
+    /// While idle: why there's nothing to farm.
+    pub nothing_to_farm: Option<NothingToFarm>,
+    /// After an error: what went wrong.
+    pub trouble: Option<Trouble>,
 }

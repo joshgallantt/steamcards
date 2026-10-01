@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use account::GetAccountUseCase;
-use farming::{FarmCardsUseCase, FarmingEvent};
+use farming::{FarmCardsUseCase, FarmingUpdate};
 use game::AppId;
 use preferences::{GetPreferencesUseCase, Preferences, PreferencesError, SetGameTierUseCase, Tier};
 use session::EndSessionUseCase;
@@ -15,8 +15,8 @@ pub struct FarmingViewModel {
     account: Arc<dyn GetAccountUseCase>,
     get_preferences: Arc<dyn GetPreferencesUseCase>,
     set_tier: Arc<dyn SetGameTierUseCase>,
-    tx: mpsc::Sender<FarmingEvent>,
-    events: mpsc::Receiver<FarmingEvent>,
+    tx: mpsc::Sender<FarmingUpdate>,
+    updates: mpsc::Receiver<FarmingUpdate>,
     running: Option<(CancellationToken, JoinHandle<()>)>,
     /// The account this session of farming is for: who was signed in when
     /// it began. `None` until farming first starts, and once it ends.
@@ -31,7 +31,7 @@ impl FarmingViewModel {
         get_preferences: Arc<dyn GetPreferencesUseCase>,
         set_tier: Arc<dyn SetGameTierUseCase>,
     ) -> Self {
-        let (tx, events) = mpsc::channel(1024);
+        let (tx, updates) = mpsc::channel(1024);
         Self {
             farm,
             end_session,
@@ -39,7 +39,7 @@ impl FarmingViewModel {
             get_preferences,
             set_tier,
             tx,
-            events,
+            updates,
             running: None,
             session_for: None,
         }
@@ -101,8 +101,8 @@ impl FarmingViewModel {
         }
     }
 
-    pub fn try_recv(&mut self) -> Option<FarmingEvent> {
-        self.events.try_recv().ok()
+    pub fn try_recv(&mut self) -> Option<FarmingUpdate> {
+        self.updates.try_recv().ok()
     }
 
     pub fn preferences(&self) -> Preferences {

@@ -1,6 +1,6 @@
-/// What a log line is about, so the UI can highlight the ones that matter.
+/// What a log line is about, so the log can highlight the ones that matter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum EventKind {
+pub(crate) enum EventKind {
     #[default]
     Info,
     /// Routine looks at the cards.

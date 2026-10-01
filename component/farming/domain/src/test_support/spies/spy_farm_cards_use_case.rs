@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{FarmCardsUseCase, FarmingEvent};
+use crate::{FarmCardsUseCase, FarmingUpdate};
 
 /// Never farms: each run stops at once. Counts the runs started, for screens
 /// that need a farmer to exist.
@@ -19,7 +19,7 @@ impl SpyFarmCardsUseCase {
 }
 
 impl FarmCardsUseCase for SpyFarmCardsUseCase {
-    fn call(&self, _: CancellationToken, _: mpsc::Sender<FarmingEvent>) -> JoinHandle<()> {
+    fn call(&self, _: CancellationToken, _: mpsc::Sender<FarmingUpdate>) -> JoinHandle<()> {
         self.runs.fetch_add(1, Ordering::Relaxed);
         tokio::spawn(async {})
     }

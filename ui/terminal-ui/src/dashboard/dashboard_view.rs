@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use farming::{EventKind, Status};
+use farming::Status;
 use preferences::Tier;
 use ratatui::{
     Frame,
@@ -30,7 +30,7 @@ use crate::dashboard::{
 };
 use crate::{
     app::{Ctx, MIN_HEIGHT, MIN_WIDTH},
-    dashboard::LogEntry,
+    dashboard::{EventKind, LogEntry},
     theme::{self, BAD, BUSY, GOOD},
     widgets::{
         DIVIDER, elapsed, fit, fit_right, fitted, flash_line, gauge, hints, keycap, panel, rule,
@@ -389,11 +389,9 @@ fn state_lines(cx: &Ctx<'_>, room: usize) -> Vec<Vec<Span<'static>>> {
             next("looks again"),
         ),
         Status::Error => {
-            let note = if s.note.is_empty() {
-                "something went wrong".to_owned()
-            } else {
-                s.note.clone()
-            };
+            let note = farming_words::note(s, cx.now)
+                .filter(|note| !note.is_empty())
+                .unwrap_or_else(|| "something went wrong".to_owned());
             let head = say(theme::FAILED, theme::fg(BAD), &note);
             let mut lines = with(vec![head], next("trying again"));
             lines.push(vec![say(
