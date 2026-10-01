@@ -158,9 +158,9 @@ In this order, on the day:
 - [ ] The first release, v0.1.0: `cargo xtask release 0.1.0`. It fills in
       the Homebrew formula's checksums, and the release workflow installs
       and uninstalls it with the one-liners to check them.
-- [ ] Take the "hasn't had its first release yet" paragraph out of the
-      README's Install section, and check the README's screenshots show on
-      GitHub.
+- [x] Take the "hasn't had its first release yet" paragraph out of the
+      README's Install section.
+- [ ] Check the README's screenshots show on GitHub.
 
 ## 7. The redesign `[~]`
 

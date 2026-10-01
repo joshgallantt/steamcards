@@ -26,8 +26,6 @@
 
 Paste the line for your computer into a terminal, and press Enter.
 
-steamcards hasn't had its first release yet. Until it has, these lines have nothing to install: build it from source instead, as [CONTRIBUTING.md](CONTRIBUTING.md#building-from-source) says.
-
 ### macOS
 
 ```sh
