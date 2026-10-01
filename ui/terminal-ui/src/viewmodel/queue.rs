@@ -108,14 +108,6 @@ impl Queue {
     pub fn is_empty(&self) -> bool {
         self.sections.is_empty()
     }
-
-    /// Card drops still to come across the games that are farmed.
-    pub fn drops_to_go(&self) -> u32 {
-        self.entries()
-            .filter(|e| e.wanted && e.section() != Section::Skipped)
-            .map(|e| e.game.drops.remaining)
-            .sum()
-    }
 }
 
 #[cfg(test)]
@@ -160,7 +152,6 @@ mod tests {
         assert_eq!(ids(&q, Section::Done), [5]);
         assert_eq!(q.get(AppId(2)).unwrap().playing, Some(Mode::Hours));
         assert_eq!(q.get(AppId(1)).unwrap().playing, None);
-        assert_eq!(q.drops_to_go(), 3 + 2 + 1);
     }
 
     #[test]
@@ -180,6 +171,6 @@ mod tests {
         };
         let q = Queue::build(&library, &[AppId(1)], &[], None, &prefs);
         assert!(!q.get(AppId(2)).unwrap().wanted);
-        assert_eq!(q.drops_to_go(), 3);
+        assert!(q.get(AppId(1)).unwrap().wanted);
     }
 }

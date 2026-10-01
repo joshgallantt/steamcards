@@ -50,7 +50,7 @@ The domain starts from its entities:
 
 - **`SteamLibrary`**, in `game`: the games on the account that have
   trading cards. It holds each game once, and knows the drops received and
-  still to come, and how many games have had every drop.
+  still to come.
 - **`Game`**: one of those games, by its **`AppId`**: its hours, its `CardDrops`
   (received and still to come) and its badge level. Its drops are what
   farming works through.
@@ -145,7 +145,7 @@ worth: pure, so every figure can be checked by hand) and `rules.rs`. `money` is 
 `Currency`, with Valve's table of currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
-(`SteamLibrary::drops_left`, `CardSet::is_full`, `Preferences::wants`,
+(`SteamLibrary::drops_left`, `CardSet::missing`, `Preferences::wants`,
 `Wallet::seller_gets`). They carry no serde derives: how a thing is stored is
 the data layer's concern.
 

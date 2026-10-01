@@ -1,7 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
 
 use account::GetAccountUseCase;
 use farming::{FarmCardsUseCase, FarmingEvent};
@@ -21,7 +18,6 @@ pub struct Farming {
     tx: mpsc::Sender<FarmingEvent>,
     events: mpsc::Receiver<FarmingEvent>,
     running: Option<(CancellationToken, JoinHandle<()>)>,
-    started: Option<Instant>,
     /// The account this session of farming is for: who was signed in when
     /// it began. `None` until farming first starts, and once it ends.
     session_for: Option<String>,
@@ -45,7 +41,6 @@ impl Farming {
             tx,
             events,
             running: None,
-            started: None,
             session_for: None,
         }
     }
@@ -62,7 +57,6 @@ impl Farming {
         let token = CancellationToken::new();
         let task = self.farm.call(token.clone(), self.tx.clone());
         self.running = Some((token, task));
-        self.started = Some(Instant::now());
     }
 
     /// Stops farming; the farmer stops playing and signs off by itself.
@@ -70,7 +64,6 @@ impl Farming {
         if let Some((token, _)) = self.running.take() {
             token.cancel();
         }
-        self.started = None;
     }
 
     /// Stops farming and waits, briefly, for the farmer to sign off, so
@@ -80,7 +73,6 @@ impl Farming {
             token.cancel();
             let _ = tokio::time::timeout(Duration::from_secs(3), task).await;
         }
-        self.started = None;
     }
 
     pub fn is_running(&self) -> bool {
@@ -107,11 +99,6 @@ impl Farming {
         if !same {
             self.end_session();
         }
-    }
-
-    /// How long farming has been running since it was last started.
-    pub fn running_for(&self) -> Option<Duration> {
-        self.started.map(|t| t.elapsed())
     }
 
     pub fn try_recv(&mut self) -> Option<FarmingEvent> {
@@ -141,13 +128,14 @@ mod tests {
 
     use super::*;
 
-    fn farming(signed_in: bool) -> Farming {
+    /// Farming, signed in or not, counting the farmer's runs.
+    fn farming(signed_in: bool, farm: &Arc<SpyFarmCardsUseCase>) -> Farming {
         let account = signed_in.then(|| Account {
             name: "cardfarmer".into(),
             expired: false,
         });
         Farming::new(
-            Arc::new(SpyFarmCardsUseCase::default()),
+            farm.clone(),
             Arc::new(SpyEndSessionUseCase::default()),
             Arc::new(StubGetAccountUseCase::new(account)),
             Arc::new(StubGetPreferencesUseCase::default()),
@@ -159,9 +147,11 @@ mod tests {
 
     #[tokio::test]
     async fn farming_takes_a_sign_in() {
-        let mut f = farming(false);
+        let farm = Arc::new(SpyFarmCardsUseCase::default());
+        let mut f = farming(false, &farm);
         f.start();
         assert!(!f.is_running());
+        assert_eq!(farm.runs(), 0, "the farmer never started");
     }
 
     /// Farming, signed in as whoever `who` says, counting the sessions
@@ -207,14 +197,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pausing_stops_the_clock() {
-        let mut f = farming(true);
+    async fn pausing_stops_the_farmer_and_starting_runs_it_again() {
+        let farm = Arc::new(SpyFarmCardsUseCase::default());
+        let mut f = farming(true, &farm);
         f.start();
-        assert!(f.is_running() && f.running_for().is_some());
+        f.start();
+        assert!(f.is_running());
+        assert_eq!(farm.runs(), 1, "once, however often it's asked");
         f.pause();
-        assert!(!f.is_running() && f.running_for().is_none());
+        assert!(!f.is_running());
         f.start();
         f.stop().await;
         assert!(!f.is_running());
+        assert_eq!(farm.runs(), 2);
     }
 }

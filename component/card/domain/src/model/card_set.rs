@@ -42,12 +42,6 @@ impl CardSet {
         self.cards.iter().filter(|c| c.owned > 0).count()
     }
 
-    /// Whether the account has every card of the set, so a badge can be
-    /// crafted. `false` while the set isn't known.
-    pub fn is_full(&self) -> bool {
-        !self.cards.is_empty() && self.cards.iter().all(|c| c.owned > 0)
-    }
-
     /// Copies held beyond one of each card of the set: a badge level takes
     /// one of each.
     pub fn spares(&self) -> u32 {
@@ -86,7 +80,6 @@ mod tests {
     #[test]
     fn a_set_knows_what_the_account_has_of_it() {
         let mut portal = CardSet::default();
-        assert!(!portal.is_full(), "the set isn't known yet");
         assert_eq!(portal.spares(), 0, "the set isn't known yet");
         assert_eq!(portal.missing().count(), 0, "nor what it's short of");
 
@@ -96,9 +89,8 @@ mod tests {
             card("Wheatley", 1),
         ]);
         assert_eq!(portal.collected(), 2);
-        assert!(!portal.is_full());
         assert!(portal.count_in("P-Body"));
-        assert!(portal.is_full());
+        assert_eq!(portal.collected(), 3, "every card of the set");
         assert!(!portal.count_in("GLaDOS"), "no such card in the set");
     }
 
@@ -123,6 +115,5 @@ mod tests {
         assert_eq!(heavy_rain.owned("Anarchist"), 0, "not in the set");
         let missing: Vec<&str> = heavy_rain.missing().map(|c| c.name.as_str()).collect();
         assert_eq!(missing, ["Ethan", "Carter", "Norman"]);
-        assert!(!heavy_rain.is_full());
     }
 }

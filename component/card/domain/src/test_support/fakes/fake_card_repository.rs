@@ -38,12 +38,6 @@ impl FakeCardRepository {
         }
     }
 
-    /// Holding `assets` as well.
-    pub fn holding(self, assets: Vec<CardAsset>) -> Self {
-        *self.assets.lock().unwrap() = assets;
-        self
-    }
-
     fn game(&self, app_id: AppId) -> anyhow::Result<Game> {
         if self.down.load(Ordering::Relaxed) {
             anyhow::bail!("steamcommunity.com didn't answer");

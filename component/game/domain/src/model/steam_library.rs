@@ -48,15 +48,6 @@ impl SteamLibrary {
         self.games.iter().map(|g| g.drops.total()).sum()
     }
 
-    /// How many games have had every drop they give. A game that gives none
-    /// isn't counted: there was nothing to farm.
-    pub fn games_done(&self) -> usize {
-        self.games
-            .iter()
-            .filter(|g| g.drops.total() > 0 && !g.has_drops_left())
-            .count()
-    }
-
     /// Puts a newer look at a game in place of the older one, or adds it.
     pub fn update(&mut self, game: Game) {
         match self.games.iter_mut().find(|g| g.app_id == game.app_id) {
@@ -133,11 +124,5 @@ mod tests {
         assert_eq!(library.drops_received(), 4);
         assert_eq!(library.drops_total(), 9);
         assert_eq!(library.drops_left(), 5);
-        assert_eq!(
-            library.games_done(),
-            1,
-            "Half-Life 2 has had every drop; 730 never had one to give"
-        );
-        assert_eq!(SteamLibrary::default().games_done(), 0);
     }
 }

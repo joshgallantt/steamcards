@@ -10,12 +10,6 @@ pub struct StubGetPreferencesUseCase {
 }
 
 impl StubGetPreferencesUseCase {
-    pub fn new(preferences: Preferences) -> Self {
-        Self {
-            preferences: Mutex::new(preferences),
-        }
-    }
-
     pub fn set(&self, preferences: Preferences) {
         *self.preferences.lock().unwrap() = preferences;
     }
