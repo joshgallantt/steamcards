@@ -194,8 +194,9 @@ jobs:
       - run: cargo xtask test
 
   # Whether the install scripts changed. Their tests run on Macs, the costly
-  # machines, so they run only when the scripts (or this workflow) change. GitHub can skip a whole workflow by the files a change
-  # touches, but not a single job, so this job works it out.
+  # machines, so they run only when the scripts (or this workflow) change.
+  # GitHub can skip a whole workflow by the files a change touches, but not a
+  # single job, so this job works it out.
   changes:
     name: What changed
     runs-on: ubuntu-latest
