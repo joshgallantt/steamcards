@@ -19,6 +19,11 @@ done, and move it into a numbered section if it grows.
       later.
 - [x] macOS and Linux first. Windows can come later: its installer, its CI
       job, and a check that everything still builds there.
+- [~] Windows, as streamdrops has it (2026-10-01): `install.ps1` and
+      `uninstall.ps1` with their tests (run here on macOS, but for the
+      scenarios that need Windows), CI's tests on Windows and PSScriptAnalyzer
+      on the scripts, the Windows release zip, and the README and
+      CONTRIBUTING.md's Windows instructions. Done once CI passes on Windows.
 - [x] Sign in with a QR code only: the Steam app, already signed in on your
       phone, approves steamcards. No password is ever typed in. "Sign in
       with Steam" in a browser only tells a site who you are, so it can't

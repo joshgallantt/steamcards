@@ -11,17 +11,27 @@ pub(super) fn release_notes(version: &Version, repository: &str, attested: bool)
     let name = repository.trim_start_matches("https://github.com/");
     let raw = format!("https://raw.githubusercontent.com/{name}/main");
     // A pre-release is installed only when asked for by version.
-    let sh = if version.is_pre_release() {
-        format!("curl -fsSL {raw}/install/install.sh | STEAMCARDS_VERSION={version} sh")
+    let (sh, ps) = if version.is_pre_release() {
+        (
+            format!("curl -fsSL {raw}/install/install.sh | STEAMCARDS_VERSION={version} sh"),
+            format!("$env:STEAMCARDS_VERSION = '{version}'; irm {raw}/install/install.ps1 | iex"),
+        )
     } else {
-        format!("curl -fsSL {raw}/install/install.sh | sh")
+        (
+            format!("curl -fsSL {raw}/install/install.sh | sh"),
+            format!("irm {raw}/install/install.ps1 | iex"),
+        )
     };
 
-    let mut out = format!("## Install or update\n\nmacOS and Linux:\n\n```sh\n{sh}\n```\n\n");
+    let mut out = format!(
+        "## Install or update\n\n\
+         macOS and Linux:\n\n```sh\n{sh}\n```\n\n\
+         Windows, in PowerShell:\n\n```powershell\n{ps}\n```\n\n"
+    );
     if version.is_pre_release() {
         out.push_str(
-            "This is a pre-release: the command above installs it by name, and neither it \
-             nor Homebrew offers it otherwise.\n",
+            "This is a pre-release: the commands above install it by name, and neither they \
+             nor Homebrew offer it otherwise.\n",
         );
     } else {
         out.push_str(&format!(
@@ -31,7 +41,7 @@ pub(super) fn release_notes(version: &Version, repository: &str, attested: bool)
     }
     out.push_str(
         "\n## Check a download\n\n`SHA256SUMS` has every archive's checksum, which the \
-         install command checks for you.",
+         install commands check for you.",
     );
     if attested {
         out.push_str(&format!(
@@ -62,6 +72,11 @@ mod tests {
         assert!(notes.contains(
             "curl -fsSL https://raw.githubusercontent.com/o/r/main/install/install.sh | sh"
         ));
+        assert!(
+            notes.contains(
+                "irm https://raw.githubusercontent.com/o/r/main/install/install.ps1 | iex"
+            )
+        );
         assert!(notes.contains("brew upgrade steamcards"));
         assert!(notes.contains("gh attestation verify"));
 
@@ -74,6 +89,7 @@ mod tests {
         let notes = release_notes(&v("0.2.0-rc.1"), REPO, false);
 
         assert!(notes.contains("| STEAMCARDS_VERSION=0.2.0-rc.1 sh"));
+        assert!(notes.contains("$env:STEAMCARDS_VERSION = '0.2.0-rc.1'; irm"));
         assert!(!notes.contains("brew upgrade"));
     }
 }

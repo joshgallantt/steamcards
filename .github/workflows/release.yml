@@ -120,6 +120,8 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             cross: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     permissions:
@@ -158,6 +160,8 @@ jobs:
               sudo apt-get update -qq
               sudo apt-get install -y -qq qemu-user-static > /dev/null
               actual=$(qemu-aarch64-static "$binary" --version) ;;
+            *-windows-*)
+              actual=$("$binary.exe" --version) ;;
             *)
               actual=$("$binary" --version) ;;
           esac
@@ -166,13 +170,22 @@ jobs:
             exit 1
           fi
           echo "$TARGET: $actual"
-      - name: Package
+      - name: Package (macOS and Linux)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           name="steamcards-$TARGET"
           mkdir -p dist "$name"
           cp "target/$TARGET/release/steamcards" LICENSE README.md "$name/"
           tar -czf "dist/$name.tar.gz" -C "$name" steamcards LICENSE README.md
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "steamcards-$env:TARGET"
+          New-Item -ItemType Directory -Path dist, $name | Out-Null
+          Copy-Item "target/$env:TARGET/release/steamcards.exe", LICENSE, README.md -Destination $name
+          Compress-Archive -Path "$name/*" -DestinationPath "dist/$name.zip"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: steamcards-${{ matrix.target }}
@@ -241,12 +254,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     permissions: {}
     steps:
       - name: The install script
+        if: runner.os != 'Windows'
         run: |
           version=${GITHUB_REF_NAME#v}
           # A pre-release is installed only when asked for by name.
@@ -258,9 +272,61 @@ jobs:
             exit 1
           fi
       - name: The uninstall script
+        if: runner.os != 'Windows'
         run: |
           curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install/uninstall.sh" | STEAMCARDS_DELETE_DATA=1 sh
           if [ -e "$HOME/.local/bin/steamcards" ] || command -v steamcards; then
             echo "::error::The uninstall script left steamcards installed."
             exit 1
           fi
+      # The same scripts under both PowerShells: 7, and the 5.1 that Windows
+      # ships with, which is what many people paste into.
+      - name: The install script (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($version.Contains('-')) { $env:STEAMCARDS_VERSION = $version }
+          irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/install.ps1" | iex
+          $installed = & "$env:LOCALAPPDATA\Programs\steamcards\steamcards.exe" --version
+          if ($installed -ne "steamcards $version") {
+            throw "The install script installed '$installed', not steamcards $version."
+          }
+      - name: The uninstall script (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:STEAMCARDS_DELETE_DATA = '1'
+          irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/uninstall.ps1" | iex
+          $folder = "$env:LOCALAPPDATA\Programs\steamcards"
+          if (Test-Path -LiteralPath $folder) {
+            throw "The uninstall script left $folder behind."
+          }
+          if (@([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -contains $folder) {
+            throw "The uninstall script left $folder on the user PATH."
+          }
+      # Installed again from nothing, after the uninstall.
+      - name: The install script (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($version.Contains('-')) { $env:STEAMCARDS_VERSION = $version }
+          irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/install.ps1" | iex
+          $installed = & "$env:LOCALAPPDATA\Programs\steamcards\steamcards.exe" --version
+          if ($installed -ne "steamcards $version") {
+            throw "The install script installed '$installed', not steamcards $version."
+          }
+      - name: The uninstall script (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:STEAMCARDS_DELETE_DATA = '1'
+          irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/uninstall.ps1" | iex
+          $folder = "$env:LOCALAPPDATA\Programs\steamcards"
+          if (Test-Path -LiteralPath $folder) {
+            throw "The uninstall script left $folder behind."
+          }
+          if (@([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') -contains $folder) {
+            throw "The uninstall script left $folder on the user PATH."
+          }
