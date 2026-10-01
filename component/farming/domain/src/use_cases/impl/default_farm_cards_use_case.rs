@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use crate::{FarmCardsUseCase, FarmingDependencies, FarmingUpdate, farmer::Farmer};
+use super::farmer::Farmer;
+use crate::{FarmCardsUseCase, FarmingDependencies, FarmingUpdate};
 
 pub struct DefaultFarmCardsUseCase {
     farmer: Arc<Farmer>,

@@ -23,15 +23,17 @@ use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
+use super::reporter::Reporter;
 use crate::{
     FarmingDependencies, FarmingEvent, FarmingStatus, FarmingUpdate, Status, Trouble,
-    model::Signal,
-    ranking::{Plan, farm_order, plan, why_nothing},
-    reporter::Reporter,
-    rules::{
-        AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES, IDLE_LOOK,
-        LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ, TICK,
+    model::{
+        Plan, Signal,
+        rules::{
+            AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES,
+            IDLE_LOOK, LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ, TICK,
+        },
     },
+    service::{farm_order, plan, why_nothing},
 };
 
 /// Farms through the game, card and preferences components' use cases, never

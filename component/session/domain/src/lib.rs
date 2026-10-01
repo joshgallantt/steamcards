@@ -9,7 +9,6 @@
 //! kept in memory alone, so there's no data layer.
 
 mod model;
-mod rules;
 mod use_cases;
 
 #[cfg(feature = "test-support")]

@@ -120,13 +120,14 @@ component/<name>/domain/src/
 ├── model/
 │   ├── mod.rs                   the models, re-exported
 │   ├── <entity>.rs              one entity, value or error each: game.rs holds Game
+│   ├── rules.rs                 the numbers it runs on, each with where it comes from
 │   └── ...
 ├── repository/
 │   ├── mod.rs
 │   └── <name>_repository.rs     the contract the data layer is written to fit
 ├── service/                     domain services: rules no one entity holds
 │   ├── mod.rs
-│   └── <name>.rs                card's valuation.rs, what cards are worth
+│   └── <name>.rs                card's valuation.rs, farming's ranking.rs
 ├── use_cases/
 │   ├── mod.rs
 │   ├── <name>_use_cases.rs      every use case of the component, a trait each
@@ -147,20 +148,21 @@ chapter 5): `card`'s valuations work over prices, sets, the wallet and the
 library at once, so they're functions in `service/`, pure, so every figure
 can be checked by hand.
 
-`farming` keeps nothing, so it has no repository either. It adds
-`farmer.rs` (the farmer `DefaultFarmCardsUseCase` runs), `ranking.rs` (what
-to play, and how: pure), `rules.rs` (every number it runs on, with where it
-comes from) and `reporter.rs`.
-`session` keeps which card each drop was in `KeptSession`, the time to
-finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `game`
-has the rules both use, the 3 hours a game needs and the 32 Steam plays at
-once, in `rules.rs`. `card` keeps the market's numbers in
-`model/rules.rs` and the `Clock` in `model/clock.rs`; beside its use cases
-are `pricing.rs` (looking a set up and keeping it), which two of them share,
-and `price_watcher.rs` (the background pricing
-`DefaultKeepCardPricesUpToDateUseCase` runs). `money` is its models alone, a
-file each: `Currency`, with Valve's table of currencies as a `match`, and
-`Money`.
+The numbers a component runs on are its `model/rules.rs`, each with where
+it comes from: in `game`'s, the 3 hours a game needs and the 32 Steam plays
+at once, which farming and the forecast both use; in `session`'s, the
+forecast's priors; in `farming`'s, how often it looks and when it gives up;
+in `card`'s, the market's. What a use case runs for a while sits beside it
+in `use_cases/impl/`: the farmer `DefaultFarmCardsUseCase` runs, with the
+`reporter.rs` it tells the screens through, and the background pricing
+`DefaultKeepCardPricesUpToDateUseCase` runs, `price_watcher.rs`, with
+`pricing.rs` (looking a set up and keeping it), which two of card's use
+cases share. `farming` keeps nothing, so it has no repository either; what
+to play, and how, is its domain service, `service/ranking.rs`, pure.
+`session` keeps which card each drop was in `KeptSession`, and the time to
+finish in `Forecast` (pure). `card` keeps its `Clock` in `model/clock.rs`.
+`money` is its models alone, a file each: `Currency`, with Valve's table of
+currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
 (`SteamLibrary::drops_left`, `CardSet::missing`, `Preferences::wants`,
@@ -238,9 +240,9 @@ and `GetPreferencesUseCase`, handed in together as `FarmingDependencies`,
 never their repositories: so `farming` depends on `game`, `card` and
 `preferences` as domain components, and never learns where any of them
 comes from. It's a feature over them, with no data of its own. When a
-tier changes, the farmer sees it within moments,
-through the same use case the screens call. Steam's word on playing and on
-new items comes as two answers; the farmer waits for whichever comes first.
+tier changes, the farmer sees it within moments, through the same use case
+the screens call. Steam's word on playing and on new items comes as two
+answers; the farmer waits for whichever comes first.
 
 `DefaultFarmCardsUseCase` and `DefaultEndSessionUseCase` share a
 `SessionKeeper`, which the

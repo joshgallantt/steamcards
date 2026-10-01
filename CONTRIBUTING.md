@@ -355,7 +355,7 @@ if let Err(err) = self.farming.set_tier(e.game.app_id, tier) {
 
 Instead of confirming a change that didn't happen, it says *"That didn't stick — preferences couldn't be saved. Try again?"*
 
-The farmer never hears about the keypress. Every tick, it calls `GetPreferencesUseCase` to see what the user wants. [`component/farming/domain/src/farmer.rs`](component/farming/domain/src/farmer.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
+The farmer never hears about the keypress. Every tick, it calls `GetPreferencesUseCase` to see what the user wants. [`component/farming/domain/src/use_cases/impl/farmer.rs`](component/farming/domain/src/use_cases/impl/farmer.rs) notices the preferences changed, plans again, and switches to Hades if the new plan says so. Farming depends on the preferences **use case**, never on its storage.
 
 ### What that buys
 

@@ -9,21 +9,18 @@
 //! user wants first), never their storage, all handed in as
 //! [`FarmingDependencies`]. It keeps nothing of its own, so it has no
 //! repository, and no data layer. The numbers it runs on, and where each
-//! comes from, are in `rules.rs`.
+//! comes from, are in `model/rules.rs`.
 //!
 //! It says what happened ([`FarmingEvent`]) and where farming stands
 //! ([`FarmingStatus`]), never how to put it: the screens choose the words.
 
-mod farmer;
 mod model;
-mod ranking;
-mod reporter;
-mod rules;
+mod service;
 mod use_cases;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
 pub use model::{FarmingEvent, FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble};
-pub use ranking::farm_order;
+pub use service::farm_order;
 pub use use_cases::{DefaultFarmCardsUseCase, FarmCardsUseCase, FarmingDependencies};

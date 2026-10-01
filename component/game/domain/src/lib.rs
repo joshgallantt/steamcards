@@ -14,15 +14,16 @@
 
 mod model;
 mod repository;
-mod rules;
 mod use_cases;
 
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use model::{AppId, CardDrops, Game, GameError, Playing, PlayingSignal, SteamLibrary};
+pub use model::{
+    AppId, CardDrops, Game, GameError, HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE, Playing,
+    PlayingSignal, SteamLibrary,
+};
 pub use repository::{GameRepository, PlayingRepository};
-pub use rules::{HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE};
 pub use use_cases::{
     DefaultGetLibraryUseCase, DefaultObservePlayingUseCase, DefaultPlayGamesUseCase,
     DefaultStandByUseCase, DefaultStopPlayingUseCase, GetLibraryUseCase, ObservePlayingUseCase,

@@ -30,7 +30,7 @@ use game::{AppId, MOST_PLAYED_AT_ONCE, SteamLibrary};
 
 use crate::{
     Drop, Mode, Session, Stretch,
-    rules::{BAND_80, PRIOR_DROPS, PRIOR_HOURS},
+    model::rules::{BAND_80, PRIOR_DROPS, PRIOR_HOURS},
 };
 
 /// How long farming should take to finish, learnt from this session's drops

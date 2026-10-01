@@ -6,6 +6,7 @@ mod found;
 mod kept_session;
 mod looked;
 mod mode;
+pub(crate) mod rules;
 mod session;
 mod session_keeper;
 mod set_aside;
