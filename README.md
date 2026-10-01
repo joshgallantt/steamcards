@@ -6,7 +6,7 @@
 [![Windows](https://img.shields.io/badge/Windows-supported-2ea44f)](#windows)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![unsafe: forbidden](https://img.shields.io/badge/unsafe-forbidden-2ea44f)](CONTRIBUTING.md#the-rules-the-build-enforces)
-![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange?logo=rust)
+![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange?logo=rust)
 
 **Get your Steam trading cards without playing for them.** steamcards plays your games in the background, so their cards drop while you get on with your day, and shows you what they're worth. Nothing is installed or launched: Steam is simply told what's being played, the way the Steam client tells it.
 

@@ -9,15 +9,17 @@
 //! since the Steam client, a library, keeps it.
 //!
 //! A file can hold a sign-in, so on macOS and Linux only its owner can read
-//! it.
+//! it. One steamcards at a time uses a config file: see [`ConfigLock`].
 
 mod config_file;
+mod config_lock;
 mod credential_store;
 mod credentials;
 mod json_file;
 mod private_file;
 
 pub use config_file::ConfigFile;
+pub use config_lock::ConfigLock;
 pub use credential_store::CredentialStore;
 pub use credentials::Credentials;
 pub use json_file::JsonFile;

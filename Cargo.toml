@@ -44,9 +44,11 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/joshgallantt/steamcards"
-# Our own code needs 1.88 for let chains (`if x && let Some(y) = z`), as do
-# the `instability` and `darling` crates that ratatui builds with.
-rust-version = "1.88"
+# Our own code needs 1.89 for locking a file (`File::try_lock`, which keeps
+# a second steamcards off the same config file), and 1.88 for let chains
+# (`if x && let Some(y) = z`), as do the `instability` and `darling` crates
+# that ratatui builds with.
+rust-version = "1.89"
 # None of these crates goes to crates.io: steamcards is installed as a
 # binary, or built from this repository. Saying so also lets them depend on
 # each other by path alone, which cargo-deny would otherwise count as `*`.

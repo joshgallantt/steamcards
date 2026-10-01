@@ -18,7 +18,7 @@ Thanks for helping. This guide is the technical side of steamcards: building it 
 
 ## Building from source
 
-Any OS, with Rust 1.88 or later and a C compiler. First set up your OS:
+Any OS, with Rust 1.89 or later and a C compiler. First set up your OS:
 
 - **Windows:** install [Rust](https://www.rust-lang.org/tools/install), with `rustup-init.exe` or `winget install Rustlang.Rustup`. When rustup asks, let it install the **Visual Studio Build Tools** (the "Desktop development with C++" workload). If you skipped that, get them from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/visual-cpp-build-tools/). On Windows on ARM, also install LLVM (`winget install LLVM.LLVM`): the `ring` crate needs Clang to build there.
 - **macOS:** install the Xcode command-line tools, then [Rust](https://www.rust-lang.org/tools/install):
@@ -75,6 +75,8 @@ Your sign-in and choices are in one file, `config.json`, in a folder of steamcar
 | Windows | `%APPDATA%\steamcards` |
 
 That's [`dirs::config_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_dir.html), from Rust's `dirs` crate, plus `steamcards`. It's the only folder of yours the uninstall scripts delete: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
+
+One steamcards at a time uses a config file: two would sign on to Steam as the same session and knock each other off. While one runs, it holds `config.lock` beside the config file, and a second says so and quits. To run two, give the second a config file of its own with `STEAMCARDS_CONFIG`.
 
 ### Opening links on Linux
 

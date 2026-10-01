@@ -9,6 +9,8 @@
 //!
 //! Not unit tested: it is wiring, with no behaviour of its own.
 
+use config_file::ConfigLock;
+
 use crate::settings::Settings;
 
 mod data;
@@ -21,6 +23,8 @@ pub(crate) use presentation::PresentationAssembler;
 
 pub(crate) struct CompositionRoot {
     pub presentation: PresentationAssembler,
+    /// Held until steamcards exits: see `DataAssembler::lock`.
+    _lock: ConfigLock,
 }
 
 impl CompositionRoot {
@@ -28,6 +32,9 @@ impl CompositionRoot {
         let data = DataAssembler::new(settings)?;
         let domain = DomainAssembler::new(&data);
         let presentation = PresentationAssembler::new(domain);
-        Ok(Self { presentation })
+        Ok(Self {
+            presentation,
+            _lock: data.lock,
+        })
     }
 }
