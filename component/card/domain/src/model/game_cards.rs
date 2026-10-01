@@ -1,4 +1,4 @@
-use game::Game;
+use steam_library::Game;
 
 use crate::CardSet;
 

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use card::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
-use game::ReadLibraryUseCase;
 use preferences::GetPreferencesUseCase;
 use session::SessionKeeper;
+use steam_library::ReadLibraryUseCase;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 

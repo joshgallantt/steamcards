@@ -19,7 +19,7 @@ debug-log.workspace = true
 steam-api.workspace = true
 
 [dev-dependencies]
-game.workspace = true
+steam-library.workspace = true
 money.workspace = true
 serde_json.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }

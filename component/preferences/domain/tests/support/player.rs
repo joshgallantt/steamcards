@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use game::AppId;
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
     DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, Preferences, SetAppearOnlineUseCase,
     SetGameTierUseCase, SetOnlyPriorityUseCase, Tier, test_support::FakePreferencesRepository,
 };
+use steam_library::AppId;
 
 /// Someone arranging what gets farmed first.
 pub(crate) struct Player {

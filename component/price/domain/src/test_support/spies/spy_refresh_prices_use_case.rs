@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use game::AppId;
+use steam_library::AppId;
 use tokio::task::JoinHandle;
 
 use crate::{PriceError, RefreshPricesUseCase};

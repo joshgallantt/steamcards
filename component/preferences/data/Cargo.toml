@@ -12,7 +12,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-game.workspace = true
+steam-library.workspace = true
 preferences.workspace = true
 config-file.workspace = true
 anyhow.workspace = true

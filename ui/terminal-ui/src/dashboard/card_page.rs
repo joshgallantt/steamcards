@@ -1,4 +1,4 @@
-use game::AppId;
+use steam_library::AppId;
 
 /// Opens a page in the default browser: through AppKit on macOS, and through
 /// `$BROWSER` or the desktop's opener (`xdg-open` and the like) on Linux. A

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use game::AppId;
+use steam_library::AppId;
 
 /// A game whose last drop came this session: seen at `at`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

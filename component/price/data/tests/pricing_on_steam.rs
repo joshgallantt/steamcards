@@ -12,7 +12,6 @@ use std::{
 
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, DefaultKeepPricesUpToDateUseCase, DefaultSetGamesToPriceUseCase,
@@ -24,6 +23,7 @@ use steam_api::{
     EResult, SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
+use steam_library::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use wiremock::{

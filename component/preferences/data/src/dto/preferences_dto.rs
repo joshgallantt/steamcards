@@ -1,6 +1,6 @@
-use game::AppId;
 use preferences::Preferences;
 use serde::{Deserialize, Serialize};
+use steam_library::AppId;
 
 /// The preferences' fields in the config file, each at the top of it: games
 /// by app ID.

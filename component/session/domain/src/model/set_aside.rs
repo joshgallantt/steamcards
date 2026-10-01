@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use game::AppId;
+use steam_library::AppId;
 
 /// A game put behind the others after 10 hours without a drop: how often,
 /// and when last.

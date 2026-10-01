@@ -9,7 +9,6 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use farming::{FarmingRepository, Signal};
 use farming_data::{DefaultFarmingRepository, SteamFarmingClient};
-use game::AppId;
 use keep_awake::KeepAwake;
 use session::NewItem;
 use steam_api::{
@@ -17,6 +16,7 @@ use steam_api::{
     cm::UnseenItem,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token, unseen_card},
 };
+use steam_library::AppId;
 
 /// Farming as the app does it, with the computer's sleep left alone.
 fn repository(session: Arc<SteamClient>) -> DefaultFarmingRepository {

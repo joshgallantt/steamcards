@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use farming::{FarmingRepository, Signal};
-use game::AppId;
 use keep_awake::KeepAwake;
+use steam_library::AppId;
 
 use crate::FarmingClient;
 

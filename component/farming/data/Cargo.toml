@@ -13,7 +13,7 @@ workspace = true
 
 [dependencies]
 card.workspace = true
-game.workspace = true
+steam-library.workspace = true
 session.workspace = true
 farming.workspace = true
 keep-awake.workspace = true

@@ -3,10 +3,10 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use debug_log::DebugLog;
-use game::AppId;
 use price::{
     Lookup, Offers, Price, PriceBook, PriceRepository, PriceSettings, PricedCard, SetPrices, Wallet,
 };
+use steam_library::AppId;
 
 use crate::{MarketClient, PriceStore};
 

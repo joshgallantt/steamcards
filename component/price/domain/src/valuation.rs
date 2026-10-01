@@ -4,8 +4,8 @@
 //! have a minimum, so the two differ (research §1.4).
 
 use chrono::{DateTime, Utc};
-use game::{AppId, SteamLibrary};
 use money::Money;
+use steam_library::{AppId, SteamLibrary};
 
 use crate::{Basis, Estimate, Held, HeldCard, Price, PriceBook, QuoteSource, SetPrices, Wallet};
 
@@ -162,7 +162,7 @@ mod tests {
     use std::time::Duration;
 
     use chrono::TimeDelta;
-    use game::{AppId, CardDrops, Game};
+    use steam_library::{AppId, CardDrops, Game};
 
     use super::*;
     use money::Currency;

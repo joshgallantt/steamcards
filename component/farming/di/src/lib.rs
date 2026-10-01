@@ -9,11 +9,11 @@ use std::sync::Arc;
 use card::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
 use farming::{DefaultFarmCardsUseCase, FarmCardsUseCase};
 use farming_data::{DefaultFarmingRepository, FarmingClient, SteamFarmingClient};
-use game::ReadLibraryUseCase;
 use keep_awake::KeepAwake;
 use preferences::GetPreferencesUseCase;
 use session::SessionKeeper;
 use steam_api::SteamClient;
+use steam_library::ReadLibraryUseCase;
 
 pub struct FarmingComponent {
     pub farm_cards: Arc<dyn FarmCardsUseCase>,

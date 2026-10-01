@@ -18,7 +18,6 @@ use account::{
 use card::{AssetId, Card, CardAsset, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
-use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
     DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
@@ -32,6 +31,7 @@ use price::{
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
+use steam_library::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 
 use super::{App, Clock, LogView, Overlay, SignInView};
 use crate::{

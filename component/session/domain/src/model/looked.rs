@@ -1,5 +1,5 @@
 use card::CardSet;
-use game::Game;
+use steam_library::Game;
 
 use crate::Found;
 

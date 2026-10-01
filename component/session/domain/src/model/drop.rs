@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use game::AppId;
+use steam_library::AppId;
 
 use crate::DropCard;
 

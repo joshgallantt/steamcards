@@ -1,7 +1,7 @@
 //! Everything asked of the cards, a trait each. Each is done over the
 //! repository by a `Default…UseCase` in `impl/`.
 
-use game::AppId;
+use steam_library::AppId;
 use tokio::task::JoinHandle;
 
 use crate::{AssetId, CardAsset, CardError, CardSet, GameCards};

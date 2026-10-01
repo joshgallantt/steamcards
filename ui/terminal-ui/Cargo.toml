@@ -18,7 +18,7 @@ workspace = true
 account.workspace = true
 farming.workspace = true
 farming-words.workspace = true
-game.workspace = true
+steam-library.workspace = true
 card.workspace = true
 price.workspace = true
 money.workspace = true
@@ -37,7 +37,7 @@ webbrowser.workspace = true
 [dev-dependencies]
 account = { workspace = true, features = ["test-support"] }
 farming = { workspace = true, features = ["test-support"] }
-game = { workspace = true, features = ["test-support"] }
+steam-library = { workspace = true, features = ["test-support"] }
 card = { workspace = true, features = ["test-support"] }
 price = { workspace = true, features = ["test-support"] }
 preferences = { workspace = true, features = ["test-support"] }

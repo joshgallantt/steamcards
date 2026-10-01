@@ -16,11 +16,11 @@ workspace = true
 test-support = []
 
 [dependencies]
-game.workspace = true
+steam-library.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 card = { path = ".", features = ["test-support"] }
-game = { workspace = true, features = ["test-support"] }
+steam-library = { workspace = true, features = ["test-support"] }

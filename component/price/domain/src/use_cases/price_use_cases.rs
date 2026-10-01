@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use game::AppId;
+use steam_library::AppId;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 

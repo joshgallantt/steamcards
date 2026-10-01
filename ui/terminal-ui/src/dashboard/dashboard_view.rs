@@ -1186,7 +1186,7 @@ fn render_footer(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use game::{AppId, Game};
+    use steam_library::{AppId, Game};
 
     use super::*;
 
@@ -1234,7 +1234,7 @@ mod tests {
 
     #[test]
     fn a_game_reads_as_its_state() {
-        use game::test_support::game;
+        use steam_library::test_support::game;
         let entry = |remaining: u32, playing: Option<Mode>| QueueEntry {
             game: game(1, 5.0, 1, remaining),
             tier: Tier::Indifferent,
@@ -1253,7 +1253,7 @@ mod tests {
             app_id: AppId(1),
             name: "Done".into(),
             hours: 5.0,
-            drops: game::CardDrops {
+            drops: steam_library::CardDrops {
                 received: 3,
                 remaining: 0,
             },

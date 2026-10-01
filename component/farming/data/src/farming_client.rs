@@ -7,12 +7,12 @@ use async_trait::async_trait;
 use card::AssetId;
 use chrono::DateTime;
 use farming::Signal;
-use game::AppId;
 use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
     cm::{Announcement, Connection, Event, UnseenItem},
 };
+use steam_library::AppId;
 use tokio::sync::broadcast;
 
 /// Steam's side of farming: what's played, and what Steam says back.

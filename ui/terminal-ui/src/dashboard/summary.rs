@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use game::{AppId, Game, SteamLibrary};
 use money::Money;
 use price::{
     Basis, HeldCard, Price, PriceBook, Wallet, held_value, on_completion, value_left, value_of,
 };
 use session::{DropCard, Forecast, Session};
+use steam_library::{AppId, Game, SteamLibrary};
 
 /// Cards are valued at their market price: what buyers pay, the lowest
 /// listing on the Steam market.
@@ -263,13 +263,13 @@ pub fn prices_wanted(playing: &[AppId], session: &Session, order: &[AppId]) -> V
 mod tests {
     use card::{AssetId, CardAsset};
     use chrono::TimeZone;
-    use game::CardDrops;
     use money::Currency;
     use price::{
         PriceQuote, PricedCard, QuoteSource, SetPrices,
         test_support::{listing, pounds},
     };
     use session::{Drop, Mode, Stretch};
+    use steam_library::CardDrops;
 
     use super::*;
 

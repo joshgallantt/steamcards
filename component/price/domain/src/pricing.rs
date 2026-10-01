@@ -1,7 +1,7 @@
 //! Pricing a game's set: looking it up afresh, normal cards then foils, and
 //! keeping what's found.
 
-use game::AppId;
+use steam_library::AppId;
 
 use crate::{
     Clock, Lookup, MarketPause, PriceRepository, SetPrices,

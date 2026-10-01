@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
-| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
-| DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
+| Domain | `money`, `account`, `steam-library`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
+| Data | `account-data`, `steam-library-data`, `card-data`, `preferences-data`, `farming-data`, `price-data` | Domain, Library |
+| DI | `account-di`, `steam-library-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `price-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `keep-awake`, `steam-api` | Library |
 | Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -32,11 +32,11 @@ Two things enforce this table:
 
    | Component | May use |
    | --- | --- |
-   | `money`, `account`, `game` | nothing |
-   | `card`, `preferences` | `game` |
-   | `session` | `game`, `card` |
-   | `farming` | `game`, `card`, `session`, `preferences` |
-   | `price` | `game`, `card`, `money` |
+   | `money`, `account`, `steam-library` | nothing |
+   | `card`, `preferences` | `steam-library` |
+   | `session` | `steam-library`, `card` |
+   | `farming` | `steam-library`, `card`, `session`, `preferences` |
+   | `price` | `steam-library`, `card`, `money` |
 
    So farming and the prices never meet.
 
@@ -48,7 +48,7 @@ Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
 The domain starts from its entities:
 
-- **`SteamLibrary`**, in `game`: the games on the account that have
+- **`SteamLibrary`**, in `steam-library`: the games on the account that have
   trading cards. It holds each game once, and knows the drops received and
   still to come.
 - **`Game`**: one of those games, by its **`AppId`**: its hours, its `CardDrops`
@@ -98,7 +98,7 @@ The domain starts from its entities:
   or just a name and a border. **`Held`** is what cards held are worth, at
   least; **`Estimate`**, what cards still to drop are likely worth.
 
-Steam's IDs are types of their own, `AppId` in `game` and `AssetId` in
+Steam's IDs are types of their own, `AppId` in `steam-library` and `AssetId` in
 `card`, so a game's ID is never taken for an item's, or for a count. The
 data layer wraps Steam's numbers as they come in, and unwraps them as they
 go out.
@@ -136,7 +136,7 @@ memory by its keeper, and `money` is its models alone.
 `ranking.rs` (what to play, and how: pure), `rules.rs` (every number it
 runs on, with where it comes from) and `reporter.rs`.
 `session` keeps which card each drop was in `KeptSession`, the time to
-finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `game`
+finish in `Forecast` (pure), and the forecast's priors in `rules.rs`. `steam-library`
 has the rules both use, the 3 hours a game needs and the 32 Steam plays at
 once, in `rules.rs`. `price` adds `clock.rs`, `pricing.rs` (looking a set
 up and keeping it), `watcher.rs` (the background pricing
@@ -176,7 +176,7 @@ state.
 | | `CheckSignInUseCase` | Checks the saved sign-in again, in the background. |
 | | `SignInUseCase` | Signs in with a QR code; the codes arrive on a channel. Errs with `SignInError`. |
 | | `SignOutUseCase` | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
-| game | `ReadLibraryUseCase` | The whole library, games with drops left first. Errs with `GameError`. |
+| game | `ReadLibraryUseCase` | The whole library, games with drops left first. Errs with `SteamLibraryError`. |
 | card | `LookAtCardsUseCase` | One game's card page afresh: its drops and hours, and its set. Errs with `CardError`. |
 | | `LookAtFoilsUseCase` | One game's foils afresh, from its foil badge: how many of each the account has. |
 | | `IdentifyCardsUseCase` | Which cards new items are, by asset ID, each copy on its own. Items that aren't cards are left out. |
@@ -208,7 +208,7 @@ later (see [the research](research/market-and-session.md), section 4).
 `DefaultFarmCardsUseCase` needs the library, the cards and what the user
 wants. It takes `ReadLibraryUseCase`, `LookAtCardsUseCase`,
 `LookAtFoilsUseCase`, `IdentifyCardsUseCase` and `GetPreferencesUseCase`,
-not their repositories: so `farming` depends on `game`,
+not their repositories: so `farming` depends on `steam-library`,
 `card` and `preferences` as domain components, and never learns where any of
 them comes from. When a tier changes,
 the farmer sees it within moments, through the same use case the screens
@@ -221,7 +221,7 @@ the next. The session asks the farmer for the farm order when it needs one
 (the drops left at the start, the first forecast), since which games are
 farmed, and in what order, is the farmer's to say.
 
-`price` depends on `game` and `card` for their entities alone: it values
+`price` depends on `steam-library` and `card` for their entities alone: it values
 `CardAsset`s, a game's set and the drops still to come, handed to it. It
 never depends on `farming`, nor `farming` on it; whatever shows a session's
 cards joins the two.
@@ -231,7 +231,7 @@ cards joins the two.
 | Contract | Declared in | Implemented by |
 | --- | --- | --- |
 | `AccountRepository` | `account` | `DefaultAccountRepository` in `account-data`, through a `SteamAccountClient` |
-| `GameRepository` | `game` | `DefaultGameRepository` in `game-data`, through a `SteamGameClient` |
+| `SteamLibraryRepository` | `steam-library` | `DefaultSteamLibraryRepository` in `steam-library-data`, through a `SteamLibraryClient` |
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
 | `FarmingRepository` | `farming` | `DefaultFarmingRepository` in `farming-data`, through a `SteamFarmingClient`, keeping the computer awake while anything plays |
@@ -239,7 +239,7 @@ cards joins the two.
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,
 `SignOutError::Unavailable`, `PreferencesError::Unavailable`,
-`GameError::Unavailable`, `CardError::Unavailable`, `PriceError::Paused`).
+`SteamLibraryError::Unavailable`, `CardError::Unavailable`, `PriceError::Paused`).
 Repository contracts
 return `anyhow::Result` with a reason written for the user; the use case
 decides what it means. Farming's failures are the log lines the user reads,
@@ -269,11 +269,11 @@ wallet Steam tells of as it signs on (CM message 5528).
 
 **Each data crate has the same shape.** A `Default…Repository` satisfies the
 domain's contract through a client or a store: a trait, with the
-implementation that names the technology beside it (`SteamGameClient`,
+implementation that names the technology beside it (`SteamLibraryClient`,
 `FilePreferencesStore`). What a crate reads or keeps in a shape of its own
 is a DTO in `dto/`, mapped onto the domain there (`PreferencesDto`,
 `PriceSetDto`, `BadgeDto`). A page only one component reads is read in its
-data crate: the badge pages in `game-data`, the market in `price-data`. What
+data crate: the badge pages in `steam-library-data`, the market in `price-data`. What
 several read, `steam-api` reads once. Each DI takes the client or store and
 builds its repository itself.
 
@@ -355,7 +355,7 @@ types are named, in three phases, each handed only the one before it:
 | Phase | Builds | From |
 | --- | --- | --- |
 | `DataAssembler` | `ConfigFile`, `steam_api::SteamClient`, `KeepAwake`, `SessionKeeper`, and where the prices are kept | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
+| `DomainAssembler` | `AccountComponent`, `SteamLibraryComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `PriceComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
 `PriceComponent` takes the `SteamClient`, the `ConfigFile` and where the
@@ -422,7 +422,7 @@ graph TD
 
     subgraph DI["component/*/di"]
         ADI[account-di]
-        GDI[game-di]
+        LDI[steam-library-di]
         CDI[card-di]
         SDI[session-di]
         PDI[preferences-di]
@@ -432,7 +432,7 @@ graph TD
 
     subgraph DATA["component/*/data"]
         AD[account-data]
-        GD[game-data]
+        LD[steam-library-data]
         CD[card-data]
         PD[preferences-data]
         FD[farming-data]
@@ -442,7 +442,7 @@ graph TD
     subgraph DOMAIN["component/*/domain"]
         MON[money]
         ACC[account]
-        GAME[game]
+        LIB[steam-library]
         CARD[card]
         SES[session]
         PREF[preferences]
@@ -457,28 +457,28 @@ graph TD
         KA[keep-awake]
     end
 
-    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
-    TUI --> FW & ACC & GAME & CARD & SES & PREF & FARM & PRICE & MON
+    APP --> TUI & HL & ADI & LDI & CDI & SDI & PDI & FDI & PRDI & SES & CF & SA & DL & KA
+    TUI --> FW & ACC & LIB & CARD & SES & PREF & FARM & PRICE & MON
     HL --> FW & ACC & FARM
-    FW --> FARM & GAME
+    FW --> FARM & LIB
     ADI --> AD
-    GDI --> GD
+    LDI --> LD
     CDI --> CD
     PDI --> PD
     FDI --> FD
     SDI --> SES
     PRDI --> PRD
     AD --> ACC & SA
-    GD --> GAME & SA
-    CD --> CARD & GAME & SA
-    PD --> PREF & GAME & CF
-    FD --> FARM & SES & GAME & CARD & SA & KA
-    PRD --> PRICE & GAME & MON & SA & CF & DL
-    CARD --> GAME
-    PREF --> GAME
-    SES --> GAME & CARD
-    FARM --> GAME & CARD & SES & PREF
-    PRICE --> GAME & CARD & MON
+    LD --> LIB & SA
+    CD --> CARD & LIB & SA
+    PD --> PREF & LIB & CF
+    FD --> FARM & SES & LIB & CARD & SA & KA
+    PRD --> PRICE & LIB & MON & SA & CF & DL
+    CARD --> LIB
+    PREF --> LIB
+    SES --> LIB & CARD
+    FARM --> LIB & CARD & SES & PREF
+    PRICE --> LIB & CARD & MON
     SA --> CF & DL
     KA --> DL
 ```

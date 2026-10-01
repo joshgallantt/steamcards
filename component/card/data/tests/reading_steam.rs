@@ -7,11 +7,11 @@ use card::{AssetId, Card, CardAsset, CardRepository};
 use card_data::{DefaultCardRepository, SteamCardClient};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use game::AppId;
 use steam_api::{
     SteamClient,
     test_support::{ACCOUNT, FakeSteam, HeldItem, STEAM_ID, token},
 };
+use steam_library::AppId;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path, query_param},

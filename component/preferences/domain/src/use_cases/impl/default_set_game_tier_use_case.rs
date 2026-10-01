@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use game::AppId;
+use steam_library::AppId;
 
 use crate::{PreferencesError, PreferencesRepository, SetGameTierUseCase, Tier};
 

@@ -1,4 +1,4 @@
-use game::AppId;
+use steam_library::AppId;
 
 use crate::Tier;
 

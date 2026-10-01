@@ -4,14 +4,14 @@ use std::{
 };
 
 use futures::FutureExt;
-use game::{Game, GameError, ReadLibraryUseCase, SteamLibrary};
+use steam_library::{Game, ReadLibraryUseCase, SteamLibrary, SteamLibraryError};
 use tokio::task::JoinHandle;
 
 /// The Steam library, read in the background, so a screen showing it never
 /// waits on Steam.
 pub struct LibraryViewModel {
     read: Arc<dyn ReadLibraryUseCase>,
-    pending: Option<JoinHandle<Result<SteamLibrary, GameError>>>,
+    pending: Option<JoinHandle<Result<SteamLibrary, SteamLibraryError>>>,
     library: Option<SteamLibrary>,
     fetched: Option<Instant>,
     /// Something the library depends on changed since the one at hand, or
@@ -102,11 +102,11 @@ impl LibraryViewModel {
 
 #[cfg(test)]
 mod tests {
-    use game::test_support::{SpyReadLibraryUseCase, game};
+    use steam_library::test_support::{SpyReadLibraryUseCase, game};
 
     use super::*;
 
-    fn answering(result: Result<SteamLibrary, GameError>) -> Arc<SpyReadLibraryUseCase> {
+    fn answering(result: Result<SteamLibrary, SteamLibraryError>) -> Arc<SpyReadLibraryUseCase> {
         Arc::new(SpyReadLibraryUseCase::answering(result))
     }
 
@@ -145,7 +145,7 @@ mod tests {
         l.refresh_if_older(Duration::from_secs(600));
         assert_eq!(read.reads(), 1);
 
-        let read = answering(Err(GameError::Unavailable(
+        let read = answering(Err(SteamLibraryError::Unavailable(
             "steamcommunity.com didn't answer".into(),
         )));
         let mut l = LibraryViewModel::new(read.clone());

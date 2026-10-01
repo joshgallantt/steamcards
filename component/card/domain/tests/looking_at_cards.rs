@@ -9,7 +9,7 @@ use card::{
     LookAtFoilsUseCase,
     test_support::{FakeCardRepository, card},
 };
-use game::{AppId, test_support::game};
+use steam_library::{AppId, test_support::game};
 
 #[tokio::test]
 async fn a_games_cards_are_looked_at_on_its_own_page() {

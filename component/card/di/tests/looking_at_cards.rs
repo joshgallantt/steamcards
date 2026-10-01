@@ -5,8 +5,8 @@
 mod support;
 
 use card::{AssetId, Card, CardAsset, CardError};
-use game::AppId;
 use steam_api::{EResult, test_support::HeldItem};
+use steam_library::AppId;
 use support::Player;
 
 #[tokio::test]

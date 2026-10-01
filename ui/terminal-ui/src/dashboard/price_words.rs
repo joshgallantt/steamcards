@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use game::SteamLibrary;
 use price::PriceEvent;
+use steam_library::SteamLibrary;
 
 use crate::dashboard::EventKind;
 
@@ -96,8 +96,8 @@ fn in_words(d: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::{DateTime, TimeDelta, Utc};
-    use game::{AppId, test_support::game};
     use price::MarketPause;
+    use steam_library::{AppId, test_support::game};
 
     use super::*;
 

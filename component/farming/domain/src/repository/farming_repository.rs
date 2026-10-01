@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use game::AppId;
+use steam_library::AppId;
 
 use crate::Signal;
 

@@ -19,11 +19,11 @@ use farming::{
     FarmingStatus, FarmingUpdate, Status,
     test_support::FakeSteamAccount,
 };
-use game::{AppId, DefaultReadLibraryUseCase};
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::{
     DefaultEndSessionUseCase, DropCard, EndSessionUseCase, Finished, Mode, NewItem, SessionKeeper,
 };
+use steam_library::{AppId, DefaultReadLibraryUseCase};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 

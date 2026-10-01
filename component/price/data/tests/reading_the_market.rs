@@ -9,7 +9,6 @@ use std::{sync::Arc, time::Duration};
 use chrono::{TimeDelta, Utc};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use game::AppId;
 use money::{Currency, Money};
 use price::{Lookup, MarketPause, Price, PriceQuote};
 use price_data::{MarketClient, MarketPace, SteamMarketClient};
@@ -17,6 +16,7 @@ use steam_api::{
     EResult, SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
+use steam_library::AppId;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{header, header_exists, header_regex, method, path, query_param},

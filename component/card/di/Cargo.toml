@@ -19,7 +19,7 @@ steam-api.workspace = true
 [dev-dependencies]
 config-file.workspace = true
 debug-log.workspace = true
-game.workspace = true
+steam-library.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }
 tokio.workspace = true
 wiremock.workspace = true

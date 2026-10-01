@@ -1,4 +1,4 @@
-use game::{AppId, CardDrops};
+use steam_library::{AppId, CardDrops};
 
 /// One line in a list of games to pick from.
 #[derive(Debug, Clone, PartialEq)]

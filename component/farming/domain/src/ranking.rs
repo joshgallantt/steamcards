@@ -1,9 +1,9 @@
 //! What to play, and how. Pure: the library, the preferences and what's been
 //! set aside go in; an order and a plan come out.
 
-use game::{AppId, Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
 use preferences::Preferences;
 use session::SetAside;
+use steam_library::{AppId, Game, MOST_PLAYED_AT_ONCE, SteamLibrary};
 
 use crate::{
     NothingToFarm,
@@ -112,7 +112,7 @@ pub(crate) fn why_nothing(library: &SteamLibrary, prefs: &Preferences) -> Nothin
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
-    use game::CardDrops;
+    use steam_library::CardDrops;
 
     use super::*;
 

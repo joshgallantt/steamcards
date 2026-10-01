@@ -3,7 +3,7 @@
 //! holds only the ones it calls, and a test double is a type of its own in
 //! `test_support`.
 
-use game::AppId;
+use steam_library::AppId;
 
 use crate::{Preferences, PreferencesError, Tier};
 

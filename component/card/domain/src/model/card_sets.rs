@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use game::AppId;
+use steam_library::AppId;
 
 use crate::CardSet;
 

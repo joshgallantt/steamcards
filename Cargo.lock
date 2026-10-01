@@ -262,7 +262,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "card",
- "game",
+ "steam-library",
  "tokio",
 ]
 
@@ -275,8 +275,8 @@ dependencies = [
  "card",
  "config-file",
  "debug-log",
- "game",
  "steam-api",
+ "steam-library",
  "tokio",
  "wiremock",
 ]
@@ -289,8 +289,8 @@ dependencies = [
  "card-data",
  "config-file",
  "debug-log",
- "game",
  "steam-api",
+ "steam-library",
  "tokio",
  "wiremock",
 ]
@@ -816,9 +816,9 @@ dependencies = [
  "card",
  "chrono",
  "farming",
- "game",
  "preferences",
  "session",
+ "steam-library",
  "tokio",
  "tokio-util",
 ]
@@ -834,10 +834,10 @@ dependencies = [
  "config-file",
  "debug-log",
  "farming",
- "game",
  "keep-awake",
  "session",
  "steam-api",
+ "steam-library",
  "tokio",
 ]
 
@@ -848,11 +848,11 @@ dependencies = [
  "card",
  "farming",
  "farming-data",
- "game",
  "keep-awake",
  "preferences",
  "session",
  "steam-api",
+ "steam-library",
 ]
 
 [[package]]
@@ -861,7 +861,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "farming",
- "game",
+ "steam-library",
 ]
 
 [[package]]
@@ -1017,44 +1017,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
-]
-
-[[package]]
-name = "game"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "game",
- "tokio",
-]
-
-[[package]]
-name = "game-data"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "config-file",
- "debug-log",
- "game",
- "scraper",
- "steam-api",
- "tokio",
- "wiremock",
-]
-
-[[package]]
-name = "game-di"
-version = "0.1.0"
-dependencies = [
- "config-file",
- "debug-log",
- "game",
- "game-data",
- "steam-api",
- "tokio",
- "wiremock",
 ]
 
 [[package]]
@@ -2155,8 +2117,8 @@ name = "preferences"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "game",
  "preferences",
+ "steam-library",
 ]
 
 [[package]]
@@ -2165,10 +2127,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config-file",
- "game",
  "preferences",
  "serde",
  "serde_json",
+ "steam-library",
 ]
 
 [[package]]
@@ -2176,9 +2138,9 @@ name = "preferences-di"
 version = "0.1.0"
 dependencies = [
  "config-file",
- "game",
  "preferences",
  "preferences-data",
+ "steam-library",
 ]
 
 [[package]]
@@ -2189,9 +2151,9 @@ dependencies = [
  "async-trait",
  "card",
  "chrono",
- "game",
  "money",
  "price",
+ "steam-library",
  "tokio",
  "tokio-util",
 ]
@@ -2205,7 +2167,6 @@ dependencies = [
  "chrono",
  "config-file",
  "debug-log",
- "game",
  "money",
  "price",
  "rand 0.10.3",
@@ -2213,6 +2174,7 @@ dependencies = [
  "serde",
  "serde_json",
  "steam-api",
+ "steam-library",
  "tokio",
  "tokio-util",
  "wiremock",
@@ -2224,12 +2186,12 @@ version = "0.1.0"
 dependencies = [
  "config-file",
  "debug-log",
- "game",
  "money",
  "price",
  "price-data",
  "serde_json",
  "steam-api",
+ "steam-library",
  "tokio",
  "tokio-util",
  "wiremock",
@@ -2825,7 +2787,7 @@ version = "0.1.0"
 dependencies = [
  "card",
  "chrono",
- "game",
+ "steam-library",
 ]
 
 [[package]]
@@ -2981,6 +2943,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "steam-library"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "steam-library",
+ "tokio",
+]
+
+[[package]]
+name = "steam-library-data"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "config-file",
+ "debug-log",
+ "scraper",
+ "steam-api",
+ "steam-library",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
+name = "steam-library-di"
+version = "0.1.0"
+dependencies = [
+ "config-file",
+ "debug-log",
+ "steam-api",
+ "steam-library",
+ "steam-library-data",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "steamcards"
 version = "0.1.0"
 dependencies = [
@@ -2992,7 +2992,6 @@ dependencies = [
  "debug-log",
  "dirs",
  "farming-di",
- "game-di",
  "headless",
  "keep-awake",
  "preferences-di",
@@ -3001,6 +3000,7 @@ dependencies = [
  "session",
  "session-di",
  "steam-api",
+ "steam-library-di",
  "terminal-ui",
  "tokio",
 ]
@@ -3149,7 +3149,6 @@ dependencies = [
  "farming",
  "farming-words",
  "futures",
- "game",
  "money",
  "preferences",
  "price",
@@ -3157,6 +3156,7 @@ dependencies = [
  "ratatui",
  "serde_json",
  "session",
+ "steam-library",
  "tokio",
  "tokio-util",
  "webbrowser",

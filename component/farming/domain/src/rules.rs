@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use game::AppId;
+use steam_library::AppId;
 
 /// How often a game being farmed has its cards looked at: ASF's
 /// `FarmingDelay` of 15 minutes, plus its 15 seconds for Steam's clock.

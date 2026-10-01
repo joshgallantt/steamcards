@@ -11,9 +11,9 @@ use std::{
 
 use card::{AssetId, CardAsset, IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
 use chrono::Utc;
-use game::{AppId, Game, HOURS_BEFORE_DROPS, ReadLibraryUseCase, SteamLibrary};
 use preferences::{GetPreferencesUseCase, Preferences};
 use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
+use steam_library::{AppId, Game, HOURS_BEFORE_DROPS, ReadLibraryUseCase, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 

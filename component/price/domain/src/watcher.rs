@@ -4,7 +4,7 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
-use game::AppId;
+use steam_library::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 

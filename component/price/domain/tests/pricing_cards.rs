@@ -8,7 +8,6 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use game::AppId;
 use money::{Currency, Money};
 use price::{
     Basis, Clock, DefaultGetPriceSettingsUseCase, DefaultGetPricesUseCase, DefaultGetWalletUseCase,
@@ -19,6 +18,7 @@ use price::{
     SetGamesToPriceUseCase, held_value,
     test_support::{self, FakePriceRepository},
 };
+use steam_library::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 

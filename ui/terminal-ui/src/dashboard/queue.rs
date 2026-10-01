@@ -2,9 +2,9 @@
 // don't mind about, what they skipped, and what's done. Pure data — built
 // fresh from the latest farming status and preferences on every frame.
 
-use game::{AppId, Game, SteamLibrary};
 use preferences::{Preferences, Tier};
 use session::Mode;
+use steam_library::{AppId, Game, SteamLibrary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
@@ -112,7 +112,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use game::{AppId, test_support::game};
+    use steam_library::{AppId, test_support::game};
 
     use super::*;
 

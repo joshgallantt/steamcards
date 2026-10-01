@@ -12,7 +12,6 @@ use std::{
 
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
-use game::AppId;
 use price::{Basis, PriceBook, PriceError, PriceEvent, Wallet, system_clock};
 use price_data::{FilePriceStore, MarketPace, SteamMarketClient};
 use price_di::PriceComponent;
@@ -20,6 +19,7 @@ use steam_api::{
     SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
+use steam_library::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use wiremock::MockServer;

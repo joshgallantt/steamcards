@@ -9,7 +9,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
-use game::AppId;
+use steam_library::AppId;
 
 use crate::{
     Clock, Lookup, MarketPause, Offers, Price, PriceBook, PriceRepository, PriceSettings,
