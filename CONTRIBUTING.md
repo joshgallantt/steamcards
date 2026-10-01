@@ -188,7 +188,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 ```
 ├── component/     Domain + Data + DI. One folder per business concept.
 │   ├── account/       The one Steam account: signing in with a QR code, and out.
-│   ├── steam-library/ Your Steam library: the games with trading cards, and their drops.
+│   ├── game/          Your games with trading cards, and their drops: the Steam library.
 │   ├── card/          Each game's cards, normal and foil: its sets, and the copies you hold.
 │   ├── preferences/   What you want farmed first.
 │   ├── session/       This session: every card that dropped, and how long the rest should take.
@@ -360,8 +360,8 @@ The farmer never hears about the keypress. Every tick, it calls `GetPreferencesU
 
 ### What that buys
 
-- **Dependency inversion** (③): `SteamLibraryRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
-- **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `steam-library-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
+- **Dependency inversion** (③): `GameRepository`, `CardRepository`, `FarmingRepository`, `AccountRepository`, `PreferencesRepository` and `PriceRepository` are all declared in domain crates and implemented in data crates. Imports run Data → Domain while calls run Domain → Data.
+- **Single responsibility**: Steam's CM protocol, and the page markup several components read, change for Valve's reasons and live in `library/steam-api`; a page only one component reads is read in its data crate, as the badge pages are in `game-data`. The rules for what to farm change for the user's reasons and live in `component/farming/domain`.
 - **Interface segregation** (①): one trait per use case, so the games pop-up holds the preference use cases it needs and the account pop-up holds the account ones. Neither sees the farmer.
 - **Liskov substitution**: the paused-time tests drive the real `DefaultFarmCardsUseCase` over a fake Steam account, and the farmer can't tell the difference.
 
@@ -375,7 +375,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `steam-library`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `price` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `steam-api` | Library |
@@ -463,7 +463,7 @@ async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
 
 This runs the real farmer through hours of drops in milliseconds, on paused time, with no network. It checks what the farmer says happened; how the log puts it is `farming-words`' to test.
 
-- **Doubles** come from the domain crates' `test-support` features, which production builds never enable: a file each, named for their kind (`FakeSteamLibraryRepository`, `StubGetAccountUseCase`, `SpySignOutUseCase`), and builders like `game()`.
+- **Doubles** come from the domain crates' `test-support` features, which production builds never enable: a file each, named for their kind (`FakeGameRepository`, `StubGetAccountUseCase`, `SpySignOutUseCase`), and builders like `game()`.
 - **No test touches the real Steam.** End-to-end tests point `steam-api` at a local stand-in through its `Endpoints`.
 - **Use made-up account names, Steam IDs and tokens** in tests, fixtures and docs, never real ones.
 - **A test should fail when the code is wrong.** If you add one, break the code on purpose once and watch it fail.

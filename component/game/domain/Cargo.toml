@@ -1,0 +1,24 @@
+[package]
+name = "game"
+description = "Your games with trading cards: the Steam library, each game's hours and card drops."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Doubles for other crates' tests. Never depends on game-data.
+test-support = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+game = { path = ".", features = ["test-support"] }

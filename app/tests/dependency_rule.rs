@@ -60,11 +60,11 @@ fn allowed(from: Layer) -> &'static [Layer] {
 /// never meet: whatever shows a session's cards joins the two.
 fn components(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
-        "money" | "account" | "steam-library" => &[],
-        "card" | "preferences" => &["steam-library"],
-        "session" => &["steam-library", "card"],
-        "farming" => &["steam-library", "card", "session", "preferences"],
-        "price" => &["steam-library", "card", "money"],
+        "money" | "account" | "game" => &[],
+        "card" | "preferences" => &["game"],
+        "session" => &["game", "card"],
+        "farming" => &["game", "card", "session", "preferences"],
+        "price" => &["game", "card", "money"],
         _ => return None,
     })
 }

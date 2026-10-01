@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use steam_library::AppId;
+use game::AppId;
 
 use crate::SetGamesToPriceUseCase;
 

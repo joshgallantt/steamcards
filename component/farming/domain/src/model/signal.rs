@@ -1,5 +1,5 @@
+use game::AppId;
 use session::NewItem;
-use steam_library::AppId;
 
 /// Something Steam said that the farmer acts on.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -6,6 +6,7 @@
 
 use card::{CardKind, test_support::card_asset};
 use chrono::{DateTime, TimeDelta, Utc};
+use game::{AppId, SteamLibrary, test_support::game};
 use money::{Currency, Money};
 use price::{
     Basis, HeldCard, Offers, Price, PriceBook, SetPrices, expected_per_drop, held_value,
@@ -13,7 +14,6 @@ use price::{
     test_support::{order_book, pounds, session_start, set_prices},
     value_left,
 };
-use steam_library::{AppId, SteamLibrary, test_support::game};
 
 const HOLLOW_KNIGHT: u32 = 367_520;
 const INSCRYPTION: u32 = 1_092_790;

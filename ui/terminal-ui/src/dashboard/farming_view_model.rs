@@ -2,9 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use account::GetAccountUseCase;
 use farming::{FarmCardsUseCase, FarmingUpdate};
+use game::AppId;
 use preferences::{GetPreferencesUseCase, Preferences, PreferencesError, SetGameTierUseCase, Tier};
 use session::EndSessionUseCase;
-use steam_library::AppId;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 

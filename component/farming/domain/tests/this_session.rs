@@ -20,11 +20,11 @@ use farming::{
     FarmingStatus, FarmingUpdate, Status,
     test_support::FakeSteamAccount,
 };
+use game::{AppId, DefaultGetLibraryUseCase};
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::{
     DefaultEndSessionUseCase, DropCard, EndSessionUseCase, Finished, Mode, NewItem, SessionKeeper,
 };
-use steam_library::{AppId, DefaultReadLibraryUseCase};
 use tokio::{sync::mpsc, task::JoinHandle, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -54,7 +54,7 @@ impl Player {
         let (tx, updates) = mpsc::channel(8192);
         Self {
             farm: Arc::new(DefaultFarmCardsUseCase::new(
-                Arc::new(DefaultReadLibraryUseCase::new(steam.clone())),
+                Arc::new(DefaultGetLibraryUseCase::new(steam.clone())),
                 Arc::new(DefaultLookAtCardsUseCase::new(steam.clone())),
                 Arc::new(DefaultLookAtFoilsUseCase::new(steam.clone())),
                 Arc::new(DefaultIdentifyCardsUseCase::new(steam.clone())),

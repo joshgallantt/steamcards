@@ -6,8 +6,8 @@ use std::{
 
 use async_trait::async_trait;
 use card::{AssetId, Card, CardAsset, CardKind, CardRepository, CardSet, GameCards};
+use game::{AppId, CardDrops, Game, GameRepository, SteamLibrary};
 use session::NewItem;
-use steam_library::{AppId, CardDrops, Game, SteamLibrary, SteamLibraryRepository};
 use tokio::{sync::mpsc, time::Instant};
 
 use crate::{FarmingRepository, Signal};
@@ -449,7 +449,7 @@ fn drop_card(s: &mut State, app_id: AppId) {
 }
 
 #[async_trait]
-impl SteamLibraryRepository for FakeSteamAccount {
+impl GameRepository for FakeSteamAccount {
     /// The badge pages: every game, without its set.
     async fn library(&self) -> anyhow::Result<SteamLibrary> {
         self.settle();

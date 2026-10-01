@@ -3,12 +3,12 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use card::{AssetId, Card, CardAsset, CardKind, CardSet, GameCards};
+use game::{AppId, CardDrops, Game};
 use steam_api::{
     SteamClient,
     badges::{BadgeGame, SetCard},
     inventory::InventoryItem,
 };
-use steam_library::{AppId, CardDrops, Game};
 
 /// Steam's say on the account's cards.
 #[async_trait]

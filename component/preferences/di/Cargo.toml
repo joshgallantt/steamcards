@@ -17,4 +17,4 @@ preferences-data.workspace = true
 config-file.workspace = true
 
 [dev-dependencies]
-steam-library.workspace = true
+game.workspace = true

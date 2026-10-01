@@ -16,6 +16,6 @@ workspace = true
 test-support = []
 
 [dependencies]
-steam-library.workspace = true
+game.workspace = true
 card.workspace = true
 chrono.workspace = true

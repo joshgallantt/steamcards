@@ -2,7 +2,7 @@
 //! kinds, normal and foil, and each kind makes a badge of its own: so a
 //! game's set, of either kind, and how many of each card the account has;
 //! and the copies of cards the account holds, each an item in its
-//! inventory. A card is from the set of a game in the [`steam_library`], so
+//! inventory. A card is from the set of a game in the [`game`], so
 //! this component uses that one.
 //!
 //! How Steam is asked (card pages, foils' pages, the inventory) is the data

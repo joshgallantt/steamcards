@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use farming::{FarmingRepository, Signal};
-use steam_library::AppId;
+use game::AppId;
 
 use crate::FarmingClient;
 

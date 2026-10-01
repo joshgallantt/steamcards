@@ -4,7 +4,7 @@
 //! user picks, and Steam's pause on market lookups.
 //!
 //! It values the [`card`] component's cards, the copies held and a game's
-//! set, and the drops the [`steam_library`] component's games still have to
+//! set, and the drops the [`game`] component's games still have to
 //! come. It knows nothing of farming: whoever shows a session's cards hands
 //! them over as [`HeldCard`]s. How Steam is asked is the data layer's business, behind
 //! [`PriceRepository`], and so is how fast: every lookup waits its turn in

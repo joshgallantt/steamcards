@@ -1,0 +1,26 @@
+[package]
+name = "game-data"
+description = "The Steam library as the badge pages show it, read through a client of its own, written to fit the game domain's GameRepository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+game.workspace = true
+steam-api.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+scraper.workspace = true
+
+[dev-dependencies]
+config-file.workspace = true
+debug-log.workspace = true
+steam-api = { workspace = true, features = ["test-support"] }
+tokio.workspace = true
+wiremock.workspace = true

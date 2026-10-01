@@ -2,7 +2,7 @@
 //! keeping what's found.
 
 use card::CardKind;
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{
     Clock, Lookup, MarketPause, PriceRepository, SetPrices,

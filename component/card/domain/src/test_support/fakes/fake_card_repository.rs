@@ -7,7 +7,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use steam_library::{AppId, Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 
 use crate::{AssetId, CardAsset, CardRepository, CardSet, GameCards};
 

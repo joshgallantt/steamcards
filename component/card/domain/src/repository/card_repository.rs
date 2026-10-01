@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{AssetId, CardAsset, CardSet, GameCards};
 

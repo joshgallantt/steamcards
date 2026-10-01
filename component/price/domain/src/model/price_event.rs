@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use steam_library::AppId;
+use game::AppId;
 
 use crate::MarketPause;
 

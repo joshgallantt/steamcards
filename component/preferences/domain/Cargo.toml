@@ -16,7 +16,7 @@ workspace = true
 test-support = []
 
 [dependencies]
-steam-library.workspace = true
+game.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]

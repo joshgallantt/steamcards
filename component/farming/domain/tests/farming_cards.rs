@@ -16,9 +16,9 @@ use farming::{
     FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble,
     test_support::FakeSteamAccount,
 };
+use game::{AppId, DefaultGetLibraryUseCase};
 use preferences::{Preferences, test_support::StubGetPreferencesUseCase};
 use session::Mode;
-use steam_library::{AppId, DefaultReadLibraryUseCase};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -51,7 +51,7 @@ impl Player {
 
     fn starts_farming(&mut self) {
         let farm = DefaultFarmCardsUseCase::new(
-            Arc::new(DefaultReadLibraryUseCase::new(self.steam.clone())),
+            Arc::new(DefaultGetLibraryUseCase::new(self.steam.clone())),
             Arc::new(DefaultLookAtCardsUseCase::new(self.steam.clone())),
             Arc::new(DefaultLookAtFoilsUseCase::new(self.steam.clone())),
             Arc::new(DefaultIdentifyCardsUseCase::new(self.steam.clone())),

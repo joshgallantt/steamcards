@@ -1,5 +1,5 @@
 use card::CardSet;
-use steam_library::AppId;
+use game::AppId;
 
 use crate::Looked;
 

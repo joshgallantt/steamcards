@@ -6,9 +6,9 @@
 mod support;
 
 use card::CardKind;
+use game::AppId;
 use money::{Currency, Money};
 use price::{Basis, Price, PriceError, PriceEvent};
-use steam_library::AppId;
 use support::Player;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,

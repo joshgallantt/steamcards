@@ -26,7 +26,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use steam_library::{AppId, MOST_PLAYED_AT_ONCE, SteamLibrary};
+use game::{AppId, MOST_PLAYED_AT_ONCE, SteamLibrary};
 
 use crate::{
     Drop, Mode, Session, Stretch,
@@ -166,7 +166,7 @@ fn span(hours: f64) -> Duration {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
-    use steam_library::{CardDrops, Game};
+    use game::{CardDrops, Game};
 
     use super::*;
     use crate::DropCard;

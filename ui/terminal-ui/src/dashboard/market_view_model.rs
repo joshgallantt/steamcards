@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use game::AppId;
 use price::{
     GetPricesUseCase, GetWalletUseCase, KeepPricesUpToDateUseCase, PriceBook, PriceEvent,
     RefreshPricesUseCase, SetGamesToPriceUseCase, Wallet,
 };
-use steam_library::AppId;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 

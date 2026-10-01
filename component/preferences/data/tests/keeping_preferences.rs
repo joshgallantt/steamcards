@@ -8,10 +8,10 @@ use std::{
 };
 
 use config_file::ConfigFile;
+use game::AppId;
 use preferences::Preferences;
 use preferences_data::{FilePreferencesStore, PreferencesStore};
 use serde_json::{Value, json};
-use steam_library::AppId;
 
 fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(

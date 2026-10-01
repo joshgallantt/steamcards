@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use card::{AssetId, CardAsset, CardRepository, CardSet, GameCards};
-use steam_library::AppId;
+use game::AppId;
 
 use crate::CardClient;
 

@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use card::CardSets;
 use chrono::{DateTime, Utc};
+use game::{AppId, SteamLibrary};
 use session::{Mode, Session, SetAside};
-use steam_library::{AppId, SteamLibrary};
 
 use crate::{NothingToFarm, Status, Trouble};
 

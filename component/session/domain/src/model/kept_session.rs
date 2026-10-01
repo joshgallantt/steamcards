@@ -20,7 +20,7 @@ use std::{
 
 use card::{CardAsset, CardKind, CardSet, CardSets, GameCards};
 use chrono::{DateTime, Utc};
-use steam_library::{AppId, Game, SteamLibrary};
+use game::{AppId, Game, SteamLibrary};
 
 use crate::{
     Drop, DropCard, Finished, Forecast, Found, Looked, Mode, NewItem, Session, SetAside, Stretch,
@@ -543,7 +543,7 @@ mod tests {
     use std::slice;
 
     use card::{AssetId, Card};
-    use steam_library::CardDrops;
+    use game::CardDrops;
 
     use super::*;
 

@@ -1,6 +1,6 @@
 use card::CardKind;
 use chrono::{DateTime, Utc};
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{
     SetPrices,

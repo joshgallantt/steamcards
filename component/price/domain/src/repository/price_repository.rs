@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use card::CardKind;
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{Lookup, Offers, Price, PriceBook, PriceSettings, PricedCard, SetPrices, Wallet};
 

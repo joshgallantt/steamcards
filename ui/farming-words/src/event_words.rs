@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use card::CardKind;
 use farming::{FarmingEvent, Trouble};
-use steam_library::HOURS_BEFORE_DROPS;
+use game::HOURS_BEFORE_DROPS;
 
 use crate::counting::{cards, hours, minutes, ordinal};
 

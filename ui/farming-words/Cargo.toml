@@ -17,5 +17,5 @@ workspace = true
 [dependencies]
 card.workspace = true
 farming.workspace = true
-steam-library.workspace = true
+game.workspace = true
 chrono.workspace = true

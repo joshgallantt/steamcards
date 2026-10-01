@@ -23,11 +23,11 @@ use crossterm::{
 };
 use farming::{FarmingStatus, FarmingUpdate, farm_order};
 use futures::StreamExt;
+use game::{AppId, SteamLibrary};
 use preferences::{Preferences, PreferencesError, Tier};
 use price::{PriceBook, PriceEvent, Wallet};
 use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 use session::Session;
-use steam_library::{AppId, SteamLibrary};
 
 use crate::{
     account::AccountViewModel,

@@ -12,9 +12,9 @@ members = [
     "component/account/domain",
     "component/account/data",
     "component/account/di",
-    "component/steam-library/domain",
-    "component/steam-library/data",
-    "component/steam-library/di",
+    "component/game/domain",
+    "component/game/data",
+    "component/game/di",
     "component/card/domain",
     "component/card/data",
     "component/card/di",
@@ -97,7 +97,7 @@ broken_intra_doc_links = "deny"
 # Domain
 money = { path = "component/money/domain" }
 account = { path = "component/account/domain" }
-steam-library = { path = "component/steam-library/domain" }
+game = { path = "component/game/domain" }
 card = { path = "component/card/domain" }
 session = { path = "component/session/domain" }
 preferences = { path = "component/preferences/domain" }
@@ -106,7 +106,7 @@ price = { path = "component/price/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
-steam-library-data = { path = "component/steam-library/data" }
+game-data = { path = "component/game/data" }
 card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
 farming-data = { path = "component/farming/data" }
@@ -114,7 +114,7 @@ price-data = { path = "component/price/data" }
 
 # DI
 account-di = { path = "component/account/di" }
-steam-library-di = { path = "component/steam-library/di" }
+game-di = { path = "component/game/di" }
 card-di = { path = "component/card/di" }
 session-di = { path = "component/session/di" }
 preferences-di = { path = "component/preferences/di" }

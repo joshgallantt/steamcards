@@ -9,11 +9,11 @@ use card::{AssetId, CardAsset, CardError, CardKind, CardSet, GameCards};
 use card_di::CardComponent;
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
+use game::AppId;
 use steam_api::{
     SteamClient,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
 };
-use steam_library::AppId;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path, query_param},

@@ -14,7 +14,7 @@ workspace = true
 [dependencies]
 price.workspace = true
 card.workspace = true
-steam-library.workspace = true
+game.workspace = true
 money.workspace = true
 config-file.workspace = true
 debug-log.workspace = true

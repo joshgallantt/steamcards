@@ -5,9 +5,9 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use config_file::ConfigFile;
+use game::AppId;
 use preferences::{Preferences, PreferencesError, Tier};
 use preferences_di::PreferencesComponent;
-use steam_library::AppId;
 
 pub(crate) struct Player {
     config: PathBuf,

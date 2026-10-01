@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use crate::games::GameRow;
 
+use game::{AppId, Game};
 use preferences::{
     GetPreferencesUseCase, PreferencesError, SetAppearOnlineUseCase, SetGameTierUseCase,
     SetOnlyPriorityUseCase, Tier,
 };
-use steam_library::{AppId, Game};
 
 /// Choosing which games are farmed first, and how farming shows to friends.
 pub struct GamesViewModel {
@@ -115,11 +115,11 @@ fn row(app_id: AppId, games: &[Game], rank: Option<usize>) -> GameRow {
 
 #[cfg(test)]
 mod tests {
+    use game::{AppId, test_support::game};
     use preferences::{
         DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
         DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
     };
-    use steam_library::{AppId, test_support::game};
 
     use super::*;
 

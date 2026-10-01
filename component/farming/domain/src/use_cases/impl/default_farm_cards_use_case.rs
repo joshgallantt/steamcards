@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use card::{IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
+use game::GetLibraryUseCase;
 use preferences::GetPreferencesUseCase;
 use session::SessionKeeper;
-use steam_library::ReadLibraryUseCase;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -15,7 +15,7 @@ pub struct DefaultFarmCardsUseCase {
 
 impl DefaultFarmCardsUseCase {
     pub fn new(
-        read_library: Arc<dyn ReadLibraryUseCase>,
+        get_library: Arc<dyn GetLibraryUseCase>,
         look_at_cards: Arc<dyn LookAtCardsUseCase>,
         look_at_foils: Arc<dyn LookAtFoilsUseCase>,
         identify_cards: Arc<dyn IdentifyCardsUseCase>,
@@ -25,7 +25,7 @@ impl DefaultFarmCardsUseCase {
     ) -> Self {
         Self {
             farmer: Arc::new(Farmer::new(
-                read_library,
+                get_library,
                 look_at_cards,
                 look_at_foils,
                 identify_cards,

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{Basis, HeldCard, Offers, Price, SetPrices};
 

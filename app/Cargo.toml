@@ -20,7 +20,7 @@ path = "src/main.rs"
 [dependencies]
 account-di.workspace = true
 farming-di.workspace = true
-steam-library-di.workspace = true
+game-di.workspace = true
 card-di.workspace = true
 price-di.workspace = true
 preferences-di.workspace = true

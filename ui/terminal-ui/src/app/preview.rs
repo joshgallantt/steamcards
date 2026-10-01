@@ -18,6 +18,7 @@ use account::{
 use card::{AssetId, Card, CardAsset, CardKind, CardSet, CardSets};
 use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
+use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyGetLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
     DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
@@ -31,7 +32,6 @@ use price::{
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
-use steam_library::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyReadLibraryUseCase};
 
 use super::{App, Clock, LogView, Overlay, SignInView};
 use crate::{
@@ -269,7 +269,7 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        LibraryViewModel::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(library())))),
+        LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(library())))),
         OnboardingViewModel::new(accounts),
         MarketViewModel::new(
             Arc::new(StubGetPricesUseCase::new(prices())),
@@ -994,7 +994,7 @@ fn showcase_app() -> App {
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
         ),
-        LibraryViewModel::new(Arc::new(SpyReadLibraryUseCase::answering(Ok(
+        LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(
             showcase_library(),
         )))),
         OnboardingViewModel::new(accounts),

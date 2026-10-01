@@ -11,9 +11,9 @@ use std::{
 
 use card::{AssetId, CardAsset, IdentifyCardsUseCase, LookAtCardsUseCase, LookAtFoilsUseCase};
 use chrono::Utc;
+use game::{AppId, Game, GetLibraryUseCase, HOURS_BEFORE_DROPS, SteamLibrary};
 use preferences::{GetPreferencesUseCase, Preferences};
 use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
-use steam_library::{AppId, Game, HOURS_BEFORE_DROPS, ReadLibraryUseCase, SteamLibrary};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -31,7 +31,7 @@ use crate::{
 /// their storage, plays through the repository, and writes the session its
 /// keeper keeps from one run to the next.
 pub(crate) struct Farmer {
-    read_library: Arc<dyn ReadLibraryUseCase>,
+    get_library: Arc<dyn GetLibraryUseCase>,
     look_at_cards: Arc<dyn LookAtCardsUseCase>,
     look_at_foils: Arc<dyn LookAtFoilsUseCase>,
     identify_cards: Arc<dyn IdentifyCardsUseCase>,
@@ -124,7 +124,7 @@ impl Run {
 
 impl Farmer {
     pub(crate) fn new(
-        read_library: Arc<dyn ReadLibraryUseCase>,
+        get_library: Arc<dyn GetLibraryUseCase>,
         look_at_cards: Arc<dyn LookAtCardsUseCase>,
         look_at_foils: Arc<dyn LookAtFoilsUseCase>,
         identify_cards: Arc<dyn IdentifyCardsUseCase>,
@@ -133,7 +133,7 @@ impl Farmer {
         sessions: Arc<SessionKeeper>,
     ) -> Self {
         Self {
-            read_library,
+            get_library,
             look_at_cards,
             look_at_foils,
             identify_cards,
@@ -168,7 +168,7 @@ impl Farmer {
             r.stage(Status::Checking);
             let read = tokio::select! {
                 _ = token.cancelled() => return,
-                read = self.read_library.call() => read,
+                read = self.get_library.call() => read,
             };
             match read {
                 Ok(Ok(fresh)) => {

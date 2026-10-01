@@ -9,13 +9,13 @@ use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use farming::{FarmingRepository, Signal};
 use farming_data::{DefaultFarmingRepository, SteamFarmingClient};
+use game::AppId;
 use session::NewItem;
 use steam_api::{
     EResult, SteamClient,
     cm::UnseenItem,
     test_support::{ACCOUNT, FakeSteam, STEAM_ID, token, unseen_card},
 };
-use steam_library::AppId;
 
 /// Farming as the app does it.
 fn repository(session: Arc<SteamClient>) -> DefaultFarmingRepository {

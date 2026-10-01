@@ -1,5 +1,5 @@
 use card::{CardAsset, CardKind};
-use steam_library::AppId;
+use game::AppId;
 
 /// A card the account holds, as far as its value goes: a copy that dropped,
 /// or one known only by its name and border.
@@ -44,7 +44,7 @@ impl From<&CardAsset> for HeldCard {
 #[cfg(test)]
 mod tests {
     use card::AssetId;
-    use steam_library::AppId;
+    use game::AppId;
 
     use super::*;
 

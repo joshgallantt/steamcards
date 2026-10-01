@@ -5,8 +5,8 @@
 
 mod support;
 
+use game::AppId;
 use preferences::{PreferencesError, Tier};
-use steam_library::AppId;
 use support::Player;
 
 #[test]

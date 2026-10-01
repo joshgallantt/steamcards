@@ -20,7 +20,7 @@ steam-api.workspace = true
 
 [dev-dependencies]
 card.workspace = true
-steam-library.workspace = true
+game.workspace = true
 money.workspace = true
 serde_json.workspace = true
 steam-api = { workspace = true, features = ["test-support"] }

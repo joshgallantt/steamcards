@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use steam_library::AppId;
+use game::AppId;
 use tokio::task::JoinHandle;
 
 use crate::{CardError, CardRepository, CardSet, LookAtFoilsUseCase};

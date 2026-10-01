@@ -3,10 +3,10 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use card::CardKind;
 use chrono::{DateTime, Utc};
+use game::AppId;
 use money::{Currency, Money};
 use price::{Lookup, MarketPause, Price, PriceQuote, PricedCard, QuoteSource, Wallet};
 use steam_api::SteamClient;
-use steam_library::AppId;
 
 use crate::market::{
     Listed, MAX_SET_PAGES, MarketPace, MarketQueue, OrderBook, QUERY_ACTION, orderbook_path,

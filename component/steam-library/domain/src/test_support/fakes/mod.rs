@@ -1,3 +1,0 @@
-mod fake_steam_library_repository;
-
-pub use fake_steam_library_repository::FakeSteamLibraryRepository;

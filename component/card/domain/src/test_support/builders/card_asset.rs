@@ -1,4 +1,4 @@
-use steam_library::AppId;
+use game::AppId;
 
 use crate::{AssetId, CardAsset, CardKind};
 

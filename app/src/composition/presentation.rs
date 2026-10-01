@@ -43,7 +43,7 @@ impl PresentationAssembler {
                 d.preferences.set_only_priority.clone(),
                 d.preferences.set_appear_online.clone(),
             ),
-            LibraryViewModel::new(d.steam_library.read_library.clone()),
+            LibraryViewModel::new(d.game.get_library.clone()),
             OnboardingViewModel::new(d.account.get_account.clone()),
             MarketViewModel::new(
                 d.price.get_prices.clone(),

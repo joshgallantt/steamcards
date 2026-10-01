@@ -3,7 +3,7 @@
 //! stepping aside while another device plays — writing the [`session`] it
 //! makes as it goes.
 //!
-//! It works through the [`steam_library`] and [`card`] components' use
+//! It works through the [`game`] and [`card`] components' use
 //! cases (what can still drop, a game's set, and which card an item is) and
 //! the [`preferences`] component's (what the user wants first), never their
 //! storage. Playing is the data layer's business, behind [`FarmingRepository`].
