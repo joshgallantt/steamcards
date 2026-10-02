@@ -15,11 +15,10 @@
 ## Features
 
 - **Sign in with your phone:** scan a QR code with the Steam app, so steamcards never sees your password.
-- **Your games, in your order.** Rank the games you want cards from first; the rest follow, the ones closest to dropping first.
-- **See what you've got, and what it's worth:** this session's time and cards at Steam market prices, how many are left and how long they'll take, and every game's set, card by card.
-- **Appears offline** while farming, unless you'd rather not: your friends don't see a pile of games, and the cards drop just the same.
-- **Steps aside** while you play on another device, and carries on a minute after you stop.
-- **Shakes drops loose,** if you like: it can restart the game every 5 minutes, as Steam Game Idler does. It's off until you turn it on in the games list (`g`, then `s`).
+- **Your games, in your order.** Rank the games you want cards from first, the ones closest to dropping first are prioritised.
+- **Status Dashboard:** Includes farming progress, market value of cards, and much more.
+- **Appears offline** Enabled by default. So your friends don't get spammed by you launching games.
+- **Steps aside** While you play on another device, and carries on a minute after you stop.
 - **Windows, macOS and Linux.**
 
 ## Install
