@@ -611,7 +611,7 @@ function Invoke-Scenario {
         AppData = $appData
         InstallDir = $installDir
         Exe = Join-Path $installDir 'steamcards.exe'
-        Data = Join-Path $appData 'steamcards'
+        Data = Join-Path $localAppData 'steamcards'
         Ran = Join-Path $root 'ran'
         Path = @($basePath)
         Result = $null
@@ -948,7 +948,7 @@ try {
         Write-FakeBinary -Version '0.2.0' -Path $s.Exe
         Write-FakeConfig $s.Data
         # Another app's, beside them.
-        $other = Join-Path $s.AppData 'another-app'
+        $other = Join-Path $s.LocalAppData 'another-app'
         Write-FakeConfig $other
         $r = Invoke-Uninstaller $s @{ STEAMCARDS_DELETE_DATA = '1' }
         Assert-ExitCode $r 0

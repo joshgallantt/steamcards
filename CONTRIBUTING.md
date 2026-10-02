@@ -72,9 +72,9 @@ Your sign-in and choices are in one file, `config.json`, in a folder of steamcar
 | --- | --- |
 | macOS | `~/Library/Application Support/steamcards` |
 | Linux | `$XDG_CONFIG_HOME/steamcards` when `XDG_CONFIG_HOME` is set to a full path, otherwise `~/.config/steamcards` |
-| Windows | `%APPDATA%\steamcards` |
+| Windows | `%LOCALAPPDATA%\steamcards` |
 
-That's [`dirs::config_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_dir.html), from Rust's `dirs` crate, plus `steamcards`. It's the only folder of yours the uninstall scripts delete: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
+That's [`dirs::config_local_dir()`](https://docs.rs/dirs/latest/dirs/fn.config_local_dir.html), from Rust's `dirs` crate, plus `steamcards`. On Windows it's this computer's own folder, not the roaming `%APPDATA%` that follows you to other PCs on a network: your sign-in is this computer's session with Steam, and two PCs sharing it would knock each other off. It's the only folder of yours the uninstall scripts delete: a config file you keep elsewhere with `STEAMCARDS_CONFIG` stays where it is.
 
 One steamcards at a time uses a config file: two would sign on to Steam as the same session and knock each other off. While one runs, it holds `config.lock` beside the config file, and a second says so and quits. To run two, give the second a config file of its own with `STEAMCARDS_CONFIG`.
 

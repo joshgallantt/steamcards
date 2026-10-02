@@ -8,6 +8,7 @@ disallowed-methods = [
     { path = "std::env::set_var", reason = "pass values as arguments, not through the environment" },
     { path = "std::env::remove_var", reason = "pass values as arguments, not through the environment" },
     { path = "dirs::config_dir", reason = "resolve paths in app/src/settings.rs and pass them in" },
+    { path = "dirs::config_local_dir", reason = "resolve paths in app/src/settings.rs and pass them in" },
     { path = "dirs::home_dir", reason = "resolve paths in app/src/settings.rs and pass them in" },
 ]
 

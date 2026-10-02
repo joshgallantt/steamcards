@@ -13,7 +13,8 @@ use anyhow::anyhow;
 use debug_log::DebugLog;
 
 pub(crate) struct Settings {
-    /// `$STEAMCARDS_CONFIG`, or `<config-dir>/steamcards/config.json`.
+    /// `$STEAMCARDS_CONFIG`, or `<config-dir>/steamcards/config.json`, where
+    /// `<config-dir>` is this computer's own: on Windows, `%LOCALAPPDATA%`.
     pub config_path: PathBuf,
     /// The market's prices, in a file of their own beside the config file:
     /// `prices.json`.
@@ -25,8 +26,12 @@ impl Settings {
     /// `headless` sends debug lines to stderr when `$STEAMCARDS_DEBUG` is
     /// unset, since nothing owns the screen.
     pub(crate) fn from_environment(headless: bool) -> anyhow::Result<Self> {
+        // This computer's folder for settings. On Windows that's the local
+        // one, not the roaming one that follows a user to other PCs: the
+        // sign-in is this computer's session with Steam, and two PCs sharing
+        // it would knock each other off. On macOS and Linux they're the same.
         let config_dir = || {
-            dirs::config_dir()
+            dirs::config_local_dir()
                 .map(|d| d.join("steamcards"))
                 .ok_or_else(|| anyhow!("could not determine config directory"))
         };

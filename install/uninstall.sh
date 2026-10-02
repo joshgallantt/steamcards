@@ -38,9 +38,9 @@ case "${HOME:-}" in
 esac
 
 # Your sign-in, choices and saved prices are in the folder steamcards keeps
-# them in: the one Rust's dirs crate gives it for settings
-# (dirs::config_dir), plus steamcards. It's the only folder this ever
-# deletes.
+# them in: the one Rust's dirs crate gives it for this computer's settings
+# (dirs::config_local_dir, the same as dirs::config_dir on macOS and Linux),
+# plus steamcards. It's the only folder this ever deletes.
 if [ "$(uname -s)" = Darwin ]; then
     data="$HOME/Library/Application Support/steamcards"
 else

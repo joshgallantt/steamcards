@@ -7,8 +7,8 @@
 # removes it the way it was installed: a copy that cargo built with cargo, and
 # any other by deleting it (the whole folder, when it's that one). It takes
 # that folder off your user PATH too, where install.ps1 put it. Then it asks
-# whether to delete your sign-in and choices, in %APPDATA%\steamcards, as
-# well. Where it can't ask, it keeps them. To answer before it asks:
+# whether to delete your sign-in and choices, in %LOCALAPPDATA%\steamcards,
+# as well. Where it can't ask, it keeps them. To answer before it asks:
 #
 #   $env:STEAMCARDS_DELETE_DATA=1  delete your sign-in and choices, without asking
 #   $env:STEAMCARDS_DELETE_DATA=0  keep them, without asking
@@ -21,10 +21,10 @@
 
     $installDir = Join-Path $env:LOCALAPPDATA 'Programs\steamcards'
     # Your sign-in, choices and saved prices are in the folder steamcards
-    # keeps them in: the one Rust's dirs crate gives it for settings
-    # (dirs::config_dir, which is %APPDATA%), plus steamcards. It's the only
-    # folder of yours this ever deletes.
-    $data = Join-Path $env:APPDATA 'steamcards'
+    # keeps them in: the one Rust's dirs crate gives it for this computer's
+    # settings (dirs::config_local_dir, which is %LOCALAPPDATA%), plus
+    # steamcards. It's the only folder of yours this ever deletes.
+    $data = Join-Path $env:LOCALAPPDATA 'steamcards'
 
     # Which steamcards is installed, if any: the one in the install folder,
     # or else the first one on PATH.
