@@ -22,7 +22,7 @@ done, and move it into a numbered section if it grows.
 - [~] Redesign the UI for card farming, not streamdrops' layout: overall
       progress, progress per game, the cards that dropped this session,
       what each card is worth, the session's value, and the time and value
-      to finish. See section 3.
+      to finish. See section 2.
 
 ---
 
@@ -31,26 +31,7 @@ done, and move it into a numbered section if it grows.
 - [ ] Save a real badge page as a test fixture (the current fixtures are
       modelled on ASF's selectors).
 
-## 2. Release `[~]`
-
-### Going public
-
-In this order, on the day:
-
-- [ ] Check the history once more: `git log --all -p` for anything
-      personal. Rewriting it is only simple before anyone has cloned it.
-- [ ] Make the repository public (Settings → General → Danger zone).
-- [ ] Turn on private vulnerability reporting, which the security policy's
-      "Report a vulnerability" link needs:
-      `gh api -X PUT repos/joshgallantt/steamcards/private-vulnerability-reporting`.
-- [ ] `cargo xtask protect`: the ruleset for `main`. GitHub applies it to a
-      private repository only with GitHub Pro.
-- [ ] Check the one-liners install and uninstall a release: the release
-      workflow does it once the repository is public, and skipped it while
-      it's private.
-- [ ] Check the README's screenshots show on GitHub.
-
-## 3. The redesign `[~]`
+## 2. The redesign `[~]`
 
 - [~] Try it on the real account (2026-09-30). The wallet's currency came
       through, prices are looked up at the intended pace, and Steam lists
