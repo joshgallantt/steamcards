@@ -155,9 +155,11 @@ In this order, on the day:
       `gh api -X PUT repos/joshgallantt/steamcards/private-vulnerability-reporting`.
 - [ ] `cargo xtask protect`: the rulesets for `main` and tags. GitHub applies
       them to a private repository only with GitHub Pro.
-- [ ] The first release, v0.1.0: `cargo xtask release 0.1.0`. It fills in
-      the Homebrew formula's checksums, and the release workflow installs
-      and uninstalls it with the one-liners to check them.
+- [x] The first release, v0.1.0 (2026-10-02): `cargo xtask release 0.1.0`.
+      It filled in the Homebrew formula's checksums.
+- [ ] Check the one-liners install and uninstall a release: the release
+      workflow does it once the repository is public, and skipped it while
+      it's private.
 - [x] Take the "hasn't had its first release yet" paragraph out of the
       README's Install section.
 - [ ] Check the README's screenshots show on GitHub.
