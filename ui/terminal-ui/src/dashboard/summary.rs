@@ -24,6 +24,9 @@ pub struct Value {
 /// The dashboard's summary: this session, what's left, and every game.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Summary {
+    /// How long this session has played: waiting for another device, and
+    /// pauses, left out.
+    pub session_played: Duration,
     /// The cards that dropped this session, each copy counted.
     pub session_cards: usize,
     /// What they're worth, once any is priced.
@@ -81,6 +84,7 @@ impl Summary {
         };
 
         Self {
+            session_played: session.time_played(now),
             session_cards: session.drops.len(),
             session_value,
             cards_to_go,

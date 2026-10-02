@@ -16,7 +16,7 @@
 
 - **Sign in with your phone:** scan a QR code with the Steam app. No password is typed in.
 - **Your games, in your order.** Rank the games you want cards from first; the rest follow, the ones closest to dropping first.
-- **See what you've got, and what it's worth.** The cards that dropped this session, each at its Steam market price; how many are left, and about how long they'll take; and what it'll all be worth when every card has dropped.
+- **See what you've got, and what it's worth.** How long this session has been farming, and the cards that dropped in it, each at its Steam market price; how many are left, and about how long they'll take; and what it'll all be worth when every card has dropped.
 - **Every game with cards in one list,** with its drops and what they're worth. Open one to see its set: how many of each card you have (a card can drop twice), and what each is worth.
 - **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.

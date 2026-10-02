@@ -460,17 +460,22 @@ fn render_summary(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, s: &Summary) {
     let label = |text: &str| dim(format!(" {}", fit(text, LABEL - 1)));
     let reading = cx.library.is_empty();
 
-    // This session: its cards, and what they're worth.
-    let session: Vec<Span<'static>> = if s.session_cards == 0 {
-        vec![dim("no cards yet")]
+    // This session: how long it has played, its cards, and what they're
+    // worth.
+    let mut session: Vec<Span<'static>> = Vec::new();
+    if !s.session_played.is_zero() {
+        session.push(Span::raw(elapsed(s.session_played)));
+        session.push(dim(" · "));
+    }
+    if s.session_cards == 0 {
+        session.push(dim("no cards yet"));
     } else {
-        let mut v = vec![Span::styled(cards(s.session_cards as u64), theme::bold())];
+        session.push(Span::styled(cards(s.session_cards as u64), theme::bold()));
         if let Some(worth) = s.session_value {
-            v.push(dim(" · "));
-            v.push(Span::styled(value(worth), theme::strong(GOOD)));
+            session.push(dim(" · "));
+            session.push(Span::styled(value(worth), theme::strong(GOOD)));
         }
-        v
-    };
+    }
     // What's to go: most to least detailed.
     let to_go: Vec<Vec<Span<'static>>> = if reading {
         vec![vec![dim("reading your badges")]]

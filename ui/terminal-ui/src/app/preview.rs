@@ -385,8 +385,8 @@ async fn previews() {
     assert!(big.contains("farming Portal 2 · next check in 12m"));
     assert!(big.contains("cardfarmer · appears offline"));
     assert!(
-        big.contains("This session  5 cards · £0.84+"),
-        "every copy counted"
+        big.contains("This session  1h 35m · 5 cards · £0.84+"),
+        "how long it has played, and every copy counted"
     );
     assert!(big.contains("To go  15 cards · 5 games · about 8 hours"));
     assert!(big.contains("All games") && big.contains("━") && big.contains("11 of 28"));

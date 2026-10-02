@@ -13,7 +13,7 @@ data.
 
 ```
  header       what's happening                     account · appears offline   ? help
- summary      This session  cards · value          To go  cards · games · time
+ summary      This session  time · cards · value   To go  cards · games · time
               All games     ━━━━━━────  received of all · when done ≈ value
  Games                                       │ This session
    one row per game, in farm order            │   one row per card, newest first
@@ -23,7 +23,7 @@ data.
 
 ```mockup 120x30 the dashboard, farming
  steamcards   ● farming Portal 2 · next check in 12m                            cardfarmer · appears offline    ?  help
- This session  5 cards · £0.84+     To go  15 cards · 5 games · about 8 hours
+ This session  1h 35m · 5 cards · £0.84+     To go  15 cards · 5 games · about 8 hours
  All games     ━━━━━━━━━━━━━━━━━━━━━━━━────────────────────────────────────  11 of 28 · when done ≈ £2.03+
 ╭ Games ────────────────────────────────────────────────────── 5 to go ╮╭ This session ────────────── 5 cards · £0.84+ ╮
 │       GAME                                           CARDS   TO COME ││ 14:04 Portal 2  ⠋ which card?              … │
@@ -57,7 +57,7 @@ data.
 | Part | Shows |
 | --- | --- |
 | Header | What's happening: farming a game and when its cards are next checked, building hours, waiting while another device plays and when farming carries on after it, paused, reading the badges, nothing to farm, an error and when it's tried again, or the sign-in. Then the account and whether it appears offline. |
-| This session | The cards that dropped this session, each copy counted, and what they're worth. |
+| This session | How long this session has played (waiting for another device and pauses left out), then the cards that dropped, each copy counted, and what they're worth. |
 | To go | The card drops still to come in the games that will be farmed, how many games, and about how long: learnt from this session's drops, assuming half an hour a drop until two have dropped. |
 | All games | Every game with cards: the drops received of all there are, as a gauge. When done: what this session's cards and those still to come will be worth. |
 | Games | Each game, in the order it's farmed: ▶ farming, ▷ building hours, #1 its priority, ✕ skipped, ✓ done (shown with c). CARDS is drops received of its total. TO COME is what its drops still to come are worth, at its set's average price. |
@@ -134,7 +134,7 @@ still has this session's count and value.
 
 ```mockup 80x24 80 columns
  steamcards   ● farming Portal 2                    cardfarmer · appears offline
- This session  5 cards · £0.84+     To go  15 cards · 5 games · about 8 hours
+ This session  1h 35m · 5 cards · £0.84+     To go  15 cards · about 8 hours
  All games     ━━━━━━━━━━━━━────────────────────  11 of 28 · when done ≈ £2.03+
 ╭ Games ────────────────────────────────────────────────────────────── 5 to go ╮
 │       GAME                                                   CARDS   TO COME │
@@ -161,7 +161,7 @@ still has this session's count and value.
 
 ```mockup 60x16 the smallest
  steamcards   ● farming Portal 2             appears offline
- This session  5 cards · £0.84+     To go  15 cards
+ This session  1h 35m · 5 cards · £0.84+     To go  15 cards
  All games     ━━━━━────────  11 of 28 · when done ≈ £2.03+
 ╭ Games ────────────────────────────────────────── 5 to go ╮
 │       GAME                               CARDS   TO COME │
