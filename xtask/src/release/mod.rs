@@ -3,9 +3,9 @@
 //!
 //! 1. **Checks** a release can be made: the GitHub CLI is signed in, and this
 //!    is `main` with nothing uncommitted, level with GitHub.
-//! 2. **Prepares** it here: works out the version, bumps `Cargo.toml` and
-//!    `Cargo.lock`, runs every CI check, then commits "Release vX.Y.Z" and
-//!    tags it.
+//! 2. **Prepares** it here: works out the version, runs every CI check on
+//!    the code as it is, then bumps `Cargo.toml` and `Cargo.lock`, commits
+//!    "Release vX.Y.Z" and tags it.
 //! 3. **Asks**, then **publishes**: pushes `main` and the tag together.
 //!    Pushing `main` runs the tests on the release commit, and the tag starts
 //!    `.github/workflows/release.yml`, which waits for them to pass,
@@ -245,7 +245,7 @@ struct Release<'a> {
 }
 
 impl Release<'_> {
-    /// 2. Bumps the version, runs every check, then commits and tags it.
+    /// 2. Runs every check, then bumps the version, commits and tags it.
     fn prepare(&self) -> Result<(), String> {
         let bump = match self.version.precedence(&self.current) {
             Ordering::Less => {
@@ -264,35 +264,21 @@ impl Release<'_> {
         } else {
             println!("• Releasing {}, the version Cargo.toml has.", self.version);
         }
-        if bump {
-            let manifest_path = self.root.join("Cargo.toml");
-            let manifest = read(&manifest_path)?;
-            let (line, _) = field(&manifest, "version").ok_or(NO_VERSION)?;
-            let bumped = set_line(&manifest, line, &format!("version = \"{}\"", self.version));
-            write(&manifest_path, &bumped)?;
-            // Cargo.lock records every crate's version too.
-            step(
-                self.root,
-                crate::CARGO,
-                &["update", "--workspace", "--offline", "--quiet"],
-            )?;
-        }
 
+        // On the code as it is, before the version changes: a failed check
+        // leaves nothing to undo. The bump changes nothing the checks look
+        // at but the version itself.
         println!("• Running every CI check…");
         if !crate::run(&crate::CI) {
-            if bump {
-                let mut restore = vec!["checkout", "--"];
-                restore.extend(RELEASE_FILES);
-                output(self.root, "git", &restore)?;
-            }
-            return Err("a check failed, so nothing was committed or tagged".into());
+            return Err("a check failed, so nothing was bumped, committed or tagged".into());
         }
 
-        if bump {
-            let message = format!("Release {}", self.tag);
-            let mut commit = vec!["commit", "--quiet", "-m", message.as_str(), "--"];
-            commit.extend(RELEASE_FILES);
-            step(self.root, "git", &commit)?;
+        if bump && let Err(e) = self.bump() {
+            // Back as it was, so the same command can run again.
+            let mut restore = vec!["checkout", "--"];
+            restore.extend(RELEASE_FILES);
+            output(self.root, "git", &restore)?;
+            return Err(e);
         }
         let annotation = format!("steamcards {}", self.version);
         output(
@@ -302,6 +288,36 @@ impl Release<'_> {
         )?;
         println!("✓ Tagged {}. Nothing has left this machine yet.", self.tag);
         Ok(())
+    }
+
+    /// Bumps Cargo.toml's version, and Cargo.lock's record of it, and commits
+    /// the two as "Release vX.Y.Z".
+    fn bump(&self) -> Result<(), String> {
+        let manifest_path = self.root.join("Cargo.toml");
+        let manifest = read(&manifest_path)?;
+        let (line, _) = field(&manifest, "version").ok_or(NO_VERSION)?;
+        let bumped = set_line(&manifest, line, &format!("version = \"{}\"", self.version));
+        write(&manifest_path, &bumped)?;
+        // Cargo.lock records every crate's version too.
+        step(
+            self.root,
+            crate::CARGO,
+            &["update", "--workspace", "--offline", "--quiet"],
+        )?;
+        // Every check has just passed, the pre-commit hook's among them, and
+        // this changes the version alone: the hook would only build it all
+        // again. GitHub tests the commit before the release builds.
+        let message = format!("Release {}", self.tag);
+        let mut commit = vec![
+            "commit",
+            "--quiet",
+            "--no-verify",
+            "-m",
+            message.as_str(),
+            "--",
+        ];
+        commit.extend(RELEASE_FILES);
+        step(self.root, "git", &commit)
     }
 
     /// Refuses a release with nothing in it: no commits since the last one,

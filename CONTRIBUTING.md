@@ -530,7 +530,7 @@ It needs the [GitHub CLI](https://cli.github.com), signed in (`gh auth login`). 
 What it does:
 
 1. **Checks** you're on `main`, with nothing uncommitted, level with GitHub.
-2. **Prepares the release on your machine.** It works out the version, bumps `Cargo.toml` and `Cargo.lock`, and runs `cargo xtask ci`. Then it commits "Release vX.Y.Z" and tags it.
+2. **Prepares the release on your machine.** It works out the version and runs `cargo xtask ci` on the code as it is, so a failed check leaves nothing to undo. Then it bumps `Cargo.toml` and `Cargo.lock`, commits "Release vX.Y.Z" and tags it. The commit skips the pre-commit hook, whose checks have just passed; GitHub tests it before the release builds.
 3. **Asks, then pushes** `main` and the tag together. `--yes` skips the question.
 4. **Follows the release build** ([`release.yml`](.github/workflows/release.yml)) to the end. The build:
    - waits for the tests to pass on the tagged commit, which pushing it to `main` started;
