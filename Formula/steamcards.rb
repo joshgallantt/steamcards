@@ -12,19 +12,19 @@
 class Steamcards < Formula
   desc "Farms your Steam trading cards from the terminal"
   homepage "https://github.com/joshgallantt/steamcards"
-  version "0.1.3"
+  version "0.1.4"
   license "MIT"
 
   depends_on :macos
 
   on_arm do
-    url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.3/steamcards-aarch64-apple-darwin.tar.gz"
-    sha256 "2f06ae5647ec62a287edfa7449ae8dbf162ed3f052ab9d9ac71a386c0a7675d2"
+    url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.4/steamcards-aarch64-apple-darwin.tar.gz"
+    sha256 "8c95b5e6c43e08f16bfb5f5ce6de962dca44810baf5cb341d19297cfac92754c"
   end
 
   on_intel do
-    url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.3/steamcards-x86_64-apple-darwin.tar.gz"
-    sha256 "39793b25d691d1127bd88bd2114acceb459dc19a5a2188014879986cca4068bc"
+    url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.4/steamcards-x86_64-apple-darwin.tar.gz"
+    sha256 "fe366acd1acb249f253247deb7876799a5b24b1bc26fa6f2af71d8e0380bd7a2"
   end
 
   def install
