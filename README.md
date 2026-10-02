@@ -1,24 +1,23 @@
 # steamcards
 
 [![Tests](https://github.com/joshgallantt/steamcards/actions/workflows/tests.yml/badge.svg)](https://github.com/joshgallantt/steamcards/actions/workflows/tests.yml)
-[![macOS](https://img.shields.io/badge/macOS-supported-2ea44f)](#macos)
-[![Linux](https://img.shields.io/badge/Linux-supported-2ea44f)](#linux)
+[![macOS](https://img.shields.io/badge/macOS-supported-2ea44f)](#macos-and-linux)
+[![Linux](https://img.shields.io/badge/Linux-supported-2ea44f)](#macos-and-linux)
 [![Windows](https://img.shields.io/badge/Windows-supported-2ea44f)](#windows)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![unsafe: forbidden](https://img.shields.io/badge/unsafe-forbidden-2ea44f)](CONTRIBUTING.md#the-rules-the-build-enforces)
 ![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange?logo=rust)
 
-**Get your Steam trading cards without playing for them.** steamcards plays your games in the background, so their cards drop while you get on with your day, and shows you what they're worth. Nothing is installed or launched: Steam is simply told what's being played, the way the Steam client tells it.
+**Get your Steam trading cards without playing for them.** steamcards plays your games in the background, so their cards drop while you get on with your day, and shows you what they're worth. Nothing is installed or launched: it tells Steam what's being played, the way the Steam client does, so it takes a tiny fraction of the power a running game would.
 
 ![steamcards farming Steam trading cards: this session's cards and what they're worth, how many are left and about how long they'll take, every game with its drops, and the cards that dropped today](docs/images/dashboard.svg)
 
 ## Features
 
-- **Sign in with your phone:** scan a QR code with the Steam app. No password is typed in.
+- **Sign in with your phone:** scan a QR code with the Steam app, so steamcards never sees your password.
 - **Your games, in your order.** Rank the games you want cards from first; the rest follow, the ones closest to dropping first.
-- **See what you've got, and what it's worth.** How long this session has been farming, and the cards that dropped in it, each at its Steam market price; how many are left, and about how long they'll take; and what it'll all be worth when every card has dropped.
-- **Every game with cards in one list,** with its drops and what they're worth. Open one to see its set: how many of each card you have (a card can drop twice), and what each is worth.
-- **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
+- **See what you've got, and what it's worth:** this session's time and cards at Steam market prices, how many are left and how long they'll take, and every game's set, card by card.
+- **Appears offline** while farming, unless you'd rather not: your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.
 - **Shakes drops loose,** if you like: it can restart the game every 5 minutes, as Steam Game Idler does. It's off until you turn it on in the games list (`g`, then `s`).
 - **Windows, macOS and Linux.**
@@ -27,22 +26,16 @@
 
 Paste the line for your computer into a terminal, and press Enter.
 
-### macOS
+### macOS and Linux
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.sh | sh
 ```
 
-Or with [Homebrew](https://brew.sh):
+Or, on macOS, with [Homebrew](https://brew.sh):
 
 ```sh
 brew tap joshgallantt/steamcards https://github.com/joshgallantt/steamcards && brew install joshgallantt/steamcards/steamcards
-```
-
-### Linux
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.sh | sh
 ```
 
 ### Windows
@@ -57,7 +50,7 @@ To update, run the same line again (with Homebrew, `brew upgrade steamcards`). S
 
 ## Getting started
 
-Type `steamcards` and press Enter. The first time, it walks you through signing in with the Steam app and picking the games you want cards from first. Then leave it running: it remembers everything for next time.
+Type `steamcards` and press Enter. The first time, it walks you through signing in and picking the games you want cards from first. Then leave it running: it remembers everything for next time.
 
 Press `?` at any time to see what the keys do, and `enter` on a game to see its cards. To run without the dashboard, on a server or in a background terminal, see [running it without the dashboard](CONTRIBUTING.md#without-the-dashboard).
 
@@ -75,11 +68,11 @@ Press `?` at any time to see what the keys do, and `enter` on a game to see its 
 
 Steam won't drop cards for some games whatever plays them: family-shared games, free-to-play games you haven't spent on, games marked private, and games on limited accounts. steamcards moves on from a game that drops nothing for 10 hours.
 
-Start a game on another computer while steamcards farms, and Steam says you're already playing elsewhere, and offers to close that game: let it. steamcards waits until you stop playing, and carries on a minute after.
+If you start a game on another computer while steamcards farms, Steam says you're already playing elsewhere, and offers to close that game: let it.
 
 ## Your data, and uninstalling
 
-Your sign-in and choices stay on your computer, in one file only you can read, and steamcards talks to nobody but Steam. The market's prices of your cards are kept beside it, so a restart doesn't look every game up again. Signing out (press `a`) forgets the sign-in and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.
+Your sign-in and choices stay on your computer, in one file only you can read, with your cards' market prices beside it, so a restart doesn't look every game up again. steamcards talks to nobody but Steam, and collects nothing: no analytics, no tracking. Signing out (press `a`) forgets the sign-in, and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.
 
 To uninstall, paste the line for your computer. It works however you installed steamcards, and asks whether to delete your sign-in and choices too.
 
@@ -99,20 +92,9 @@ irm https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/unins
 
 steamcards is unofficial: Valve doesn't make it, endorse it or support it.
 
-**Why it exists.** Trading cards drop for games you play, so people leave games running for hours just to get them, keeping a computer busy drawing frames nobody watches. steamcards gets the same cards without launching anything: it tells Steam what's being played, the way the Steam client does, so it uses a tiny fraction of the power. It's open source, so anyone can check exactly what it does, and your sign-in stays on your computer, shared with nobody but Steam.
+**Why it exists.** Trading cards drop for games you play, so people leave games running for hours just to get them, keeping a computer busy drawing frames nobody watches. steamcards gets the same cards without that, and it's open source, so anyone can check exactly what it does.
 
-**How it works.** It only asks Steam for what the Steam client and the community site ask for:
-
-- **Signing in** works the way the Steam app approves any sign-in: you scan a QR code on your phone, so steamcards never sees your password.
-- **Playing** means telling Steam which games are being played, as the Steam client does when you launch one, without launching anything.
-- **Reading** your badges, your card sets and the market's prices uses the same pages you'd look at yourself, one at a time, at a gentle pace.
-
-**What it won't do.**
-
-- **Use anyone's account but yours.** It holds one Steam account. It isn't for farming cards across many accounts.
-- **Get around Steam's security.** It never fakes or bypasses a check, and when Steam asks it to slow down, it does.
-- **Sell your cards.** It shows what they're worth; selling them is up to you.
-- **Collect anything.** No analytics, no tracking.
+**What it asks Steam for.** Only what the Steam client and the community site ask for: your badges, your card sets and the market's prices come from the same pages you'd look at yourself, one at a time, at a gentle pace, and when Steam asks it to slow down, it does. It holds one account, yours, never fakes or bypasses a check, and leaves selling your cards to you.
 
 **Your responsibility.** Steam can change how its client works, or what it allows, at any time, and steamcards may stop working until it catches up. Running games automatically may be against the [Steam Subscriber Agreement](https://store.steampowered.com/subscriber_agreement/): it's up to you to read it and decide. Valve could restrict an account that uses it, so don't use one you can't afford to lose. As its [licence](LICENSE) says, steamcards comes with no warranty, and its authors aren't responsible for what happens to your account or your cards. Use it at your own risk.
 
