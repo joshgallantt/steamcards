@@ -537,7 +537,7 @@ What it does:
    - builds macOS (Apple silicon and Intel), Linux (x86_64 and arm64, static) and Windows (x86_64), and checks each build runs and reports the tag's version;
    - publishes them as a GitHub release, with `SHA256SUMS` and, for a public repository, [build-provenance attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations). Its notes say how to install it, then GitHub lists the pull requests merged since the last release, grouped as [`.github/release.yml`](.github/release.yml) says. Edit them on the release's page to add anything else;
    - for a public repository, installs the release with the install scripts, the way users do on each platform, checks it runs, and uninstalls it again.
-5. **Points the [Homebrew formula](Formula/steamcards.rb) at the release**, and pushes that to `main`. [`homebrew.yml`](.github/workflows/homebrew.yml) then installs it with Homebrew and checks it runs.
+5. **Points the [Homebrew formula](Formula/steamcards.rb) at the release**, and pushes that to `main`. That commit skips the pre-commit hook too: it changes the formula alone. [`homebrew.yml`](.github/workflows/homebrew.yml) then installs it with Homebrew and checks it runs.
 
 It needs no secrets, tokens or repository settings. The workflows never push to `main`; only you do, which is what lets `main` stay protected.
 

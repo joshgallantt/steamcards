@@ -502,10 +502,21 @@ impl Release<'_> {
             Pointed::Changed => {
                 println!("• Pointing Homebrew at {}.", self.tag);
                 let message = format!("Point the Homebrew formula at {}", self.tag);
+                // The formula alone: the pre-commit hook would only build and
+                // test the code again, which every check passed before the
+                // release was tagged.
                 step(
                     self.root,
                     "git",
-                    &["commit", "--quiet", "-m", &message, "--", FORMULA],
+                    &[
+                        "commit",
+                        "--quiet",
+                        "--no-verify",
+                        "-m",
+                        &message,
+                        "--",
+                        FORMULA,
+                    ],
                 )?;
                 step(self.root, "git", &["push", "--quiet", "origin", "main"])?;
                 println!("✓ Homebrew has {}.", self.version);
