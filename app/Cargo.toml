@@ -1,6 +1,6 @@
 [package]
 name = "steamcards"
-description = "Farms Steam trading cards from the terminal."
+description = "Automatically claims your pending Steam Trading Cards."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

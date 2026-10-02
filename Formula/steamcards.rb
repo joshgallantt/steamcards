@@ -10,7 +10,7 @@
 # to be followed by its sha256 line. Until the first release is published,
 # the checksums are placeholders, and installing it fails.
 class Steamcards < Formula
-  desc "Farms your Steam trading cards from the terminal"
+  desc "Automatically claims your pending Steam Trading Cards"
   homepage "https://github.com/joshgallantt/steamcards"
   version "0.1.4"
   license "MIT"
