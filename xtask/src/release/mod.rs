@@ -40,13 +40,13 @@ use std::{
 
 use homebrew::{FORMULA, Pointed};
 use serde_json::Value;
-use version::{Bump, Version};
+use version::Version;
 
-const USAGE: &str = "usage: cargo xtask release <patch | minor | major | X.Y.Z> [--yes]
+const USAGE: &str = "usage: cargo xtask release [X.Y.Z] [--yes]
 
-  patch, minor or major works the next version out from Cargo.toml's, or give
-  one, like 0.2.0 or 0.2.0-rc.1. It asks before it publishes anything, unless
-  given --yes.";
+  Releases the next version: Cargo.toml's, with its last number one higher
+  (0.1.0, then 0.1.1). Give a version to jump to it instead, like 1.0.0. It
+  asks before it publishes anything, unless given --yes.";
 
 const WORKFLOW: &str = "release.yml";
 
@@ -67,7 +67,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let current = Version::parse(field(&manifest, "version").ok_or(NO_VERSION)?.1)?;
     let version = match wanted {
         Wanted::Exactly(version) => version,
-        Wanted::Bump(bump) => {
+        Wanted::Next => {
             let unfinished = format!("v{current}");
             if tagged_here(root, &unfinished) && !tagged_on_github(root, &unfinished)? {
                 return Err(format!(
@@ -75,7 +75,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<(), String> {
                      `cargo xtask release {current}`, or drop it with `git tag -d {unfinished}`."
                 ));
             }
-            current.bumped(bump)
+            current.next()
         }
     };
     let release = Release {
@@ -125,10 +125,11 @@ pub(crate) fn print_notes(root: &Path, args: &[String]) -> Result<(), String> {
         [tag, flag] if flag == "--attested" => (tag, true),
         _ => return Err(NOTES_USAGE.into()),
     };
-    let version = Version::parse(tag.strip_prefix('v').ok_or(NOTES_USAGE)?)?;
+    // Only a release's tag: v and its version.
+    Version::parse(tag.strip_prefix('v').ok_or(NOTES_USAGE)?)?;
     let manifest = read(&root.join("Cargo.toml"))?;
     let repository = field(&manifest, "repository").ok_or(NO_REPOSITORY)?.1;
-    print!("{}", notes::release_notes(&version, repository, attested));
+    print!("{}", notes::release_notes(repository, attested));
     Ok(())
 }
 
@@ -150,28 +151,26 @@ pub(crate) fn point_homebrew(root: &Path, args: &[String]) -> Result<(), String>
 
 /// The version asked for.
 enum Wanted {
+    /// The one after Cargo.toml's.
+    Next,
     Exactly(Version),
-    Bump(Bump),
 }
 
 fn arguments(args: &[String]) -> Result<(Wanted, bool), String> {
-    let mut wanted = None;
+    let mut wanted = Wanted::Next;
     let mut yes = false;
     for arg in args {
         match arg.as_str() {
             "--yes" | "-y" => yes = true,
-            word if !word.starts_with('-') && wanted.is_none() => {
-                wanted = Some(match Bump::from_word(word) {
-                    Some(bump) => Wanted::Bump(bump),
-                    None => {
-                        Wanted::Exactly(Version::parse(word.strip_prefix('v').unwrap_or(word))?)
-                    }
-                });
+            word if !word.starts_with('-') && matches!(wanted, Wanted::Next) => {
+                let version = Version::parse(word.strip_prefix('v').unwrap_or(word))
+                    .map_err(|e| format!("{e}\n\n{USAGE}"))?;
+                wanted = Wanted::Exactly(version);
             }
             _ => return Err(USAGE.into()),
         }
     }
-    Ok((wanted.ok_or(USAGE)?, yes))
+    Ok((wanted, yes))
 }
 
 /// What `gh` says about the repository.
@@ -247,7 +246,7 @@ struct Release<'a> {
 impl Release<'_> {
     /// 2. Runs every check, then bumps the version, commits and tags it.
     fn prepare(&self) -> Result<(), String> {
-        let bump = match self.version.precedence(&self.current) {
+        let bump = match self.version.cmp(&self.current) {
             Ordering::Less => {
                 return Err(format!(
                     "{} is older than Cargo.toml's version, {}",
@@ -338,7 +337,11 @@ impl Release<'_> {
             &["log", "--no-merges", "--format=%s", &range],
         )?;
         if worth_noting(&log).is_empty() {
-            return Err(format!("nothing has changed since {last}"));
+            let version = last.trim_start_matches('v');
+            return Err(format!(
+                "nothing has changed since {last}. If its release stopped part way, finish it \
+                 with `cargo xtask release {version}`."
+            ));
         }
         Ok(())
     }
@@ -482,16 +485,9 @@ impl Release<'_> {
         }
     }
 
-    /// The release workflow points Homebrew at the release. This makes sure it
-    /// did, and does it from here if not. Pre-releases stay out of Homebrew.
+    /// Points the Homebrew formula at the release, unless it's on a newer one
+    /// already, and pushes that to `main`.
     fn check_homebrew(&self) -> Result<(), String> {
-        if self.version.is_pre_release() {
-            println!(
-                "• {} is a pre-release, so Homebrew stays on the last release.",
-                self.tag
-            );
-            return Ok(());
-        }
         // Anything merged on GitHub while the release built comes first.
         step(
             self.root,
@@ -521,19 +517,9 @@ impl Release<'_> {
     fn report(&self, github: &GitHub, page: &str) {
         let raw = format!("https://raw.githubusercontent.com/{}/main", github.name);
         println!("\n✓ steamcards {} is released: {page}", self.version);
-        if self.version.is_pre_release() {
-            println!(
-                "  A pre-release: the install scripts install it only when asked for by name:"
-            );
-            println!(
-                "  curl -fsSL {raw}/install/install.sh | STEAMCARDS_VERSION={} sh",
-                self.version
-            );
-        } else {
-            println!("  macOS and Linux: curl -fsSL {raw}/install/install.sh | sh");
-            println!("  Windows:         irm {raw}/install/install.ps1 | iex");
-            println!("  Homebrew:        brew upgrade steamcards");
-        }
+        println!("  macOS and Linux: curl -fsSL {raw}/install/install.sh | sh");
+        println!("  Windows:         irm {raw}/install/install.ps1 | iex");
+        println!("  Homebrew:        brew upgrade steamcards");
         if github.private {
             println!("  The repository is private, so these work for you and collaborators only.");
         }
@@ -710,19 +696,22 @@ mod tests {
     }
 
     #[test]
-    fn the_version_is_a_bump_or_given() {
+    fn the_version_is_the_next_or_given() {
         let args = |list: &[&str]| list.iter().map(|&a| a.to_owned()).collect::<Vec<_>>();
 
-        let (wanted, yes) = arguments(&args(&["minor", "--yes"])).unwrap();
-        assert!(matches!(wanted, Wanted::Bump(Bump::Minor)) && yes);
-        let (wanted, yes) = arguments(&args(&["v0.3.0-rc.1"])).unwrap();
-        assert!(matches!(wanted, Wanted::Exactly(v) if v.to_string() == "0.3.0-rc.1") && !yes);
+        let (wanted, yes) = arguments(&args(&[])).unwrap();
+        assert!(matches!(wanted, Wanted::Next) && !yes);
+        let (wanted, yes) = arguments(&args(&["--yes"])).unwrap();
+        assert!(matches!(wanted, Wanted::Next) && yes);
+        let (wanted, yes) = arguments(&args(&["v1.0.0"])).unwrap();
+        assert!(matches!(wanted, Wanted::Exactly(v) if v.to_string() == "1.0.0") && !yes);
 
         for bad in [
-            &[][..],
-            &["0.3"],
-            &["minor", "major"],
-            &["minor", "--force"],
+            &["0.3"][..],
+            &["minor"],
+            &["1.0.0-rc.1"],
+            &["1.0.0", "2.0.0"],
+            &["1.0.0", "--force"],
         ] {
             assert!(arguments(&args(bad)).is_err(), "{bad:?}");
         }

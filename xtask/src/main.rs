@@ -22,8 +22,8 @@
 //!   With `--check` (one of the `ci` checks), fails if they're out of date.
 //! - `protect`: puts the rules for `main` and for tags (in `.github/rulesets/`)
 //!   on GitHub.
-//! - `release <patch | minor | major | X.Y.Z>`: publishes a release, from the
-//!   version bump to Homebrew. See `release/mod.rs`.
+//! - `release [X.Y.Z]`: publishes the next release, or this version, from the
+//!   checks to Homebrew. See `release/mod.rs`.
 //! - `release-notes <tag>`: a release's notes, for the release workflow.
 //! - `homebrew <tag>`: points the Homebrew formula at a published release,
 //!   as the release command does.
@@ -53,7 +53,7 @@ const CARGO: &str = env!("CARGO");
 
 const USAGE: &str = "usage: cargo xtask <setup | ci | lint | test | docs | deps | pre-commit | fix | \
                      hooks | tools [group] | dead-code | screenshots [--check] | protect | \
-                     release <patch | minor | major | X.Y.Z> | release-notes <tag> | homebrew <tag>>";
+                     release [X.Y.Z] | release-notes <tag> | homebrew <tag>>";
 
 /// A program a check runs that doesn't come with Rust.
 struct Tool {

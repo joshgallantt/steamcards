@@ -2,7 +2,7 @@
 //! release command does this once the release is published, and pushes it to
 //! `main`; `.github/workflows/homebrew.yml` then installs it and checks it.
 
-use std::{cmp::Ordering, collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use super::version::Version;
 
@@ -27,7 +27,7 @@ pub(super) fn point(root: &Path, tag: &str) -> Result<Pointed, String> {
     let path = root.join(FORMULA);
     let formula = super::read(&path)?;
     if let Some(current) = formula_version(&formula)
-        && Version::parse(current)?.precedence(&Version::parse(version)?) == Ordering::Greater
+        && Version::parse(current)? > Version::parse(version)?
     {
         return Ok(Pointed::Newer(current.to_owned()));
     }

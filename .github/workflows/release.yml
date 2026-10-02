@@ -9,8 +9,7 @@
 # 3. Publishes the archives, SHA256SUMS and (for a public repository)
 #    build-provenance attestations as a GitHub release. Its notes say how to
 #    install it, then list the pull requests merged since the last release,
-#    which GitHub writes (grouped as .github/release.yml says). A pre-release
-#    (v1.2.0-rc.1) is marked as one.
+#    which GitHub writes (grouped as .github/release.yml says).
 # 4. For a public repository: installs the release with the install scripts,
 #    the way users do, on each platform, checks it runs, and uninstalls it
 #    again with the uninstall scripts.
@@ -233,15 +232,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A pre-release is marked as one, so "latest" (what the install
-          # scripts and the releases page offer) stays on the last release.
-          pre=false
-          case "$GITHUB_REF_NAME" in *-*) pre=true ;; esac
           # GitHub writes the rest of the notes: the pull requests merged
           # since the last release, below how to install it.
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "steamcards $GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            --prerelease="$pre" dist/steamcards-* dist/SHA256SUMS
+            dist/steamcards-* dist/SHA256SUMS
 
   # The release as users get it: the install one-liners, each checked for the
   # right version, and after each, the uninstall one-liner, checked to leave
@@ -263,8 +258,6 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           version=${GITHUB_REF_NAME#v}
-          # A pre-release is installed only when asked for by name.
-          case "$version" in *-*) export STEAMCARDS_VERSION="$version" ;; esac
           curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install/install.sh" | sh
           installed=$("$HOME/.local/bin/steamcards" --version)
           if [ "$installed" != "steamcards $version" ]; then
@@ -286,7 +279,6 @@ jobs:
         shell: pwsh
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          if ($version.Contains('-')) { $env:STEAMCARDS_VERSION = $version }
           irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/install.ps1" | iex
           $installed = & "$env:LOCALAPPDATA\Programs\steamcards\steamcards.exe" --version
           if ($installed -ne "steamcards $version") {
@@ -311,7 +303,6 @@ jobs:
         shell: powershell
         run: |
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          if ($version.Contains('-')) { $env:STEAMCARDS_VERSION = $version }
           irm "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/install/install.ps1" | iex
           $installed = & "$env:LOCALAPPDATA\Programs\steamcards\steamcards.exe" --version
           if ($installed -ne "steamcards $version") {

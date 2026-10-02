@@ -95,7 +95,7 @@ They read these variables, all optional:
 
 | Variable | What it does |
 | --- | --- |
-| `STEAMCARDS_VERSION` | Install this release, e.g. `0.1.0`, instead of the latest. It's how to install a pre-release. |
+| `STEAMCARDS_VERSION` | Install this release, e.g. `0.1.0`, instead of the latest: to go back to an older one, say. |
 | `STEAMCARDS_FORCE` | `1` reinstalls, even if that version is already installed. |
 | `STEAMCARDS_INSTALL_DIR` | macOS and Linux only: install here instead of `~/.local/bin`. |
 | `STEAMCARDS_RELEASES_URL` | Download from a mirror instead of the [releases page](https://github.com/joshgallantt/steamcards/releases). It needs the same layout: `<url>/latest` redirects to `<url>/tag/vX.Y.Z`, and each release's files are in `<url>/download/vX.Y.Z/`. |
@@ -522,8 +522,10 @@ A pull request merges once the tests pass and the maintainer has reviewed it.
 One command does it, and asks once before anything leaves your machine:
 
 ```sh
-cargo xtask release minor    # or patch, major, or a version like 0.3.0-rc.1
+cargo xtask release
 ```
+
+Each release is the next version: the last number one higher, so 0.1.0, then 0.1.1, then 0.1.2. To jump instead, give the version: `cargo xtask release 0.2.0` after a big change, say, or `cargo xtask release 1.0.0` once steamcards is ready for everyone.
 
 It needs the [GitHub CLI](https://cli.github.com), signed in (`gh auth login`). It stops if nothing has changed since the last release.
 
@@ -541,9 +543,7 @@ What it does:
 
 It needs no secrets, tokens or repository settings. The workflows never push to `main`; only you do, which is what lets `main` stay protected.
 
-**If something stops it** (a failed check, Ctrl-C, a closed laptop), run the same command again with the same version: it carries on from where it stopped. Once the tag is pushed, the release itself finishes on GitHub whether or not your machine is watching; running the command again afterwards points Homebrew at it. If the build fails before publishing, nothing is published: fix it on `main` and release the next version, or move the tag to the fix (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`) and run the command again.
-
-**A pre-release** is a version with a hyphen, like `0.3.0-rc.1`. It's marked as one on GitHub, and Homebrew and the install scripts' "latest" skip it. People install it by name, with `STEAMCARDS_VERSION`.
+**If something stops it** (a failed check, Ctrl-C, a closed laptop), run it again. Before the tag is pushed, `cargo xtask release` starts over, or says which version to finish. After, give the version it was releasing, like `cargo xtask release 0.1.1`: it carries on from where it stopped. Once the tag is pushed, the release itself finishes on GitHub whether or not your machine is watching; running the command again afterwards points Homebrew at it. If the build fails before publishing, nothing is published: fix it on `main` and release the next version, or move the tag to the fix (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`) and run the command again.
 
 ---
 
