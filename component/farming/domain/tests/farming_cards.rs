@@ -543,6 +543,38 @@ async fn appearing_online_follows_the_preference() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn asked_to_shake_drops_loose_the_game_is_stopped_and_played_again_every_5_minutes() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.wants(Preferences {
+        restart_games: true,
+        ..Default::default()
+    });
+    player.starts_farming();
+    player.reads(playing).await;
+
+    player.waits(11 * MINUTE).await;
+
+    assert_eq!(
+        player.steam.played(),
+        [vec![620], vec![], vec![620], vec![], vec![620]],
+        "stopped for a moment, then played again, twice"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_game_being_farmed_is_never_restarted_unless_asked() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 5, Some(HOUR));
+    player.starts_farming();
+    player.reads(playing).await;
+
+    player.waits(11 * MINUTE).await;
+
+    assert_eq!(player.steam.played(), [vec![620]]);
+}
+
+#[tokio::test(start_paused = true)]
 async fn badges_that_cant_be_read_are_tried_again_in_five_minutes() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));

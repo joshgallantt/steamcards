@@ -42,6 +42,7 @@ impl PresentationAssembler {
                 d.preferences.set_game_tier.clone(),
                 d.preferences.set_only_priority.clone(),
                 d.preferences.set_appear_online.clone(),
+                d.preferences.set_restart_games.clone(),
             ),
             LibraryViewModel::new(d.game.get_library.clone()),
             OnboardingViewModel::new(d.account.get_account.clone()),

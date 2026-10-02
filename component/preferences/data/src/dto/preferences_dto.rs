@@ -14,6 +14,8 @@ pub(crate) struct PreferencesDto {
     only_priority: bool,
     #[serde(default)]
     appear_online: bool,
+    #[serde(default)]
+    restart_games: bool,
 }
 
 impl PreferencesDto {
@@ -23,6 +25,7 @@ impl PreferencesDto {
             skipped_games: p.skipped_games.iter().map(|g| g.0).collect(),
             only_priority: p.only_priority,
             appear_online: p.appear_online,
+            restart_games: p.restart_games,
         }
     }
 
@@ -32,6 +35,7 @@ impl PreferencesDto {
             skipped_games: self.skipped_games.into_iter().map(AppId).collect(),
             only_priority: self.only_priority,
             appear_online: self.appear_online,
+            restart_games: self.restart_games,
         }
     }
 }

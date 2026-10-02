@@ -20,6 +20,7 @@
 - **Every game with cards in one list,** with its drops and what they're worth. Open one to see its set: how many of each card you have (a card can drop twice), and what each is worth.
 - **Appears offline** while farming, if you like (it does by default): your friends don't see a pile of games, and the cards drop just the same.
 - **Steps aside** while you play on another device, and carries on a minute after you stop.
+- **Shakes drops loose,** if you like: it can restart the game every 5 minutes, as Steam Game Idler does. It's off until you turn it on in the games list (`g`, then `s`).
 - **Windows, macOS and Linux.**
 
 ## Install
@@ -110,7 +111,6 @@ steamcards is unofficial: Valve doesn't make it, endorse it or support it.
 
 - **Use anyone's account but yours.** It holds one Steam account. It isn't for farming cards across many accounts.
 - **Get around Steam's security.** It never fakes or bypasses a check, and when Steam asks it to slow down, it does.
-- **Game the drop timer** by stopping and restarting games to shake drops loose, which ArchiSteamFarm calls exploiting a Steam glitch.
 - **Sell your cards.** It shows what they're worth; selling them is up to you.
 - **Collect anything.** No analytics, no tracking.
 

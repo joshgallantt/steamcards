@@ -43,9 +43,9 @@ done, and move it into a numbered section if it grows.
       with the saved sign-in, read the badges and started farming. A first
       run's debug log couldn't open before the config's
       folder existed; fixed.
-- [ ] Stopping and restarting games to shake drops loose (SGI, xPaw,
-      steamctl): disputed, ASF calls it a glitch. Maybe later, opt-in, if
-      measured.
+- [x] Stopping and restarting games to shake drops loose (SGI, xPaw,
+      steamctl), every 5 minutes (2026-10-02): off until turned on in the
+      games list, since ASF calls it a glitch.
 - [ ] Look at farming faster (2026-09-29, "at some point"). The redesign's
       time-to-finish estimate learns from real drops, so it will show
       whether a change helps.

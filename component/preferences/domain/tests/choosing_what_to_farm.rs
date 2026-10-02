@@ -44,6 +44,16 @@ fn appearing_offline_is_the_default() {
 }
 
 #[test]
+fn restarting_games_is_off_until_asked_for() {
+    let player = Player::new();
+    assert!(!player.prefs().restart_games);
+    player.restart.call(true).unwrap();
+    assert!(player.prefs().restart_games);
+    player.restart.call(false).unwrap();
+    assert!(!player.prefs().restart_games);
+}
+
+#[test]
 fn only_priority_is_kept() {
     let player = Player::new();
     player.only.call(true).unwrap();

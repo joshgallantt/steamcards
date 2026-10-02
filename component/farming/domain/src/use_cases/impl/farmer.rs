@@ -30,7 +30,8 @@ use crate::{
         Plan, Signal,
         rules::{
             AFTER_BLOCK, AFTER_NEW_ITEMS, AFTER_TAKEN_OVER, GIVE_UP_AFTER, GIVE_UP_TIMES,
-            IDLE_LOOK, LOOK_EVERY, LOOK_EVERY_LAST, RETRY_CONNECT, RETRY_READ, TICK,
+            IDLE_LOOK, LOOK_EVERY, LOOK_EVERY_LAST, RESTART_EVERY, RESTART_PAUSE, RETRY_CONNECT,
+            RETRY_READ, TICK,
         },
     },
     service::{farm_order, plan, why_nothing},
@@ -294,6 +295,7 @@ impl Farmer {
             Instant::now() + look_every(&game)
         };
         let mut counted_to = Instant::now();
+        let mut next_restart = Instant::now() + RESTART_EVERY;
         loop {
             self.report(run, &[app_id], Mode::Cards, next_look, &prefs, r);
             let woke = self.wait(Some(next_look), token).await;
@@ -316,6 +318,19 @@ impl Farmer {
                     }
                 },
                 Some(Woke::Tick) => {
+                    // Stopped and played again, to shake a drop loose, when
+                    // the user asked for it.
+                    if prefs.restart_games && Instant::now() >= next_restart {
+                        if let Some(outcome) =
+                            self.restart(app_id, prefs.appear_online, token).await
+                        {
+                            return outcome;
+                        }
+                        // The moment it was stopped isn't playtime.
+                        counted_to = Instant::now();
+                        next_restart = Instant::now() + RESTART_EVERY;
+                        continue;
+                    }
                     let latest = self.get_preferences.call();
                     if latest == prefs {
                         continue;
@@ -390,6 +405,28 @@ impl Farmer {
                 return Outcome::Again;
             }
             next_look = Instant::now() + look_every(&game);
+        }
+    }
+
+    /// Stops the game, and plays it again a moment later, as the user asked:
+    /// a restart that may shake a drop loose. `None` once it plays again;
+    /// otherwise how farming it ended.
+    async fn restart(
+        &self,
+        app_id: AppId,
+        online: bool,
+        token: &CancellationToken,
+    ) -> Option<Outcome> {
+        if let Err(e) = self.play_games.call(&[], online).await {
+            return Some(Outcome::Lost(e.to_string()));
+        }
+        if !pause(RESTART_PAUSE, token).await {
+            return Some(Outcome::Stopped);
+        }
+        match self.play_games.call(&[app_id], online).await {
+            Ok(Playing::Here) => None,
+            Ok(Playing::Elsewhere(by)) => Some(Outcome::Elsewhere(Elsewhere::Playing(by))),
+            Err(e) => Some(Outcome::Lost(e.to_string())),
         }
     }
 

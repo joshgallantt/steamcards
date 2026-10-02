@@ -7,8 +7,9 @@ use std::sync::Arc;
 use config_file::ConfigFile;
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, PreferencesRepository,
-    SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase,
+    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, GetPreferencesUseCase,
+    PreferencesRepository, SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase,
+    SetRestartGamesUseCase,
 };
 use preferences_data::{DefaultPreferencesRepository, FilePreferencesStore, PreferencesStore};
 
@@ -17,6 +18,7 @@ pub struct PreferencesComponent {
     pub set_game_tier: Arc<dyn SetGameTierUseCase>,
     pub set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
     pub set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
+    pub set_restart_games: Arc<dyn SetRestartGamesUseCase>,
 }
 
 impl PreferencesComponent {
@@ -33,7 +35,8 @@ impl PreferencesComponent {
             get_preferences: Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
             set_game_tier: Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             set_only_priority: Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            set_appear_online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
+            set_appear_online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
+            set_restart_games: Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
         }
     }
 }

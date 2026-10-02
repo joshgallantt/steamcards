@@ -498,6 +498,16 @@ impl App {
         }
     }
 
+    fn toggle_restart_games(&mut self) {
+        match self.games.toggle_restart_games() {
+            Ok(()) if self.games.restart_games() => {
+                self.flash("Restarting the game every 5 minutes, to shake drops loose.")
+            }
+            Ok(()) => self.flash("The game plays on, without restarting."),
+            Err(e) => self.didnt_stick(e),
+        }
+    }
+
     fn toggle_appear_online(&mut self) {
         match self.games.toggle_appear_online() {
             Ok(()) if self.games.appear_online() => {
@@ -831,6 +841,7 @@ impl App {
                 }
             }
             KeyCode::Char('o') => self.toggle_only_priority(),
+            KeyCode::Char('s') => self.toggle_restart_games(),
             KeyCode::Char('r') => self.library.refresh(),
             code => v.cursor = moved(v.cursor, code, all.len()),
         }

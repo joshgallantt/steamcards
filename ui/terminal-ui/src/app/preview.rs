@@ -28,7 +28,8 @@ use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUs
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyGetLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
+    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, Preferences,
+    test_support::FakePreferencesRepository,
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
@@ -267,7 +268,8 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
             get,
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
+            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
         ),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(library())))),
         OnboardingViewModel::new(accounts),
@@ -992,7 +994,8 @@ fn showcase_app() -> App {
             get,
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
+            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
         ),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(
             showcase_library(),

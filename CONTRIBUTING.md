@@ -473,7 +473,7 @@ This runs the real farmer through hours of drops in milliseconds, on paused time
 
 ## Trying it against Steam
 
-**Only what Steam's own client does.** steamcards asks Steam only for what the Steam client and the community site ask for, at a polite pace, and farms one account. Never add anything that fakes or gets around Steam's security, or that games the drop timer: stopping and restarting games to shake drops loose is disputed (ArchiSteamFarm calls it exploiting a Steam glitch), so it isn't in steamcards. A pull request that does otherwise won't be merged.
+**Only what Steam's own client does.** steamcards asks Steam only for what the Steam client and the community site ask for, at a polite pace, and farms one account. Never add anything that fakes or gets around Steam's security. A pull request that does won't be merged.
 
 Much of what steamcards calls is undocumented and changes without notice. How farming works, cross-checked against the other farmers, is in [docs/research/steam-card-farming.md](docs/research/steam-card-farming.md); where prices, drops and the wallet come from is in [docs/research/market-and-session.md](docs/research/market-and-session.md). If you find that something changed, add to them.
 

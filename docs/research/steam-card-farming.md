@@ -144,11 +144,12 @@ taken to mean "no drops left".
 - Appear offline by default. ASF recommends it for main accounts, xPaw and
   steamctl never go online, and all say playtime still counts.
 
-**Disputed, and left out:** stopping and restarting games to shake drops
-loose. SGI, xPaw, steamctl and Idle Master's fast mode do it; ASF calls it
-exploiting a Steam glitch that may break Steam's online conduct rules, and
-refuses. Nobody publishes measurements. It could come later as an opt-in
-experiment.
+**Disputed, so off unless asked for:** stopping and restarting games to
+shake drops loose. SGI, xPaw, steamctl and Idle Master's fast mode do it;
+ASF calls it exploiting a Steam glitch that may break Steam's online conduct
+rules, and refuses. Nobody publishes measurements. steamcards does it as
+SGI does, every 5 minutes, for the game farmed alone, once the user turns it
+on (2026-10-02).
 
 **steamcards' own choices:**
 

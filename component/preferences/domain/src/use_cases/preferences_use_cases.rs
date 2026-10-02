@@ -27,3 +27,9 @@ pub trait SetOnlyPriorityUseCase: Send + Sync {
 pub trait SetAppearOnlineUseCase: Send + Sync {
     fn call(&self, online: bool) -> Result<(), PreferencesError>;
 }
+
+/// Restarts the game being farmed every 5 minutes, to shake drops loose, or
+/// leaves it playing.
+pub trait SetRestartGamesUseCase: Send + Sync {
+    fn call(&self, restart: bool) -> Result<(), PreferencesError>;
+}

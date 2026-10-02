@@ -16,6 +16,10 @@ pub struct Preferences {
     /// default), the account appears offline, and Steam counts the games
     /// just the same.
     pub appear_online: bool,
+    /// Stop the game being farmed every 5 minutes, and play it again a moment
+    /// later, to shake drops loose, as Steam Game Idler does. Off unless the
+    /// user turns it on.
+    pub restart_games: bool,
 }
 
 impl Preferences {

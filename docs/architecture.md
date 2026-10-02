@@ -219,6 +219,7 @@ with it, where a dropped `JoinHandle`'s task would go on and take the word.
 | | `SetGameTierUseCase` | Moves a game between priority (at a rank), indifferent and skip. |
 | | `SetOnlyPriorityUseCase` | Farm priority games only. |
 | | `SetAppearOnlineUseCase` | Show as online while farming, or appear offline. |
+| | `SetRestartGamesUseCase` | Restart the game farmed alone every 5 minutes, to shake drops loose, or leave it playing. Off unless turned on. |
 | farming | `FarmCardsUseCase` | Farms until cancelled, telling what happened (`FarmingEvent`) and where farming stands (`FarmingStatus`), in order, as `FarmingUpdate`s. Each run carries on the session. |
 | session | `EndSessionUseCase` | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 

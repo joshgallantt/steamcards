@@ -35,6 +35,7 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             skipped_games: vec![AppId(730)],
             only_priority: true,
             appear_online: false,
+            restart_games: true,
         })
         .unwrap();
 
@@ -46,6 +47,7 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             "skipped_games": [730],
             "only_priority": true,
             "appear_online": false,
+            "restart_games": true,
         })
     );
 }

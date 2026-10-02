@@ -53,6 +53,16 @@ pub(crate) const RETRY_CONNECT: Duration = Duration::from_secs(60);
 /// shows within moments.
 pub(crate) const TICK: Duration = Duration::from_secs(30);
 
+/// How often the game being farmed alone is stopped and played again, when
+/// the user asks for it, to shake a drop loose: every 5 minutes, as Steam
+/// Game Idler does (research, "Farming"). Nobody publishes whether it helps.
+pub(crate) const RESTART_EVERY: Duration = Duration::from_secs(5 * 60);
+
+/// How long it stays stopped before it's played again: long enough for
+/// Steam to see it close. Nobody publishes theirs; a few seconds costs next
+/// to no playtime.
+pub(crate) const RESTART_PAUSE: Duration = Duration::from_secs(5);
+
 /// Sale-event badges: earned by taking part in a sale, not by playing, so
 /// playing never drops their cards. ASF's `SalesBlacklist`.
 pub(crate) const SALE_EVENTS: [AppId; 25] = [

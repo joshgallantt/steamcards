@@ -17,6 +17,6 @@ pub use model::{Preferences, PreferencesError, Tier};
 pub use repository::PreferencesRepository;
 pub use use_cases::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, GetPreferencesUseCase, SetAppearOnlineUseCase,
-    SetGameTierUseCase, SetOnlyPriorityUseCase,
+    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, GetPreferencesUseCase,
+    SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
 };

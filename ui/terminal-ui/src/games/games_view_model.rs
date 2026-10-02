@@ -5,15 +5,17 @@ use crate::games::GameRow;
 use game::{AppId, Game};
 use preferences::{
     GetPreferencesUseCase, PreferencesError, SetAppearOnlineUseCase, SetGameTierUseCase,
-    SetOnlyPriorityUseCase, Tier,
+    SetOnlyPriorityUseCase, SetRestartGamesUseCase, Tier,
 };
 
-/// Choosing which games are farmed first, and how farming shows to friends.
+/// Choosing which games are farmed first, and how: how farming shows to
+/// friends, and whether the game is restarted to shake drops loose.
 pub struct GamesViewModel {
     get: Arc<dyn GetPreferencesUseCase>,
     set_tier: Arc<dyn SetGameTierUseCase>,
     set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
     set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
+    set_restart_games: Arc<dyn SetRestartGamesUseCase>,
 }
 
 impl GamesViewModel {
@@ -22,12 +24,14 @@ impl GamesViewModel {
         set_tier: Arc<dyn SetGameTierUseCase>,
         set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
         set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
+        set_restart_games: Arc<dyn SetRestartGamesUseCase>,
     ) -> Self {
         Self {
             get,
             set_tier,
             set_only_priority,
             set_appear_online,
+            set_restart_games,
         }
     }
 
@@ -45,6 +49,14 @@ impl GamesViewModel {
 
     pub fn toggle_appear_online(&self) -> Result<(), PreferencesError> {
         self.set_appear_online.call(!self.appear_online())
+    }
+
+    pub fn restart_games(&self) -> bool {
+        self.get.call().restart_games
+    }
+
+    pub fn toggle_restart_games(&self) -> Result<(), PreferencesError> {
+        self.set_restart_games.call(!self.restart_games())
     }
 
     pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
@@ -118,7 +130,8 @@ mod tests {
     use game::{AppId, test_support::game};
     use preferences::{
         DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-        DefaultSetOnlyPriorityUseCase, Preferences, test_support::FakePreferencesRepository,
+        DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, Preferences,
+        test_support::FakePreferencesRepository,
     };
 
     use super::*;
@@ -132,7 +145,8 @@ mod tests {
             Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo)),
+            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
+            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
         )
     }
 
@@ -178,12 +192,15 @@ mod tests {
     }
 
     #[test]
-    fn appearing_online_and_only_priority_toggle() {
+    fn appearing_online_only_priority_and_restarting_toggle() {
         let g = games(&[]);
         assert!(!g.appear_online(), "offline by default");
         g.toggle_appear_online().unwrap();
         assert!(g.appear_online());
         g.toggle_only_priority().unwrap();
         assert!(g.only_priority());
+        assert!(!g.restart_games(), "not restarted unless asked");
+        g.toggle_restart_games().unwrap();
+        assert!(g.restart_games());
     }
 }

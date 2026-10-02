@@ -205,7 +205,7 @@ still has this session's count and value.
 | x | skip it: never farmed |
 | o | open its card page |
 | c | show or hide finished games |
-| g | games: pick priority games, only priority |
+| g | games: pick priority games, only priority, shake drops loose |
 | a | account: sign in or out, appear offline |
 | l | the log |
 | p | pause, or carry on |
