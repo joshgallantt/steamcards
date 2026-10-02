@@ -28,7 +28,8 @@ use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUs
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyGetLibraryUseCase};
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
-    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    DefaultSetGameTierUseCase, DefaultSetHoursBeforeDropsUseCase, DefaultSetOnlyPriorityUseCase,
+    DefaultSetRestartGamesUseCase, DefaultSetSkipPrivateUseCase, DefaultSetSkipRefundableUseCase,
     Preferences, test_support::FakePreferencesRepository,
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
@@ -41,6 +42,10 @@ use crate::{
     dashboard::{EventKind, FarmingViewModel, LibraryViewModel, MarketViewModel},
     games::GamesViewModel,
     onboarding::{OnboardingViewModel, Step},
+    settings::{
+        SettingsViewModel,
+        settings_view::{Setting, SettingsView},
+    },
     sign_in::SignInViewModel,
 };
 
@@ -73,6 +78,8 @@ fn game(app_id: u32, name: &str, hours: f64, received: u32, remaining: u32) -> G
             remaining,
         },
         badge_level: 0,
+        private: false,
+        bought_at: None,
     }
 }
 
@@ -266,12 +273,11 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
         GamesViewModel::new(
-            get,
+            get.clone(),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
         ),
+        settings(get, &repo),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(library())))),
         OnboardingViewModel::new(accounts),
         MarketViewModel::new(
@@ -289,6 +295,21 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
     );
     app.clock = CLOCK;
     app
+}
+
+/// The settings, over the previews' preferences.
+fn settings(
+    get: Arc<DefaultGetPreferencesUseCase>,
+    repo: &Arc<FakePreferencesRepository>,
+) -> SettingsViewModel {
+    SettingsViewModel::new(
+        get,
+        Arc::new(DefaultSetHoursBeforeDropsUseCase::new(repo.clone())),
+        Arc::new(DefaultSetSkipPrivateUseCase::new(repo.clone())),
+        Arc::new(DefaultSetSkipRefundableUseCase::new(repo.clone())),
+        Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
+        Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
+    )
 }
 
 /// Farming Portal 2 on its own, with a card dropped and looked at again in
@@ -526,14 +547,60 @@ async fn previews() {
     let text = show("sign-in expired 120×30", render(&mut expired, 120, 30));
     assert!(text.contains("sign-in expired · press a to sign in again"));
 
+    // Games Steam's say keeps out: one private, one bought two days ago.
+    let mut held = farming_app();
+    if let Some(s) = held.status.as_mut() {
+        let mut games: Vec<Game> = s.library.games().to_vec();
+        for g in &mut games {
+            match g.app_id.0 {
+                292_030 => g.private = true,
+                1_086_940 => g.bought_at = Some(now() - chrono::Duration::days(2)),
+                _ => {}
+            }
+        }
+        s.library = SteamLibrary::new(games);
+        s.order
+            .retain(|id| ![AppId(292_030), AppId(1_086_940)].contains(id));
+    }
+    let text = show("private and refundable 120×30", render(&mut held, 120, 30));
+    assert!(text.contains("The Witcher 3: Wild Hunt · private"));
+    assert!(text.contains("Baldur's Gate 3 · refundable"));
+    held.selected = Some(AppId(1_086_940));
+    held.overlay = Some(Overlay::Detail { scroll: 0 });
+    let detail = show("details, refundable 120×30", render(&mut held, 120, 30));
+    assert!(detail.contains("Not farmed") && detail.contains("Steam would still refund it"));
+    assert!(
+        detail.contains("on 11 October"),
+        "when Steam stops refunding it"
+    );
+    held.selected = Some(AppId(292_030));
+    let detail = show("details, private 120×30", render(&mut held, 120, 30));
+    assert!(detail.contains("marked private in your Steam library"));
+
     // Pop-ups.
     a.overlay = Some(Overlay::Account { confirm: false });
     let account = show("account 120×30", render(&mut a, 120, 30));
-    assert!(account.contains("● cardfarmer") && account.contains("Appear offline while farming"));
+    assert!(account.contains("● cardfarmer") && account.contains("Appearing offline"));
+    assert!(account.contains("s  settings"));
+
+    a.overlay = Some(Overlay::Settings(SettingsView::default()));
+    let settings = show("settings 120×30", render(&mut a, 120, 30));
+    assert!(settings.contains("Hours before cards drop") && settings.contains("‹ 3 ›"));
+    assert!(settings.contains("Skip private games") && settings.contains("Skip recently bought"));
+    assert!(settings.contains("Appear offline while farming"));
     assert!(
-        account.contains("them just the same."),
-        "wrapped, not cut off"
+        settings.contains("on its own, for an account Steam doesn't hold back."),
+        "the chosen setting's meaning, wrapped, not cut off"
     );
+    a.overlay = Some(Overlay::Settings(SettingsView {
+        cursor: Setting::AutoUpdate.row(),
+    }));
+    let updates = show(
+        "settings, keeping up to date 120×30",
+        render(&mut a, 120, 30),
+    );
+    assert!(updates.contains("This is steamcards") && updates.contains("looks for a new release"));
+    show("settings 60×16", render(&mut a, 60, 16));
     a.overlay = Some(Overlay::Account { confirm: true });
     let text = show("account, signing out 120×30", render(&mut a, 120, 30));
     assert!(text.contains("Sign out of Steam"));
@@ -997,12 +1064,11 @@ fn showcase_app() -> App {
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
         ),
         GamesViewModel::new(
-            get,
+            get.clone(),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
         ),
+        settings(get, &repo),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(
             showcase_library(),
         )))),

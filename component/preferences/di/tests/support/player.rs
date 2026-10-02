@@ -60,6 +60,18 @@ impl Player {
         self.preferences.set_only_priority.call(only)
     }
 
+    pub(crate) fn sets_hours_before_drops(&self, hours: u8) -> Result<(), PreferencesError> {
+        self.preferences.set_hours_before_drops.call(hours)
+    }
+
+    pub(crate) fn skips_private_games(&self, skip: bool) -> Result<(), PreferencesError> {
+        self.preferences.set_skip_private.call(skip)
+    }
+
+    pub(crate) fn skips_refundable_games(&self, skip: bool) -> Result<(), PreferencesError> {
+        self.preferences.set_skip_refundable.call(skip)
+    }
+
     /// Quits steamcards and starts it again.
     pub(crate) fn comes_back(self) -> Self {
         let preferences = component(&self.config);

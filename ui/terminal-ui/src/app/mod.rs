@@ -1,8 +1,8 @@
 //! The app: onboarding on the first run, then one dashboard that stays up
-//! the whole time, with pop-ups for the account, signing in, games, the log
-//! and help. It holds every feature's view models, draws what's on screen
-//! with each feature's views, and forwards keys to the view models; no
-//! business rule lives here.
+//! the whole time, with pop-ups for the account, signing in, games,
+//! settings, the log and help. It holds every feature's view models, draws
+//! what's on screen with each feature's views, and forwards keys to the view
+//! models; no business rule lives here.
 
 mod popups;
 #[cfg(test)]
@@ -39,6 +39,10 @@ use crate::{
     onboarding::{
         NeedsAccount, OnboardingViewModel, Step,
         onboarding_view::{self, SetupView},
+    },
+    settings::{
+        SettingsViewModel,
+        settings_view::{Setting, SettingsView},
     },
     sign_in::{SignInUpdate, SignInViewModel, sign_in_view::SignInView},
     theme,
@@ -83,6 +87,7 @@ pub(crate) enum Overlay {
     },
     SignIn(SignInView),
     Games(GamesView),
+    Settings(SettingsView),
     Log(LogView),
     /// The chosen game's details: its set, and what each card is worth,
     /// scrolled this many lines down when they don't fit.
@@ -138,6 +143,7 @@ pub struct App {
     pub(crate) login: SignInViewModel,
     pub(crate) farming: FarmingViewModel,
     pub(crate) games: GamesViewModel,
+    pub(crate) settings: SettingsViewModel,
     pub(crate) library: LibraryViewModel,
     pub(crate) onboarding: OnboardingViewModel,
     pub(crate) market: MarketViewModel,
@@ -176,6 +182,7 @@ impl App {
         login: SignInViewModel,
         farming: FarmingViewModel,
         games: GamesViewModel,
+        settings: SettingsViewModel,
         library: LibraryViewModel,
         onboarding: OnboardingViewModel,
         market: MarketViewModel,
@@ -186,6 +193,7 @@ impl App {
             login,
             farming,
             games,
+            settings,
             library,
             onboarding,
             market,
@@ -398,7 +406,14 @@ impl App {
             (Some(s), false) => (s.order.clone(), Vec::new(), None),
             (None, _) => (Vec::new(), Vec::new(), None),
         };
-        Queue::build(&self.known_library(), &order, &playing, mode, &prefs)
+        Queue::build(
+            &self.known_library(),
+            &order,
+            &playing,
+            mode,
+            &prefs,
+            (self.clock.now)(),
+        )
     }
 
     /// Games the cursor can land on, top to bottom.
@@ -512,9 +527,64 @@ impl App {
         }
     }
 
+    /// Changes a setting, as the settings pop-up's space does.
+    fn change(&mut self, setting: Setting) {
+        match setting {
+            Setting::HoursBeforeDrops => {
+                let hours = self.settings.cycle_hours_before_drops();
+                self.said_hours(hours);
+            }
+            Setting::SkipPrivate => self.toggle_skip_private(),
+            Setting::SkipRefundable => self.toggle_skip_refundable(),
+            Setting::RestartGames => self.toggle_restart_games(),
+            Setting::AppearOffline => self.toggle_appear_online(),
+            Setting::AutoUpdate => self.toggle_auto_update(),
+        }
+    }
+
+    fn change_hours(&mut self, more: bool) {
+        let hours = self.settings.change_hours_before_drops(more);
+        self.said_hours(hours);
+    }
+
+    /// Says what the hours before cards drop are now, or that they didn't
+    /// change.
+    fn said_hours(&mut self, hours: Result<u8, PreferencesError>) {
+        match hours {
+            Ok(0) => self.flash("Every game is farmed on its own: cards drop from the start."),
+            Ok(1) => self.flash("Games build an hour together, then each is farmed on its own."),
+            Ok(n) => self.flash(format!(
+                "Games build {n} hours together, then each is farmed on its own."
+            )),
+            Err(e) => self.didnt_stick(e),
+        }
+    }
+
+    fn toggle_skip_private(&mut self) {
+        match self.settings.toggle_skip_private() {
+            Ok(()) if self.settings.skip_private() => {
+                self.flash("Private games are left out: Steam drops no cards for them.")
+            }
+            Ok(()) => self.flash("Private games are farmed too."),
+            Err(e) => self.didnt_stick(e),
+        }
+    }
+
+    fn toggle_skip_refundable(&mut self) {
+        match self.settings.toggle_skip_refundable() {
+            Ok(()) if self.settings.skip_refundable() => {
+                self.flash("Recently bought games wait until Steam won't refund them.")
+            }
+            Ok(()) => self.flash(
+                "Recently bought games are farmed too: after 2 hours, Steam won't refund them.",
+            ),
+            Err(e) => self.didnt_stick(e),
+        }
+    }
+
     fn toggle_restart_games(&mut self) {
-        match self.games.toggle_restart_games() {
-            Ok(()) if self.games.restart_games() => {
+        match self.settings.toggle_restart_games() {
+            Ok(()) if self.settings.restart_games() => {
                 self.flash("Restarting the game every 5 minutes, to shake drops loose.")
             }
             Ok(()) => self.flash("The game plays on, without restarting."),
@@ -533,8 +603,8 @@ impl App {
     }
 
     fn toggle_appear_online(&mut self) {
-        match self.games.toggle_appear_online() {
-            Ok(()) if self.games.appear_online() => {
+        match self.settings.toggle_appear_online() {
+            Ok(()) if self.settings.appear_online() => {
                 self.flash("Showing as online while farming: friends see the games being played.")
             }
             Ok(()) => self.flash("Appearing offline while farming. Cards drop just the same."),
@@ -697,6 +767,7 @@ impl App {
             }
             KeyCode::Char('a') => self.overlay = Some(Overlay::Account { confirm: false }),
             KeyCode::Char('g') => self.overlay = Some(self.open_games()),
+            KeyCode::Char('s') => self.overlay = Some(Overlay::Settings(SettingsView::default())),
             KeyCode::Char('l') => {
                 self.overlay = Some(Overlay::Log(LogView {
                     offset: usize::MAX,
@@ -748,14 +819,7 @@ impl App {
                 match k.code {
                     KeyCode::Enter => Some(self.begin_login(true)),
                     KeyCode::Char('d') if signed_in => Some(Overlay::Account { confirm: true }),
-                    KeyCode::Char('v') => {
-                        self.toggle_appear_online();
-                        Some(Overlay::Account { confirm: false })
-                    }
-                    KeyCode::Char('u') => {
-                        self.toggle_auto_update();
-                        Some(Overlay::Account { confirm: false })
-                    }
+                    KeyCode::Char('s') => Some(Overlay::Settings(SettingsView::default())),
                     KeyCode::Esc | KeyCode::Char('a' | 'q') => None,
                     _ => Some(Overlay::Account { confirm: false }),
                 }
@@ -764,6 +828,8 @@ impl App {
             Overlay::SignIn(v) => self.login_key(v, k),
 
             Overlay::Games(v) => self.games_key(v, k),
+
+            Overlay::Settings(v) => self.settings_key(v, k),
 
             Overlay::Log(mut v) => {
                 let page = 10;
@@ -869,11 +935,35 @@ impl App {
                 }
             }
             KeyCode::Char('o') => self.toggle_only_priority(),
-            KeyCode::Char('s') => self.toggle_restart_games(),
             KeyCode::Char('r') => self.library.refresh(),
             code => v.cursor = moved(v.cursor, code, all.len()),
         }
         Some(Overlay::Games(v))
+    }
+
+    fn settings_key(&mut self, mut v: SettingsView, k: KeyEvent) -> Option<Overlay> {
+        // Space changes the chosen setting, a setting's own key that one,
+        // and the arrows the hours; enter, as in every pop-up, closes.
+        match k.code {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('s' | 'q') => return None,
+            KeyCode::Char(' ') => self.change(Setting::at(v.cursor)),
+            KeyCode::Left | KeyCode::Char('-') => {
+                v.cursor = Setting::HoursBeforeDrops.row();
+                self.change_hours(false);
+            }
+            KeyCode::Right | KeyCode::Char('+' | '=') => {
+                v.cursor = Setting::HoursBeforeDrops.row();
+                self.change_hours(true);
+            }
+            KeyCode::Char(c) => {
+                if let Some(setting) = Setting::keyed(c) {
+                    v.cursor = setting.row();
+                    self.change(setting);
+                }
+            }
+            code => v.cursor = moved(v.cursor, code, Setting::ALL.len()),
+        }
+        Some(Overlay::Settings(v))
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────
@@ -890,7 +980,7 @@ impl App {
         let library = self.known_library();
         let order = match &self.status {
             Some(s) => s.order.clone(),
-            None => farm_order(&library, &prefs, &[]),
+            None => farm_order(&library, &prefs, &[], (self.clock.now)()),
         };
         let no_session = Session::default();
         let no_sets = CardSets::default();

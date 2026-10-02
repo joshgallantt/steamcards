@@ -79,11 +79,6 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, v: &GamesView)
         "Only farm priority games",
         "o",
     ));
-    lines.push(toggle(
-        cx.prefs.restart_games,
-        "Restart the game every 5 minutes, to shake drops loose",
-        "s",
-    ));
 
     let picked = rows.get(cursor).is_some_and(|r| r.rank.is_some());
     let keys = hints(
@@ -92,7 +87,6 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, v: &GamesView)
             ("space", if picked { "unpick" } else { "pick" }, 0),
             ("1-9", "rank", 1),
             ("o", "only priority", 4),
-            ("s", "shake drops", 5),
             ("r", "read again", 3),
             ("esc", "close", 0),
         ],

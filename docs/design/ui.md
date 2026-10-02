@@ -51,7 +51,7 @@ data.
 │                                                                      ││                                              │
 ╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────╯
  14:05  ✓ A card dropped for Portal 2 — 3 to go
-  ↑↓  choose   enter  details   1-9  rank   x  skip  │   a  account   g  games   l  log   p  pause   ?  help   q  quit
+  ↑↓  choose   enter  details   1-9  rank  │   a  account   g  games   s  settings   p  pause   ?  help   q  quit
 ```
 
 | Part | Shows |
@@ -205,8 +205,9 @@ still has this session's count and value.
 | x | skip it: never farmed |
 | o | open its card page |
 | c | show or hide finished games |
-| g | games: pick priority games, only priority, shake drops loose |
-| a | account: sign in or out, appear offline, keep steamcards up to date |
+| g | games: pick priority games, only priority |
+| s | settings: the hours before cards drop, skipping private and recently bought games, restarting the game, appearing offline, keeping steamcards up to date |
+| a | account: sign in or out |
 | l | the log |
 | p | pause, or carry on |
 | ? | help |

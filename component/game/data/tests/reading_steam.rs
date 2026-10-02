@@ -3,13 +3,14 @@
 
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use config_file::{ConfigFile, CredentialStore, Credentials};
 use debug_log::DebugLog;
 use game::{AppId, CardDrops, Game, GameRepository};
 use game_data::{DefaultGameRepository, SteamGameClient};
 use steam_api::{
     SteamClient,
-    test_support::{ACCOUNT, FakeSteam, STEAM_ID, token},
+    test_support::{ACCOUNT, FakeSteam, STEAM_ID, bought, redeemed, token},
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -58,33 +59,39 @@ async fn repository(steam: &FakeSteam, site: &MockServer, name: &str) -> Default
     DefaultGameRepository::new(Arc::new(SteamGameClient::new(Arc::new(session))))
 }
 
-#[tokio::test]
-async fn the_badges_are_the_library() {
-    let steam = FakeSteam::start().await;
-    let site = MockServer::start().await;
+/// The account's two badge pages, and the card pages of the games the badge
+/// pages may be wrong about.
+async fn badge_pages(site: &MockServer) {
     let badges = format!("/profiles/{STEAM_ID}/badges");
     serving(
-        &site,
+        site,
         badges.clone(),
         fixture("badges-1.html"),
         Some(("p", "1")),
     )
     .await;
-    serving(&site, badges, fixture("badges-2.html"), Some(("p", "2"))).await;
+    serving(site, badges, fixture("badges-2.html"), Some(("p", "2"))).await;
     serving(
-        &site,
+        site,
         format!("/profiles/{STEAM_ID}/gamecards/730"),
         card_page("gamecards-730.html"),
         None,
     )
     .await;
     serving(
-        &site,
+        site,
         format!("/profiles/{STEAM_ID}/gamecards/440"),
         "<html></html>".into(),
         None,
     )
     .await;
+}
+
+#[tokio::test]
+async fn the_badges_are_the_library() {
+    let steam = FakeSteam::start().await;
+    let site = MockServer::start().await;
+    badge_pages(&site).await;
     let repo = repository(&steam, &site, "badges").await;
 
     let library = repo.library().await.unwrap();
@@ -117,6 +124,8 @@ async fn the_badges_are_the_library() {
                 remaining: 3,
             },
             badge_level: 1,
+            private: false,
+            bought_at: None,
         })
     );
     assert_eq!(library.with_drops_left().count(), 5);
@@ -127,4 +136,77 @@ async fn the_badges_are_the_library() {
         (0, 6),
         "nothing has dropped from a game never played"
     );
+}
+
+/// `days` days ago, in seconds since 1970.
+fn days_ago(days: i64) -> u32 {
+    u32::try_from(Utc::now().timestamp() - days * 24 * 60 * 60).unwrap()
+}
+
+fn at(seconds: u32) -> Option<DateTime<Utc>> {
+    DateTime::from_timestamp(i64::from(seconds), 0)
+}
+
+#[tokio::test]
+async fn private_games_and_games_bought_lately_are_marked() {
+    let steam = FakeSteam::start().await;
+    let site = MockServer::start().await;
+    badge_pages(&site).await;
+    steam.private(vec![440]);
+    let (three_days_ago, nine_days_ago) = (days_ago(3), days_ago(9));
+    steam.licensed(vec![
+        bought(10, three_days_ago),
+        bought(11, days_ago(30)),
+        redeemed(12, days_ago(1)),
+        bought(13, nine_days_ago),
+        bought(14, three_days_ago),
+    ]);
+    steam.package(10, vec![620]);
+    steam.package(11, vec![220]);
+    steam.package(12, vec![1_086_940]);
+    steam.package(13, vec![413_150, 1_145_360]);
+    steam.package(14, vec![413_150]);
+    let repo = repository(&steam, &site, "marked").await;
+
+    let library = repo.library().await.unwrap();
+
+    let game = |id| library.game(AppId(id)).unwrap();
+    assert!(game(440).private);
+    assert!(!game(620).private);
+    assert_eq!(game(620).bought_at, at(three_days_ago));
+    assert_eq!(game(220).bought_at, None, "bought too long ago to refund");
+    assert_eq!(
+        game(1_086_940).bought_at,
+        None,
+        "a product key isn't refunded"
+    );
+    assert_eq!(game(1_145_360).bought_at, at(nine_days_ago));
+    assert_eq!(
+        game(413_150).bought_at,
+        at(three_days_ago),
+        "bought twice: the later purchase"
+    );
+    assert_eq!(
+        steam.product_info_asks(),
+        [vec![10, 13, 14]],
+        "only purchases Steam may still refund are asked about"
+    );
+
+    repo.library().await.unwrap();
+    assert_eq!(steam.product_info_asks().len(), 1, "a package, once a run");
+    assert_eq!(steam.private_asks(), 2, "private, at every read");
+}
+
+#[tokio::test]
+async fn games_are_read_all_the_same_when_steam_wont_say_which_are_private() {
+    let steam = FakeSteam::start().await;
+    let site = MockServer::start().await;
+    badge_pages(&site).await;
+    steam.refuse_private();
+    let repo = repository(&steam, &site, "unsaid").await;
+
+    let library = repo.library().await.unwrap();
+
+    assert_eq!(library.games().len(), 7);
+    assert!(library.games().iter().all(|g| !g.private));
 }

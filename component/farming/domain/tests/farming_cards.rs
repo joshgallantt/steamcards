@@ -6,11 +6,12 @@
 
 use std::{any::type_name_of_val, sync::Arc, time::Duration};
 
+use chrono::{TimeDelta, Utc};
 use farming::{
     DefaultFarmCardsUseCase, FarmCardsUseCase,
     FarmingEvent::{
-        self, BuildingHours, Dropped, ElsewhereStopped, FarmingCards, HoursBuilt, MovedOn,
-        PlayedElsewhere, Stalled, TakenOver, WentWrong,
+        self, BuildingHours, ChoicesChanged, Dropped, ElsewhereStopped, FarmingCards, HoursBuilt,
+        MovedOn, PlayedElsewhere, Stalled, TakenOver, WentWrong,
     },
     FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble,
     test_support::{FakeSteamAccount, farming_over},
@@ -177,7 +178,8 @@ async fn a_game_with_three_hours_is_farmed_alone_until_every_card_drops() {
         player.reads(playing).await,
         BuildingHours {
             lead: "Game 440".into(),
-            games: 1
+            games: 1,
+            hours: 3
         }
     );
     assert_eq!(player.steam.played(), [vec![620], vec![440]]);
@@ -197,7 +199,8 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
         player.reads(playing).await,
         BuildingHours {
             lead: "Game 10".into(),
-            games: 3
+            games: 3,
+            hours: 3
         }
     );
     let building = player.sees(Status::Farming).await;
@@ -211,7 +214,8 @@ async fn games_short_of_three_hours_are_played_together_until_one_gets_there() {
     assert_eq!(
         player.reads(|e| matches!(e, HoursBuilt { .. })).await,
         HoursBuilt {
-            game: "Game 10".into()
+            game: "Game 10".into(),
+            hours: 3
         }
     );
     let waited = started.elapsed();
@@ -304,6 +308,124 @@ async fn only_priority_stops_after_the_priorities() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_private_game_is_left_out_unless_the_user_farms_it_too() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 5.0, 1, Some(30 * MINUTE));
+    player.steam.add_game(440, 5.0, 1, Some(30 * MINUTE));
+    player.steam.private(620);
+    player.starts_farming();
+
+    let idle = player.sees(Status::Idle).await;
+    assert_eq!(
+        idle.nothing_to_farm,
+        Some(NothingToFarm::HeldBack {
+            private: true,
+            refundable_until: None
+        })
+    );
+    assert_eq!(player.steam.played(), [vec![440]]);
+
+    player.wants(Preferences {
+        skip_private: false,
+        ..Default::default()
+    });
+    assert_eq!(
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 620".into(),
+            cards_left: 1
+        },
+        "turned off, it's farmed: in moments, not hours"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_game_steam_would_still_refund_waits_until_it_wouldnt() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 0.5, 2, Some(30 * MINUTE));
+    let bought = Utc::now() - TimeDelta::days(14) + TimeDelta::hours(4);
+    player.steam.bought(620, bought);
+    player.starts_farming();
+
+    let idle = player.sees(Status::Idle).await;
+    let ends = bought + TimeDelta::days(14);
+    assert_eq!(
+        idle.nothing_to_farm,
+        Some(NothingToFarm::HeldBack {
+            private: false,
+            refundable_until: Some(ends)
+        })
+    );
+    let next = idle.next_look.expect("a time to look again");
+    assert!(
+        (next - ends).num_seconds().abs() < 60,
+        "looks again as Steam stops refunding it, not 8 hours on: {next} for {ends}"
+    );
+    assert!(player.steam.played().is_empty(), "never played");
+}
+
+#[tokio::test(start_paused = true)]
+async fn on_an_account_steam_doesnt_hold_back_every_game_is_farmed_alone() {
+    let mut player = Player::new();
+    player.steam.drops_only_alone();
+    player.steam.add_game(30, 0.0, 1, Some(30 * MINUTE));
+    player.steam.add_game(10, 0.5, 2, Some(30 * MINUTE));
+    player.steam.drops_straight_away(30);
+    player.steam.drops_straight_away(10);
+    player.wants(Preferences {
+        hours_before_drops: 0,
+        ..Default::default()
+    });
+    player.starts_farming();
+
+    assert_eq!(
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 30".into(),
+            cards_left: 1
+        },
+        "fewest drops left first"
+    );
+    assert_eq!(
+        player.reads(playing).await,
+        FarmingCards {
+            game: "Game 10".into(),
+            cards_left: 2
+        }
+    );
+    assert_eq!(player.steam.played()[..2], [vec![30], vec![10]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn needing_more_hours_than_a_game_has_builds_them_first() {
+    let mut player = Player::new();
+    player.steam.add_game(620, 4.0, 3, Some(HOUR));
+    player.starts_farming();
+    player.reads(playing).await;
+
+    player.wants(Preferences {
+        hours_before_drops: 5,
+        ..Default::default()
+    });
+
+    assert_eq!(
+        player
+            .reads(|e| matches!(e, ChoicesChanged | MovedOn { .. }))
+            .await,
+        ChoicesChanged,
+        "not moved on from: it builds its hours"
+    );
+    assert_eq!(
+        player.reads(playing).await,
+        BuildingHours {
+            lead: "Game 620".into(),
+            games: 1,
+            hours: 5
+        }
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn playing_elsewhere_pauses_farming_until_a_minute_after_it_stops() {
     let mut player = Player::new();
     player.steam.add_game(620, 5.0, 5, Some(HOUR));
@@ -384,11 +506,9 @@ async fn after_a_takeover_the_other_devices_game_is_given_minutes_to_start() {
     player.steam.take_over();
     let waiting = player.sees(Status::Blocked).await;
     assert_eq!(waiting.blocked_by, None, "nothing plays there yet");
-    let wait = waiting.next_look.map(|at| at - chrono::Utc::now());
+    let wait = waiting.next_look.map(|at| at - Utc::now());
     assert!(
-        wait.is_some_and(
-            |w| w > chrono::TimeDelta::minutes(4) && w <= chrono::TimeDelta::minutes(5)
-        ),
+        wait.is_some_and(|w| w > TimeDelta::minutes(4) && w <= TimeDelta::minutes(5)),
         "it says when farming carries on: {wait:?}"
     );
 
@@ -592,7 +712,7 @@ async fn badges_that_cant_be_read_are_tried_again_in_five_minutes() {
     );
     let again = player.sees(Status::Error).await.next_look;
     assert!(
-        again.is_some_and(|at| at - chrono::Utc::now() > chrono::TimeDelta::minutes(4)),
+        again.is_some_and(|at| at - Utc::now() > TimeDelta::minutes(4)),
         "it says when it tries again: {again:?}"
     );
     let failed = Instant::now();
@@ -625,11 +745,9 @@ async fn a_lost_connection_is_tried_again_after_a_minute() {
         status.trouble,
         Some(Trouble::Lost("the connection to Steam dropped".into()))
     );
-    let wait = status.next_look.map(|at| at - chrono::Utc::now());
+    let wait = status.next_look.map(|at| at - Utc::now());
     assert!(
-        wait.is_some_and(
-            |w| w > chrono::TimeDelta::seconds(50) && w <= chrono::TimeDelta::seconds(60)
-        ),
+        wait.is_some_and(|w| w > TimeDelta::seconds(50) && w <= TimeDelta::seconds(60)),
         "it says when it tries again: {wait:?}"
     );
     let lost = Instant::now();

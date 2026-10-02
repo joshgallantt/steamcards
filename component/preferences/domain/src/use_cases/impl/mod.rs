@@ -2,12 +2,18 @@ mod default_get_preferences_use_case;
 mod default_set_appear_online_use_case;
 mod default_set_auto_update_use_case;
 mod default_set_game_tier_use_case;
+mod default_set_hours_before_drops_use_case;
 mod default_set_only_priority_use_case;
 mod default_set_restart_games_use_case;
+mod default_set_skip_private_use_case;
+mod default_set_skip_refundable_use_case;
 
 pub use default_get_preferences_use_case::DefaultGetPreferencesUseCase;
 pub use default_set_appear_online_use_case::DefaultSetAppearOnlineUseCase;
 pub use default_set_auto_update_use_case::DefaultSetAutoUpdateUseCase;
 pub use default_set_game_tier_use_case::DefaultSetGameTierUseCase;
+pub use default_set_hours_before_drops_use_case::DefaultSetHoursBeforeDropsUseCase;
 pub use default_set_only_priority_use_case::DefaultSetOnlyPriorityUseCase;
 pub use default_set_restart_games_use_case::DefaultSetRestartGamesUseCase;
+pub use default_set_skip_private_use_case::DefaultSetSkipPrivateUseCase;
+pub use default_set_skip_refundable_use_case::DefaultSetSkipRefundableUseCase;

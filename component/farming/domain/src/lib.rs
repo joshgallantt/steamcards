@@ -21,6 +21,8 @@ mod use_cases;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 
-pub use model::{FarmingEvent, FarmingStatus, FarmingUpdate, NothingToFarm, Status, Trouble};
-pub use service::farm_order;
+pub use model::{
+    FarmingEvent, FarmingStatus, FarmingUpdate, LeftOut, NothingToFarm, Status, Trouble,
+};
+pub use service::{farm_order, left_out};
 pub use use_cases::{DefaultFarmCardsUseCase, FarmCardsUseCase, FarmingDependencies};

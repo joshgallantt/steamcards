@@ -107,8 +107,17 @@ impl KeptSession {
     /// Takes in a fresh look at one game, and records the drops it shows. A
     /// page showing more drops to come than the farmer has already seen is
     /// behind, cards never undropping: it's left out, its counts and all.
+    /// A card page doesn't say whether the game is private, or when it was
+    /// bought: the library's word on that stands.
     pub fn update(&mut self, looked: GameCards, now: DateTime<Utc>) -> Looked {
-        let GameCards { game: fresh, set } = looked;
+        let GameCards {
+            game: mut fresh,
+            set,
+        } = looked;
+        if let Some(known) = self.library.game(fresh.app_id) {
+            fresh.private = known.private;
+            fresh.bought_at = known.bought_at;
+        }
         let behind = self
             .library
             .game(fresh.app_id)
@@ -458,17 +467,19 @@ impl KeptSession {
     }
 
     /// Makes the session's first forecast, once it has two drops farming
-    /// alone to learn from, over the games farmed in `order`.
+    /// alone to learn from, over the games farmed in `order`, on an account
+    /// that holds cards back for `before_drops` hours.
     pub fn first_forecast(
         &mut self,
         order: impl Fn(&SteamLibrary, &[SetAside]) -> Vec<AppId>,
+        before_drops: u8,
         now: DateTime<Utc>,
     ) {
         if self.session.first_forecast.is_some() {
             return;
         }
         let order = order(&self.library, &self.set_aside);
-        let made = Forecast::of(&self.session, &self.library, &order, now);
+        let made = Forecast::of(&self.session, &self.library, &order, before_drops, now);
         if !made.assumed {
             self.session.first_forecast = Some(made);
         }
@@ -598,6 +609,8 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         }
     }
 
@@ -886,6 +899,23 @@ mod tests {
             [(some("Madison"), false, Some(3))],
             "the set known before it had the copy the read found"
         );
+    }
+
+    #[test]
+    fn a_look_at_the_card_page_keeps_what_the_library_said_of_the_game() {
+        let mut kept = KeptSession::new(at());
+        let bought = Game {
+            private: true,
+            bought_at: Some(at()),
+            ..game(HEAVY_RAIN, 3)
+        };
+        kept.take(SteamLibrary::new(vec![bought]), every, at());
+
+        let looked = kept.update(page(HEAVY_RAIN, 2, heavy_rain(1, 1)), at());
+
+        assert!(looked.game.private, "the card page doesn't say");
+        assert_eq!(looked.game.bought_at, Some(at()));
+        assert_eq!(kept.library.game(HEAVY_RAIN), Some(&looked.game));
     }
 
     #[test]

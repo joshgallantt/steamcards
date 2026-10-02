@@ -5,18 +5,21 @@ Licensed under the MIT License (see LICENSE).
 How steamcards farms trading cards follows ArchiSteamFarm
 (https://github.com/JustArchiNET/ArchiSteamFarm), Copyright 2015-2026
 Łukasz "JustArchi" Domeradzki, licensed under the Apache License 2.0:
-the badge-page selectors (library/steam-api/src/badges.rs), what an
-inventory item's tags say it is (library/steam-api/src/inventory.rs), the
-farming rules and timings (component/farming/domain/src/rules.rs), including
-its list of sale-event app IDs, and the hours its time to finish adds for
-games short of their hours (component/farming/domain/src/forecast.rs). They
-were rewritten in Rust for steamcards; no ASF source code is included.
+the badge-page selectors (component/game/data/src/badge_page.rs and
+library/steam-api/src/badges.rs), what an inventory item's tags say it is
+(library/steam-api/src/inventory.rs), the farming rules and timings
+(component/farming/domain/src/model/rules.rs), including its list of
+sale-event app IDs, which licences are purchases Steam refunds
+(library/steam-api/src/licences.rs), and the hours its time to finish adds
+for games short of their hours (component/session/domain/src/model/forecast.rs).
+They were rewritten in Rust for steamcards; no ASF source code is included.
 
 Steam's message definitions follow Valve's own .proto files, as published by
 SteamDatabase (https://github.com/SteamDatabase/Protobufs).
 
 The market's currencies, how amounts are written in them, and Steam's fee
-rules (component/market/domain/src/money.rs and model.rs) follow Valve's own
-scripts for steamcommunity.com, global.js and economy_common.js, as published
-by SteamTracking (https://github.com/SteamTracking/SteamTracking). They were
+rules (component/money/domain/src/model/currency.rs and
+component/account/domain/src/model/wallet.rs) follow Valve's own scripts for
+steamcommunity.com, global.js and economy_common.js, as published by
+SteamTracking (https://github.com/SteamTracking/SteamTracking). They were
 rewritten in Rust for steamcards.

@@ -16,8 +16,9 @@
 //!   it has been farmed alone; before that, the account's.
 //! - The time to finish: Σ N_g / r_g over the drops N_g each game has left,
 //!   plus ASF's hours term (`CardsFarmer.TimeRemaining`, Apache-2.0): games
-//!   short of 3 hours are played together, 32 at a time, and each group
-//!   takes 3 hours less its lowest hours.
+//!   short of the hours the account holds cards back for (3, unless the user
+//!   says otherwise) are played together, 32 at a time, and each group takes
+//!   those hours less its lowest hours.
 //! - Its 80% band: × e^(±1.28 √(1/N + 1/(2 + K))), where N is Σ N_g.
 //!
 //! Before the second drop there's nothing to learn from: it assumes 30
@@ -43,7 +44,8 @@ pub struct Forecast {
     pub band: Option<(Duration, Duration)>,
     /// Too few drops to learn from yet: it assumes 30 minutes a drop.
     pub assumed: bool,
-    /// The part of `eta` spent building hours for games short of 3.
+    /// The part of `eta` spent building hours for games short of the hours
+    /// their cards need.
     pub hours_term: Duration,
     /// Drops an hour, farming alone.
     pub rate: f64,
@@ -55,12 +57,14 @@ pub struct Forecast {
 
 impl Forecast {
     /// How long farming the games in `order` should take from `now`, learnt from
-    /// `session`'s drops farming alone. `order` is the farm order: games not in
-    /// it, or with no drops left, aren't farmed, so they take no time.
+    /// `session`'s drops farming alone, on an account that holds cards back
+    /// for `before_drops` hours. `order` is the farm order: games not in it,
+    /// or with no drops left, aren't farmed, so they take no time.
     pub fn of(
         session: &Session,
         library: &SteamLibrary,
         order: &[AppId],
+        before_drops: u8,
         now: DateTime<Utc>,
     ) -> Forecast {
         let alone: Vec<&Stretch> = session
@@ -112,7 +116,7 @@ impl Forecast {
             .filter_map(|&id| library.game(id))
             .filter(|g| g.has_drops_left())
         {
-            let to_go = game.hours_to_go();
+            let to_go = game.hours_to_go(before_drops);
             if to_go > 0.0 {
                 if group.0 == MOST_PLAYED_AT_ONCE {
                     group = (0, 0.0);
@@ -186,6 +190,8 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         }
     }
 
@@ -233,7 +239,7 @@ mod tests {
         };
         let library = SteamLibrary::new(vec![game(1, 8.0, 0), game(2, 5.0, 25), game(3, 4.0, 15)]);
 
-        let f = Forecast::of(&session, &library, &ids(&[2, 3]), at(2.5));
+        let f = Forecast::of(&session, &library, &ids(&[2, 3]), 3, at(2.5));
 
         assert!(!f.assumed);
         assert!(near(f.rate, 2.29, 0.01), "about 2.3 an hour: {}", f.rate);
@@ -263,7 +269,7 @@ mod tests {
         };
 
         for session in [nothing_yet, one_slow_drop] {
-            let f = Forecast::of(&session, &library, &ids(&[1, 2]), at(2.0));
+            let f = Forecast::of(&session, &library, &ids(&[1, 2]), 3, at(2.0));
             assert!(f.assumed);
             assert_eq!(f.rate, 2.0, "30 minutes a drop");
             assert_eq!(f.eta, Duration::from_secs(5 * 3600), "10 drops left");
@@ -284,7 +290,7 @@ mod tests {
             ..Default::default()
         };
 
-        let f = Forecast::of(&session, &library, &ids(&[1]), at(3.0));
+        let f = Forecast::of(&session, &library, &ids(&[1]), 3, at(3.0));
 
         assert!(f.assumed, "none of them came farming alone");
     }
@@ -298,7 +304,7 @@ mod tests {
             ..Default::default()
         };
 
-        let f = Forecast::of(&session, &library, &ids(&[1]), at(2.0));
+        let f = Forecast::of(&session, &library, &ids(&[1]), 3, at(2.0));
 
         assert!(near(f.rate, 2.0, 1e-9), "(2 + 4) / (1 + 2): {}", f.rate);
     }
@@ -316,7 +322,7 @@ mod tests {
         };
         let library = SteamLibrary::new(vec![game(1, 9.0, 2), game(2, 6.0, 2), game(3, 7.0, 2)]);
 
-        let f = Forecast::of(&session, &library, &ids(&[2, 1, 3]), at(5.0));
+        let f = Forecast::of(&session, &library, &ids(&[2, 1, 3]), 3, at(5.0));
 
         let r = 8.0 / 6.0;
         assert!(near(f.rate, r, 1e-9));
@@ -335,7 +341,7 @@ mod tests {
     fn games_short_of_three_hours_add_the_hours_they_build() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 2), game(2, 2.0, 1), game(3, 0.5, 1)]);
 
-        let f = Forecast::of(&Session::default(), &library, &ids(&[1, 2, 3]), at(0.0));
+        let f = Forecast::of(&Session::default(), &library, &ids(&[1, 2, 3]), 3, at(0.0));
 
         assert_eq!(f.hours_term, Duration::from_secs(9000), "3 hours less 0.5");
         assert_eq!(f.eta, Duration::from_secs(4 * 3600 + 1800));
@@ -348,6 +354,26 @@ mod tests {
     }
 
     #[test]
+    fn games_short_of_the_hours_the_account_needs_add_only_those() {
+        let library = SteamLibrary::new(vec![game(1, 0.5, 1), game(2, 0.0, 1)]);
+
+        let two = Forecast::of(&Session::default(), &library, &ids(&[1, 2]), 2, at(0.0));
+        assert_eq!(
+            two.hours_term,
+            Duration::from_secs(2 * 3600),
+            "2 hours less none"
+        );
+
+        let none = Forecast::of(&Session::default(), &library, &ids(&[1, 2]), 0, at(0.0));
+        assert_eq!(
+            none.hours_term,
+            Duration::ZERO,
+            "an account Steam doesn't hold back builds no hours"
+        );
+        assert_eq!(none.eta, Duration::from_secs(3600), "two drops, alone");
+    }
+
+    #[test]
     fn hours_are_built_32_games_at_a_time() {
         let games: Vec<Game> = (1..=33).map(|id| game(id, 0.0, 1)).collect();
         let order: Vec<AppId> = (1..=33).map(AppId).collect();
@@ -356,6 +382,7 @@ mod tests {
             &Session::default(),
             &SteamLibrary::new(games),
             &order,
+            3,
             at(0.0),
         );
 
@@ -366,7 +393,7 @@ mod tests {
     fn games_not_to_be_farmed_take_no_time() {
         let library = SteamLibrary::new(vec![game(1, 5.0, 2), game(2, 5.0, 0), game(3, 1.0, 4)]);
 
-        let f = Forecast::of(&Session::default(), &library, &ids(&[1, 2]), at(0.0));
+        let f = Forecast::of(&Session::default(), &library, &ids(&[1, 2]), 3, at(0.0));
 
         assert_eq!(
             f.per_game.len(),
@@ -374,7 +401,7 @@ mod tests {
             "game 2 is done, game 3 not in the order"
         );
         assert_eq!(f.eta, Duration::from_secs(3600));
-        let done = Forecast::of(&Session::default(), &library, &ids(&[]), at(0.0));
+        let done = Forecast::of(&Session::default(), &library, &ids(&[]), 3, at(0.0));
         assert_eq!(done.eta, Duration::ZERO);
         assert!(done.per_game.is_empty());
     }

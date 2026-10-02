@@ -15,8 +15,8 @@ use card::{
 };
 use chrono::Utc;
 use game::{
-    AppId, Game, GameError, GetLibraryUseCase, HOURS_BEFORE_DROPS, ObservePlayingUseCase,
-    PlayGamesUseCase, Playing, StandByUseCase, SteamLibrary, StopPlayingUseCase,
+    AppId, Game, GameError, GetLibraryUseCase, ObservePlayingUseCase, PlayGamesUseCase, Playing,
+    StandByUseCase, SteamLibrary, StopPlayingUseCase,
 };
 use preferences::{GetPreferencesUseCase, Preferences};
 use session::{DropCard, Found, KeptSession, Mode, SessionKeeper};
@@ -34,7 +34,7 @@ use crate::{
             RETRY_READ, TICK,
         },
     },
-    service::{farm_order, plan, why_nothing},
+    service::{farm_order, first_refund_ends, left_out, plan, why_nothing},
 };
 
 /// Farms through the game, card and preferences components' use cases, never
@@ -106,7 +106,7 @@ impl Run {
     /// its first, while the badges are read, carries the session on.
     fn carry_on(&self, r: &Reporter, prefs: &Preferences) {
         let kept = self.kept();
-        let order = farm_order(&kept.library, prefs, &kept.set_aside);
+        let order = farm_order(&kept.library, prefs, &kept.set_aside, Utc::now());
         r.remember(|s| {
             s.library = kept.library.clone();
             s.sets = kept.sets.clone();
@@ -183,10 +183,11 @@ impl Farmer {
             match read {
                 Ok(Ok(fresh)) => {
                     let prefs = self.get_preferences.call();
+                    let now = Utc::now();
                     let found = run.kept().take(
                         fresh,
-                        |library, aside| farm_order(library, &prefs, aside),
-                        Utc::now(),
+                        |library, aside| farm_order(library, &prefs, aside, now),
+                        now,
                     );
                     self.dropped(found, &prefs, run, r, token).await;
                     if token.is_cancelled() {
@@ -220,7 +221,7 @@ impl Farmer {
             let prefs = self.get_preferences.call();
             let planned = {
                 let kept = run.kept();
-                plan(&kept.library, &prefs, &kept.set_aside)
+                plan(&kept.library, &prefs, &kept.set_aside, Utc::now())
             };
             let outcome = match planned {
                 Plan::Cards(app_id) => self.farm_cards(app_id, run, r, token).await,
@@ -335,14 +336,22 @@ impl Farmer {
                     if latest == prefs {
                         continue;
                     }
+                    let now = Utc::now();
                     let planned = {
                         let kept = run.kept();
-                        plan(&kept.library, &latest, &kept.set_aside)
+                        plan(&kept.library, &latest, &kept.set_aside, now)
                     };
                     if planned != Plan::Cards(app_id) {
-                        r.event(FarmingEvent::MovedOn {
-                            game: game.name.clone(),
-                            outranked: latest.wants(app_id),
+                        let wanted = left_out(&game, &latest, now).is_none();
+                        // Short of the hours the account needs now, it builds
+                        // them with the others.
+                        r.event(if wanted && !game.can_drop(latest.hours_before_drops) {
+                            FarmingEvent::ChoicesChanged
+                        } else {
+                            FarmingEvent::MovedOn {
+                                game: game.name.clone(),
+                                outranked: wanted,
+                            }
                         });
                         return Outcome::Again;
                     }
@@ -464,10 +473,12 @@ impl Farmer {
         r.event(FarmingEvent::BuildingHours {
             lead: run.kept().name(app_ids[0]),
             games: app_ids.len(),
+            hours: prefs.hours_before_drops,
         });
         let mut counted_to = Instant::now();
         loop {
-            let ready_at = Instant::now() + until_ready(&run.kept().library, app_ids);
+            let ready_at = Instant::now()
+                + until_ready(&run.kept().library, app_ids, prefs.hours_before_drops);
             self.report(run, app_ids, Mode::Hours, ready_at, &prefs, r);
             let woke = self.wait(Some(ready_at), token).await;
             run.kept().count(app_ids, counted_to.elapsed());
@@ -496,18 +507,25 @@ impl Farmer {
                 let kept = run.kept();
                 app_ids
                     .iter()
-                    .find_map(|&id| kept.library.game(id).filter(|g| g.can_drop()))
+                    .find_map(|&id| {
+                        kept.library
+                            .game(id)
+                            .filter(|g| g.can_drop(prefs.hours_before_drops))
+                    })
                     .map(|g| g.name.clone())
             };
             if let Some(ready) = ready {
-                r.event(FarmingEvent::HoursBuilt { game: ready });
+                r.event(FarmingEvent::HoursBuilt {
+                    game: ready,
+                    hours: prefs.hours_before_drops,
+                });
                 return Outcome::Again;
             }
             let latest = self.get_preferences.call();
             if latest != prefs {
                 let planned = {
                     let kept = run.kept();
-                    plan(&kept.library, &latest, &kept.set_aside)
+                    plan(&kept.library, &latest, &kept.set_aside, Utc::now())
                 };
                 if planned != Plan::Hours(app_ids.to_vec()) {
                     r.event(FarmingEvent::ChoicesChanged);
@@ -523,15 +541,20 @@ impl Farmer {
         }
     }
 
-    /// Nothing to farm: signs off, and looks again in a few hours, or as
-    /// soon as the user's choices change.
+    /// Nothing to farm: signs off, and looks again in a few hours, as soon
+    /// as Steam stops refunding a game left out for it, or as soon as the
+    /// user's choices change.
     async fn rest(&self, run: &Run, r: &Reporter, token: &CancellationToken) -> Outcome {
         self.stop_playing.call().await;
         let prefs = self.get_preferences.call();
-        let until = Instant::now() + IDLE_LOOK;
-        let status = {
+        let now = Utc::now();
+        let (until, status) = {
             let kept = run.kept();
-            FarmingStatus {
+            let wait = first_refund_ends(&kept.library, &prefs, now)
+                .and_then(|ends| (ends - now).to_std().ok())
+                .map_or(IDLE_LOOK, |left| left.min(IDLE_LOOK));
+            let until = Instant::now() + wait;
+            let status = FarmingStatus {
                 status: Status::Idle,
                 library: kept.library.clone(),
                 sets: kept.sets.clone(),
@@ -539,9 +562,10 @@ impl Farmer {
                 next_look: Some(when(until)),
                 session: kept.session.clone(),
                 set_aside: kept.set_aside.clone(),
-                nothing_to_farm: Some(why_nothing(&kept.library, &prefs)),
+                nothing_to_farm: Some(why_nothing(&kept.library, &prefs, now)),
                 ..Default::default()
-            }
+            };
+            (until, status)
         };
         r.status(status);
         loop {
@@ -647,7 +671,7 @@ impl Farmer {
                 status: Status::Blocked,
                 library: kept.library.clone(),
                 sets: kept.sets.clone(),
-                order: farm_order(&kept.library, &prefs, &kept.set_aside),
+                order: farm_order(&kept.library, &prefs, &kept.set_aside, Utc::now()),
                 blocked_by: by,
                 next_look: until.map(when),
                 session: kept.session.clone(),
@@ -676,9 +700,11 @@ impl Farmer {
         }
         let (events, ask) = {
             let mut kept = run.kept();
+            let now = Utc::now();
             kept.first_forecast(
-                |library, aside| farm_order(library, prefs, aside),
-                Utc::now(),
+                |library, aside| farm_order(library, prefs, aside, now),
+                prefs.hours_before_drops,
+                now,
             );
             let events: Vec<FarmingEvent> = found
                 .iter()
@@ -851,7 +877,7 @@ impl Farmer {
                 status: Status::Farming,
                 library: kept.library.clone(),
                 sets: kept.sets.clone(),
-                order: farm_order(&kept.library, prefs, &kept.set_aside),
+                order: farm_order(&kept.library, prefs, &kept.set_aside, Utc::now()),
                 playing: playing.to_vec(),
                 mode: Some(mode),
                 blocked_by: None,
@@ -915,13 +941,14 @@ fn look_every(game: &Game) -> Duration {
     }
 }
 
-/// How long until the first of these games has the hours to drop cards.
-fn until_ready(library: &SteamLibrary, app_ids: &[AppId]) -> Duration {
+/// How long until the first of these games has the hours to drop cards, on
+/// an account that holds cards back for `before_drops` hours.
+fn until_ready(library: &SteamLibrary, app_ids: &[AppId], before_drops: u8) -> Duration {
     let least = app_ids
         .iter()
         .filter_map(|&id| library.game(id))
-        .map(Game::hours_to_go)
-        .fold(HOURS_BEFORE_DROPS, f64::min);
+        .map(|g| g.hours_to_go(before_drops))
+        .fold(f64::from(before_drops), f64::min);
     Duration::from_secs_f64((least * 3600.0).max(1.0))
 }
 

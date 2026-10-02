@@ -46,11 +46,13 @@ pub struct Summary {
 }
 
 impl Summary {
-    /// `order` is the games that will be farmed, in farm order.
+    /// `order` is the games that will be farmed, in farm order, on an
+    /// account that holds cards back for `before_drops` hours.
     pub fn build(
         session: &Session,
         library: &SteamLibrary,
         order: &[AppId],
+        before_drops: u8,
         book: &PriceBook,
         wallet: Option<&Wallet>,
         now: DateTime<Utc>,
@@ -61,7 +63,8 @@ impl Summary {
             .filter(|g| g.has_drops_left())
             .collect();
         let cards_to_go = farmed.iter().map(|g| g.drops.remaining).sum();
-        let time_to_go = (cards_to_go > 0).then(|| Forecast::of(session, library, order, now).eta);
+        let time_to_go =
+            (cards_to_go > 0).then(|| Forecast::of(session, library, order, before_drops, now).eta);
 
         let (session_value, when_done) = match wallet {
             Some(wallet) => {
@@ -291,6 +294,8 @@ mod tests {
                 remaining: 1,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         }
     }
 
@@ -304,6 +309,8 @@ mod tests {
                 remaining: 2,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         }
     }
 
@@ -401,6 +408,7 @@ mod tests {
             &session(),
             &library,
             &[AppId(960_910), AppId(48_000)],
+            3,
             &book(),
             Some(&pounds()),
             at(17, 31),
@@ -433,6 +441,7 @@ mod tests {
             &session(),
             &library,
             &[AppId(960_910)],
+            3,
             &book(),
             None,
             at(17, 31),
@@ -452,6 +461,7 @@ mod tests {
             &Session::default(),
             &library,
             &[],
+            3,
             &book(),
             Some(&pounds()),
             at(17, 31),

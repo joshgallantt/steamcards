@@ -4,7 +4,7 @@
 //! rejects the sign-in, both know at once.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -25,6 +25,7 @@ use crate::{
     community::{Community, Reply, WebLogin},
     directory,
     inventory::{self, Described, InventoryItem},
+    licences::{self, Licence},
     page::{Seen, seen_by},
     token,
 };
@@ -373,6 +374,48 @@ impl SteamClient {
             }
         }
         Ok(wanted.iter().filter_map(|id| found.remove(id)).collect())
+    }
+
+    /// The games the account marked private, by app ID. Asked over the
+    /// signed-on connection, signing on first if need be, unless another
+    /// session signed on in this one's place.
+    pub async fn private_apps(&self) -> anyhow::Result<Vec<u32>> {
+        licences::private_apps(&*self.connection_unless_replaced().await?).await
+    }
+
+    /// The account's licences, as Steam listed them to the signed-on
+    /// session, signing on first if need be, unless another session signed
+    /// on in this one's place.
+    pub async fn licences(&self) -> anyhow::Result<Vec<Licence>> {
+        self.connection_unless_replaced()
+            .await?
+            .licences()
+            .await
+            .ok_or_else(|| anyhow!("Steam didn't list the account's licences"))
+    }
+
+    /// The apps each of these packages holds, by package ID, as Steam's
+    /// product info says: `(package ID, access token)` each, as the
+    /// licences give them. A package Steam says nothing readable about is
+    /// left out. Asked as [`private_apps`](Self::private_apps) is.
+    pub async fn package_apps(
+        &self,
+        packages: &[(u32, u64)],
+    ) -> anyhow::Result<HashMap<u32, Vec<u32>>> {
+        if packages.is_empty() {
+            return Ok(HashMap::new());
+        }
+        licences::package_apps(&*self.connection_unless_replaced().await?, packages).await
+    }
+
+    /// The signed-on connection, as [`connection`](Self::connection) gives
+    /// it, unless Steam signed the last session off for another in its
+    /// place: signing on again would sign that one off.
+    async fn connection_unless_replaced(&self) -> anyhow::Result<Arc<Connection>> {
+        if self.replaced() {
+            bail!("another session signed on in this one's place");
+        }
+        self.connection().await
     }
 
     /// The account's wallet, as Steam last said: it says as a session signs

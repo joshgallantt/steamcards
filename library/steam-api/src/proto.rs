@@ -19,11 +19,14 @@ pub(crate) mod emsg {
     pub(crate) const CLIENT_CHANGE_STATUS: u32 = 716;
     pub(crate) const CLIENT_LOG_ON_RESPONSE: u32 = 751;
     pub(crate) const CLIENT_LOGGED_OFF: u32 = 757;
+    pub(crate) const CLIENT_LICENSE_LIST: u32 = 780;
     pub(crate) const CLIENT_GAMES_PLAYED_WITH_DATA_BLOB: u32 = 5410;
     pub(crate) const CLIENT_LOGON: u32 = 5514;
     pub(crate) const CLIENT_WALLET_INFO_UPDATE: u32 = 5528;
     pub(crate) const CLIENT_ITEM_ANNOUNCEMENTS: u32 = 5576;
     pub(crate) const CLIENT_REQUEST_ITEM_ANNOUNCEMENTS: u32 = 5577;
+    pub(crate) const CLIENT_PICS_PRODUCT_INFO_REQUEST: u32 = 8903;
+    pub(crate) const CLIENT_PICS_PRODUCT_INFO_RESPONSE: u32 = 8904;
     pub(crate) const CLIENT_PLAYING_SESSION_STATE: u32 = 9600;
     pub(crate) const SERVICE_METHOD_CALL_FROM_CLIENT_NON_AUTHED: u32 = 9804;
     pub(crate) const CLIENT_HELLO: u32 = 9805;
@@ -415,6 +418,101 @@ pub(crate) struct ItemTag {
     pub(crate) internal_name: Option<String>,
 }
 
+/// `CMsgClientLicenseList`: every licence the account holds, which Steam
+/// tells a session as it signs on, and again when one is added.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ClientLicenseList {
+    /// `EResult`. Absent means 2 (fail), as the .proto's default says.
+    #[prost(int32, optional, tag = "1")]
+    pub(crate) eresult: Option<i32>,
+    #[prost(message, repeated, tag = "2")]
+    pub(crate) licenses: Vec<License>,
+}
+
+/// `CMsgClientLicenseList.License`: one licence, and how it was got.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct License {
+    #[prost(uint32, optional, tag = "1")]
+    pub(crate) package_id: Option<u32>,
+    /// When it was got, in seconds since 1970.
+    #[prost(fixed32, optional, tag = "2")]
+    pub(crate) time_created: Option<u32>,
+    /// `EPaymentMethod`.
+    #[prost(uint32, optional, tag = "6")]
+    pub(crate) payment_method: Option<u32>,
+    /// `ELicenseFlags`.
+    #[prost(uint32, optional, tag = "7")]
+    pub(crate) flags: Option<u32>,
+    /// What asking about its package takes.
+    #[prost(uint64, optional, tag = "17")]
+    pub(crate) access_token: Option<u64>,
+}
+
+/// `CMsgClientPICSProductInfoRequest`: asks Steam's product info (PICS)
+/// about packages, as the Steam client and SteamKit do for the ones the
+/// account holds.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ClientPicsProductInfoRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub(crate) packages: Vec<PicsPackageAsk>,
+    #[prost(bool, optional, tag = "3")]
+    pub(crate) meta_data_only: Option<bool>,
+}
+
+/// `CMsgClientPICSProductInfoRequest.PackageInfo`: one package asked about.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct PicsPackageAsk {
+    #[prost(uint32, optional, tag = "1")]
+    pub(crate) packageid: Option<u32>,
+    #[prost(uint64, optional, tag = "2")]
+    pub(crate) access_token: Option<u64>,
+}
+
+/// `CMsgClientPICSProductInfoResponse`: one part of the answer. More follow
+/// while `response_pending` is set.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct ClientPicsProductInfoResponse {
+    #[prost(message, repeated, tag = "3")]
+    pub(crate) packages: Vec<PicsPackageInfo>,
+    /// Packages asked about that Steam doesn't know.
+    #[prost(uint32, repeated, packed = "false", tag = "4")]
+    pub(crate) unknown_packageids: Vec<u32>,
+    #[prost(bool, optional, tag = "6")]
+    pub(crate) response_pending: Option<bool>,
+}
+
+/// `CMsgClientPICSProductInfoResponse.PackageInfo`: a package's details, as
+/// binary KeyValues.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct PicsPackageInfo {
+    #[prost(uint32, optional, tag = "1")]
+    pub(crate) packageid: Option<u32>,
+    /// The access token asked with wasn't one Steam takes.
+    #[prost(bool, optional, tag = "3")]
+    pub(crate) missing_token: Option<bool>,
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub(crate) buffer: Option<Vec<u8>>,
+}
+
+/// `CAccountPrivateApps_GetPrivateAppList_Request`: nothing in it.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct GetPrivateAppListRequest {}
+
+/// `CAccountPrivateApps_GetPrivateAppList_Response`.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct GetPrivateAppListResponse {
+    #[prost(message, optional, tag = "1")]
+    pub(crate) private_apps: Option<PrivateAppList>,
+}
+
+/// `CAccountPrivateAppList`: the games the account marked private in its
+/// library.
+#[derive(Clone, PartialEq, Message)]
+pub(crate) struct PrivateAppList {
+    #[prost(int32, repeated, packed = "false", tag = "1")]
+    pub(crate) appids: Vec<i32>,
+}
+
 /// The service methods steamcards calls, as Steam names them.
 pub(crate) mod method {
     pub(crate) const BEGIN_QR: &str = "Authentication.BeginAuthSessionViaQR#1";
@@ -422,6 +520,7 @@ pub(crate) mod method {
     pub(crate) const GENERATE_ACCESS_TOKEN: &str = "Authentication.GenerateAccessTokenForApp#1";
     pub(crate) const REVOKE_TOKEN: &str = "Authentication.RevokeToken#1";
     pub(crate) const GET_INVENTORY_ITEMS: &str = "Econ.GetInventoryItemsWithDescriptions#1";
+    pub(crate) const GET_PRIVATE_APPS: &str = "AccountPrivateApps.GetPrivateAppList#1";
 }
 
 /// Decodes a message body, saying which message didn't read.

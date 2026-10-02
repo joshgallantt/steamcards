@@ -17,6 +17,5 @@ workspace = true
 [dependencies]
 card.workspace = true
 farming.workspace = true
-game.workspace = true
 update.workspace = true
 chrono.workspace = true

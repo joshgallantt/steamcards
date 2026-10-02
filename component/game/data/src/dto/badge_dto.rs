@@ -18,6 +18,8 @@ pub(crate) struct BadgeDto {
 }
 
 impl BadgeDto {
+    /// The game as its row shows it. A badge page doesn't say whether a game
+    /// is private, or when it was bought: the client asks Steam that.
     pub(crate) fn into_domain(self) -> Game {
         Game {
             app_id: AppId(self.app_id),
@@ -28,6 +30,8 @@ impl BadgeDto {
                 remaining: self.cards_left,
             },
             badge_level: self.badge_level,
+            private: false,
+            bought_at: None,
         }
     }
 }

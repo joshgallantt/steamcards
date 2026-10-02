@@ -1,7 +1,8 @@
 //! Steam, in Steam's own terms: a CM server connection, sign-in with a QR code
 //! the Steam app approves, playing games, the pages of steamcommunity.com as
 //! the account's owner sees them, and each game's card page, the items in the
-//! account's inventory, and the account's wallet. The market's requests go
+//! account's inventory, the account's wallet, its licences, and the games it
+//! keeps private. The market's requests go
 //! out through here too, one at a time, but `card-data` reads the market.
 //!
 //! No domain knowledge. The data crates map what this returns onto their
@@ -18,6 +19,8 @@ mod community;
 mod directory;
 mod eresult;
 pub mod inventory;
+mod keyvalues;
+pub mod licences;
 mod packet;
 pub mod page;
 mod proto;

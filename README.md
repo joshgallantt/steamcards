@@ -19,7 +19,8 @@
 - **Status Dashboard:** Includes farming progress, market value of cards, and much more.
 - **Appears offline** Enabled by default. So your friends don't get spammed by you launching games.
 - **Steps aside** While you play on another device, and carries on a minute after you stop.
-- **Keeps itself up to date:** Checks for a new release once a day. Turn it off with `a`, then `u`.
+- **Leaves your refunds alone:** Games you bought in the last 14 days, and have played under 2 hours, aren't farmed until Steam won't refund them.
+- **Keeps itself up to date:** Checks for a new release once a day. Turn it off in settings (`s`).
 - **Windows, macOS and Linux.**
 
 ## Install
@@ -66,7 +67,9 @@ Press `?` at any time to see what the keys do, and `enter` on a game to see its 
 
 ## Good to know
 
-Steam won't drop cards for some games whatever plays them: family-shared games, free-to-play games you haven't spent on, games marked private, and games on limited accounts. steamcards moves on from a game that drops nothing for 10 hours.
+Steam won't drop cards for some games whatever plays them: family-shared games, free-to-play games you haven't spent on, games marked private, and games on limited accounts. steamcards leaves private games out, and moves on from any other game that drops nothing for 10 hours.
+
+Most accounts get no cards from a game until it has 3 hours on record, so steamcards plays the games short of that together first, then each on its own. If yours gets cards from the start, set the hours to 0 in settings (`s`), and every game is farmed on its own.
 
 If you start a game on another computer while steamcards farms, Steam says you're already playing elsewhere, and offers to close that game: let it.
 

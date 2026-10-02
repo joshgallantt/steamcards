@@ -13,10 +13,15 @@ pub enum FarmingEvent {
     /// drop.
     FarmingCards { game: String, cards_left: u32 },
     /// Started playing games together, `games` of them, until the first,
-    /// `lead`, has the hours its cards need.
-    BuildingHours { lead: String, games: usize },
-    /// A game played for its hours has them now: its cards can drop.
-    HoursBuilt { game: String },
+    /// `lead`, has the `hours` its cards need.
+    BuildingHours {
+        lead: String,
+        games: usize,
+        hours: u8,
+    },
+    /// A game played for its hours has the `hours` its cards need now: its
+    /// cards can drop.
+    HoursBuilt { game: String, hours: u8 },
     /// Steam says new items arrived: a card may have dropped.
     NewItems,
     /// A look at a game's cards found no new drop.

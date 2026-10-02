@@ -39,3 +39,20 @@ pub trait SetRestartGamesUseCase: Send + Sync {
 pub trait SetAutoUpdateUseCase: Send + Sync {
     fn call(&self, on: bool) -> Result<(), PreferencesError>;
 }
+
+/// Sets the hours a game needs before its cards drop on this account, up to
+/// [`Preferences::MOST_HOURS_BEFORE_DROPS`]: more than that is taken as the
+/// most. 0 farms every game on its own.
+pub trait SetHoursBeforeDropsUseCase: Send + Sync {
+    fn call(&self, hours: u8) -> Result<(), PreferencesError>;
+}
+
+/// Leaves out games marked private, or farms them too.
+pub trait SetSkipPrivateUseCase: Send + Sync {
+    fn call(&self, skip: bool) -> Result<(), PreferencesError>;
+}
+
+/// Leaves out games Steam would still refund, or farms them too.
+pub trait SetSkipRefundableUseCase: Send + Sync {
+    fn call(&self, skip: bool) -> Result<(), PreferencesError>;
+}

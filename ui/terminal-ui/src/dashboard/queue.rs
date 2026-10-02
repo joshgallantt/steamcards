@@ -2,6 +2,8 @@
 // don't mind about, what they skipped, and what's done. Pure data — built
 // fresh from the latest farming status and preferences on every frame.
 
+use chrono::{DateTime, Utc};
+use farming::{LeftOut, left_out};
 use game::{AppId, Game, SteamLibrary};
 use preferences::{Preferences, Tier};
 use session::Mode;
@@ -20,11 +22,17 @@ pub struct QueueEntry {
     pub tier: Tier,
     /// Being played right now, and how.
     pub playing: Option<Mode>,
-    /// Farmed at all: not when "only priority" is on and it isn't one.
-    pub wanted: bool,
+    /// Why it isn't farmed, if it isn't: the user's choices, or what Steam
+    /// says of it.
+    pub left_out: Option<LeftOut>,
 }
 
 impl QueueEntry {
+    /// Whether it's farmed at all.
+    pub fn wanted(&self) -> bool {
+        self.left_out.is_none()
+    }
+
     pub fn section(&self) -> Section {
         if !self.game.has_drops_left() {
             return Section::Done;
@@ -46,13 +54,14 @@ pub struct Queue {
 impl Queue {
     /// `order` is the farmer's own order (app IDs); games it leaves out come
     /// after, most played first. `playing` is what's being played, and how;
-    /// empty while farming is paused.
+    /// empty while farming is paused. What's left out is as of `now`.
     pub fn build(
         library: &SteamLibrary,
         order: &[AppId],
         playing: &[AppId],
         mode: Option<Mode>,
         prefs: &Preferences,
+        now: DateTime<Utc>,
     ) -> Self {
         let place = |g: &Game| order.iter().position(|&id| id == g.app_id);
         let mut games: Vec<&Game> = library.games().iter().collect();
@@ -77,7 +86,7 @@ impl Queue {
             let entry = QueueEntry {
                 tier: prefs.tier(g.app_id),
                 playing: mode.filter(|_| playing.contains(&g.app_id)),
-                wanted: prefs.wants(g.app_id),
+                left_out: left_out(g, prefs, now),
                 game: g.clone(),
             };
             let i = sections
@@ -116,6 +125,10 @@ mod tests {
 
     use super::*;
 
+    fn now() -> DateTime<Utc> {
+        DateTime::from_timestamp(1_790_553_600, 0).unwrap()
+    }
+
     fn ids(q: &Queue, section: Section) -> Vec<u32> {
         q.sections
             .iter()
@@ -144,6 +157,7 @@ mod tests {
             &[AppId(2)],
             Some(Mode::Hours),
             &prefs,
+            now(),
         );
 
         assert_eq!(ids(&q, Section::Priority), [2, 1]);
@@ -157,7 +171,7 @@ mod tests {
     #[test]
     fn without_the_farmers_order_the_most_played_come_first() {
         let library = SteamLibrary::new(vec![game(1, 1.0, 0, 3), game(2, 7.0, 0, 2)]);
-        let q = Queue::build(&library, &[], &[], None, &Preferences::default());
+        let q = Queue::build(&library, &[], &[], None, &Preferences::default(), now());
         assert_eq!(ids(&q, Section::Indifferent), [2, 1]);
     }
 
@@ -169,8 +183,35 @@ mod tests {
             only_priority: true,
             ..Default::default()
         };
-        let q = Queue::build(&library, &[AppId(1)], &[], None, &prefs);
-        assert!(!q.get(AppId(2)).unwrap().wanted);
-        assert!(q.get(AppId(1)).unwrap().wanted);
+        let q = Queue::build(&library, &[AppId(1)], &[], None, &prefs, now());
+        assert_eq!(
+            q.get(AppId(2)).unwrap().left_out,
+            Some(LeftOut::NotPriority)
+        );
+        assert!(q.get(AppId(1)).unwrap().wanted());
+    }
+
+    #[test]
+    fn a_private_game_says_so_and_isnt_wanted() {
+        let private = Game {
+            private: true,
+            ..game(1, 5.0, 0, 3)
+        };
+        let library = SteamLibrary::new(vec![private, game(2, 7.0, 0, 2)]);
+        let q = Queue::build(
+            &library,
+            &[AppId(2)],
+            &[],
+            None,
+            &Preferences::default(),
+            now(),
+        );
+        assert_eq!(q.get(AppId(1)).unwrap().left_out, Some(LeftOut::Private));
+        assert_eq!(
+            q.get(AppId(1)).unwrap().section(),
+            Section::Indifferent,
+            "where the user put it"
+        );
+        assert!(q.get(AppId(2)).unwrap().wanted());
     }
 }

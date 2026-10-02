@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use card::CardKind;
 use chrono::{DateTime, Utc};
-use farming::Status;
+use farming::{LeftOut, Status};
 use preferences::Tier;
 use ratatui::{
     Frame,
@@ -57,7 +57,15 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
     ])
     .areas(area);
 
-    let summary = Summary::build(cx.session, cx.library, cx.order, cx.book, cx.wallet, cx.now);
+    let summary = Summary::build(
+        cx.session,
+        cx.library,
+        cx.order,
+        cx.prefs.hours_before_drops,
+        cx.book,
+        cx.wallet,
+        cx.now,
+    );
     render_header(f, header, cx);
     render_summary(f, summary_area, cx, &summary);
     let offset = if area.width >= SIDE_BY_SIDE {
@@ -155,6 +163,19 @@ pub(crate) fn hours(h: f64) -> String {
     } else {
         format!("{}h", thousands(h.round() as u64))
     }
+}
+
+/// "an hour", "3 hours": the hours a game needs on record.
+fn hours_needed(n: u8) -> String {
+    match n {
+        1 => "an hour".to_owned(),
+        n => format!("{n} hours"),
+    }
+}
+
+/// "on 12 October": the day `at` falls on, where the user is.
+fn on_day(at: DateTime<Utc>, cx: &Ctx<'_>) -> String {
+    at.with_timezone(&cx.zone).format("on %-d %B").to_string()
 }
 
 /// "1,234".
@@ -626,7 +647,7 @@ fn render_games(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) -> usize {
         .collect();
     let to_go = q
         .entries()
-        .filter(|e| e.wanted && matches!(e.section(), Section::Priority | Section::Indifferent))
+        .filter(|e| e.wanted() && matches!(e.section(), Section::Priority | Section::Indifferent))
         .count();
     block = block.title_top(Line::from(dim(format!(" {to_go} to go "))).right_aligned());
 
@@ -693,7 +714,7 @@ fn game_row(e: &QueueEntry, c: &GameCols, cx: &Ctx<'_>) -> Line<'static> {
     let state = State::of(e);
     let done = state == State::Done;
     let skipped = e.tier == Tier::Skip && !done;
-    let muted = done || skipped || !e.wanted;
+    let muted = done || skipped || !e.wanted();
     let text = if muted { theme::dim() } else { theme::plain() };
 
     let mut s = vec![if skipped {
@@ -709,10 +730,18 @@ fn game_row(e: &QueueEntry, c: &GameCols, cx: &Ctx<'_>) -> Line<'static> {
             _ => Span::raw(" ".repeat(c.rank)),
         });
     }
-    s.push(Span::styled(
-        fit(&shorten(&e.game.name, c.name.saturating_sub(1)), c.name),
-        text,
-    ));
+    // A game Steam's say keeps out says why after its name.
+    let why = match e.left_out.filter(|_| !done) {
+        Some(LeftOut::Private) => " · private",
+        Some(LeftOut::Refundable { .. }) => " · refundable",
+        _ => "",
+    };
+    let room = c.name.saturating_sub(1);
+    let name = match room.checked_sub(why.chars().count()) {
+        Some(left) if left >= 8 => format!("{}{why}", shorten(&e.game.name, left)),
+        _ => shorten(&e.game.name, room),
+    };
+    s.push(Span::styled(fit(&name, c.name), text));
     s.push(Span::styled(
         fit_right(
             &format!("{}/{}", e.game.drops.received, e.game.drops.total()),
@@ -899,8 +928,9 @@ pub(crate) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
                 state.style(),
             ),
             format!(
-                "Its cards can drop once it has 3 hours on record: {} to go.",
-                hours(g.hours_to_go())
+                "Its cards can drop once it has {} on record: {} to go.",
+                hours_needed(cx.prefs.hours_before_drops),
+                hours(g.hours_to_go(cx.prefs.hours_before_drops))
             ),
         ),
         State::Done => (
@@ -914,9 +944,25 @@ pub(crate) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
             Span::styled(format!("{} Skipped", theme::SKIPPED), theme::fg(BAD)),
             "Never farmed.".to_owned(),
         ),
-        State::Queued if !e.wanted => (
+        State::Queued if e.left_out.is_some() => (
             Span::styled("Not farmed", theme::bold()),
-            "\"Only priority\" is on, and it isn't one of your priority games.".to_owned(),
+            match e.left_out {
+                Some(LeftOut::Private) => "It's marked private in your Steam library, and Steam \
+                                           drops no cards for private games. Make it public in \
+                                           Steam, or turn off \"Skip private games\" in settings \
+                                           (s), to farm it."
+                    .to_owned(),
+                Some(LeftOut::Refundable { until }) => format!(
+                    "Bought lately, and played under 2 hours: Steam would still refund it. It's \
+                     farmed once Steam won't, {}, or once you've played it 2 hours. To farm it \
+                     now, turn off \"Skip recently bought games\" in settings (s).",
+                    on_day(until, cx)
+                ),
+                Some(LeftOut::SaleEvent) => "A sale event's badge: its cards come from taking \
+                                             part in the sale, not from playing."
+                    .to_owned(),
+                _ => "\"Only priority\" is on, and it isn't one of your priority games.".to_owned(),
+            },
         ),
         State::Queued if first == Some(g.app_id) => (
             Span::styled("Next up", theme::bold()),
@@ -945,8 +991,9 @@ pub(crate) fn detail_info(e: &QueueEntry, cx: &Ctx<'_>, w: usize) -> Vec<Line<'s
         Line::from(spans)
     };
     let mut played = vec![Span::raw(format!("{} on record", hours(g.hours)))];
-    if !g.can_drop() && g.has_drops_left() {
-        played.push(dim(" · cards drop from 3h"));
+    let before_drops = cx.prefs.hours_before_drops;
+    if !g.can_drop(before_drops) && g.has_drops_left() {
+        played.push(dim(format!(" · cards drop from {before_drops}h")));
     }
     out.push(field("Hours", played));
     let mut drops = if g.has_drops_left() {
@@ -1169,6 +1216,7 @@ fn render_footer(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
             if expired { 0 } else { 2 },
         ),
         ("g", "games", 4),
+        ("s", "settings", 5),
         ("l", "log", 7),
         (
             "p",
@@ -1243,7 +1291,7 @@ mod tests {
             game: game(1, 5.0, 1, remaining),
             tier: Tier::Indifferent,
             playing,
-            wanted: true,
+            left_out: None,
         };
         assert_eq!(State::of(&entry(2, Some(Mode::Cards))), State::Farming);
         assert_eq!(State::of(&entry(2, Some(Mode::Hours))), State::Hours);
@@ -1262,6 +1310,8 @@ mod tests {
                 remaining: 0,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         };
         assert_eq!(value_to_come(&g, &card::PriceBook::default(), None), None);
     }

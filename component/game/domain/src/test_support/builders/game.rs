@@ -12,5 +12,7 @@ pub fn game(app_id: u32, hours: f64, received: u32, remaining: u32) -> Game {
             remaining,
         },
         badge_level: 0,
+        private: false,
+        bought_at: None,
     }
 }

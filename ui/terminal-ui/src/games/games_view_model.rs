@@ -4,18 +4,14 @@ use crate::games::GameRow;
 
 use game::{AppId, Game};
 use preferences::{
-    GetPreferencesUseCase, PreferencesError, SetAppearOnlineUseCase, SetGameTierUseCase,
-    SetOnlyPriorityUseCase, SetRestartGamesUseCase, Tier,
+    GetPreferencesUseCase, PreferencesError, SetGameTierUseCase, SetOnlyPriorityUseCase, Tier,
 };
 
-/// Choosing which games are farmed first, and how: how farming shows to
-/// friends, and whether the game is restarted to shake drops loose.
+/// Choosing which games are farmed first, and whether only those are.
 pub struct GamesViewModel {
     get: Arc<dyn GetPreferencesUseCase>,
     set_tier: Arc<dyn SetGameTierUseCase>,
     set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
-    set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
-    set_restart_games: Arc<dyn SetRestartGamesUseCase>,
 }
 
 impl GamesViewModel {
@@ -23,15 +19,11 @@ impl GamesViewModel {
         get: Arc<dyn GetPreferencesUseCase>,
         set_tier: Arc<dyn SetGameTierUseCase>,
         set_only_priority: Arc<dyn SetOnlyPriorityUseCase>,
-        set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
-        set_restart_games: Arc<dyn SetRestartGamesUseCase>,
     ) -> Self {
         Self {
             get,
             set_tier,
             set_only_priority,
-            set_appear_online,
-            set_restart_games,
         }
     }
 
@@ -41,22 +33,6 @@ impl GamesViewModel {
 
     pub fn toggle_only_priority(&self) -> Result<(), PreferencesError> {
         self.set_only_priority.call(!self.only_priority())
-    }
-
-    pub fn appear_online(&self) -> bool {
-        self.get.call().appear_online
-    }
-
-    pub fn toggle_appear_online(&self) -> Result<(), PreferencesError> {
-        self.set_appear_online.call(!self.appear_online())
-    }
-
-    pub fn restart_games(&self) -> bool {
-        self.get.call().restart_games
-    }
-
-    pub fn toggle_restart_games(&self) -> Result<(), PreferencesError> {
-        self.set_restart_games.call(!self.restart_games())
     }
 
     pub fn set_tier(&self, app_id: AppId, tier: Tier) -> Result<(), PreferencesError> {
@@ -129,9 +105,8 @@ fn row(app_id: AppId, games: &[Game], rank: Option<usize>) -> GameRow {
 mod tests {
     use game::{AppId, test_support::game};
     use preferences::{
-        DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-        DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, Preferences,
-        test_support::FakePreferencesRepository,
+        DefaultGetPreferencesUseCase, DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase,
+        Preferences, test_support::FakePreferencesRepository,
     };
 
     use super::*;
@@ -144,9 +119,7 @@ mod tests {
         GamesViewModel::new(
             Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
-            Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
-            Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
+            Arc::new(DefaultSetOnlyPriorityUseCase::new(repo)),
         )
     }
 
@@ -192,15 +165,10 @@ mod tests {
     }
 
     #[test]
-    fn appearing_online_only_priority_and_restarting_toggle() {
+    fn only_priority_toggles() {
         let g = games(&[]);
-        assert!(!g.appear_online(), "offline by default");
-        g.toggle_appear_online().unwrap();
-        assert!(g.appear_online());
+        assert!(!g.only_priority(), "off by default");
         g.toggle_only_priority().unwrap();
         assert!(g.only_priority());
-        assert!(!g.restart_games(), "not restarted unless asked");
-        g.toggle_restart_games().unwrap();
-        assert!(g.restart_games());
     }
 }

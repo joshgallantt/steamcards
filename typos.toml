@@ -15,3 +15,5 @@ ratatui = "ratatui"
 Dota = "Dota"
 # The ending of an ordinal, as the farmer counts copies: "a 2nd copy".
 nd = "nd"
+# Steam's name for a package's ID, in its product info.
+packageid = "packageid"

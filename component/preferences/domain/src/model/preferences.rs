@@ -1,4 +1,4 @@
-use game::AppId;
+use game::{AppId, HOURS_BEFORE_DROPS};
 
 use crate::Tier;
 
@@ -24,6 +24,19 @@ pub struct Preferences {
     /// put it in place, or say how to get it. On unless the user turns it
     /// off.
     pub auto_update: bool,
+    /// Hours a game needs on record before its cards drop on this account:
+    /// games short of them play together to build them, and a game is
+    /// farmed on its own once it has them. 3 unless the user says otherwise;
+    /// 0 farms every game on its own, for an account Steam doesn't hold
+    /// back. At most [`Self::MOST_HOURS_BEFORE_DROPS`].
+    pub hours_before_drops: u8,
+    /// Leave out games marked private: Steam drops no cards for them. On
+    /// unless the user turns it off.
+    pub skip_private: bool,
+    /// Leave out games Steam would still refund, bought in the last 14 days
+    /// and played under 2 hours, so farming them doesn't cost the refund. On
+    /// unless the user turns it off.
+    pub skip_refundable: bool,
 }
 
 impl Default for Preferences {
@@ -35,11 +48,17 @@ impl Default for Preferences {
             appear_online: false,
             restart_games: false,
             auto_update: true,
+            hours_before_drops: HOURS_BEFORE_DROPS,
+            skip_private: true,
+            skip_refundable: true,
         }
     }
 }
 
 impl Preferences {
+    /// The most hours before cards drop there's a choice of.
+    pub const MOST_HOURS_BEFORE_DROPS: u8 = 10;
+
     /// A game's place among the priority games, from 0.
     pub fn rank(&self, app_id: AppId) -> Option<usize> {
         self.priority_games.iter().position(|&g| g == app_id)

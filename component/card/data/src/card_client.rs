@@ -138,6 +138,8 @@ impl CardClient for SteamCardClient {
     }
 }
 
+/// A game and its set, as its card page shows them. The page doesn't say
+/// whether the game is private, or when it was bought: the library does.
 fn to_game_cards(b: BadgeGame) -> GameCards {
     GameCards {
         game: Game {
@@ -149,6 +151,8 @@ fn to_game_cards(b: BadgeGame) -> GameCards {
                 remaining: b.cards_left,
             },
             badge_level: b.badge_level,
+            private: false,
+            bought_at: None,
         },
         set: CardSet::new(CardKind::Normal, b.cards.into_iter().map(to_card).collect()),
     }

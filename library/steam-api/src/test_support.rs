@@ -1,11 +1,13 @@
 //! A stand-in for Steam, for tests here and in the data crates: a CM server
-//! on this computer that signs in, signs on, plays, tells of its wallet and
-//! of another device playing, announces new items and describes the items it
-//! holds as a test tells it to, and remembers what it was sent. It speaks Steam's own messages over a
-//! real WebSocket, so the code under test is the code that runs.
+//! on this computer that signs in, signs on, plays, tells of its wallet, its
+//! licences and of another device playing, announces new items, describes
+//! the items it holds, says which apps a package holds and which games are
+//! private, as a test tells it to, and remembers what it was sent. It speaks
+//! Steam's own messages over a real WebSocket, so the code under test is the
+//! code that runs.
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -20,13 +22,16 @@ use crate::{
     EResult, Endpoints,
     cm::UnseenItem,
     inventory::{COMMUNITY_CONTEXT, STEAM_APP},
+    licences::Licence,
     packet::{Packet, pack_multi},
     proto::{
         self, Asset, BeginAuthSessionViaQrResponse, ClientChangeStatus, ClientGamesPlayed,
-        ClientItemAnnouncements, ClientLoggedOff, ClientLogon, ClientLogonResponse,
+        ClientItemAnnouncements, ClientLicenseList, ClientLoggedOff, ClientLogon,
+        ClientLogonResponse, ClientPicsProductInfoRequest, ClientPicsProductInfoResponse,
         ClientPlayingSessionState, ClientWalletInfoUpdate, GenerateAccessTokenResponse,
-        GetInventoryItemsRequest, GetInventoryItemsResponse, Header, ItemDescription, ItemTag,
-        PollAuthSessionStatusResponse, RevokeTokenRequest, RevokeTokenResponse, emsg, method,
+        GetInventoryItemsRequest, GetInventoryItemsResponse, GetPrivateAppListResponse, Header,
+        ItemDescription, ItemTag, PicsPackageInfo, PollAuthSessionStatusResponse, PrivateAppList,
+        RevokeTokenRequest, RevokeTokenResponse, emsg, method,
     },
     token,
 };
@@ -142,6 +147,26 @@ pub fn unseen_card(asset_id: u64, game: u32) -> UnseenItem {
     }
 }
 
+/// A licence for `package_id`, bought `got_at` (seconds since 1970) with a
+/// card, as Steam lists it.
+pub fn bought(package_id: u32, got_at: u32) -> Licence {
+    Licence {
+        package_id,
+        got_at,
+        payment_method: 2,
+        flags: 0,
+        access_token: 1_000 + u64::from(package_id),
+    }
+}
+
+/// A licence for `package_id`, from a product key redeemed `got_at`.
+pub fn redeemed(package_id: u32, got_at: u32) -> Licence {
+    Licence {
+        payment_method: 1,
+        ..bought(package_id, got_at)
+    }
+}
+
 /// An ask to describe items, as the stand-in heard it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InventoryAsk {
@@ -190,6 +215,18 @@ struct State {
     silent_when_asked: bool,
     /// How often a session asked what's new.
     announcement_asks: usize,
+    /// The account's licences, listed to a session signing on.
+    licences: Vec<Licence>,
+    /// The apps each package holds, as Steam's product info says.
+    packages: HashMap<u32, Vec<u32>>,
+    /// The packages each ask for product info named, in order.
+    product_info_asks: Vec<Vec<u32>>,
+    /// The games the account marked private.
+    private: Vec<u32>,
+    /// Steam won't say which games are private.
+    private_refused: bool,
+    /// How often a session asked which games are private.
+    private_asks: usize,
     clients: Vec<mpsc::UnboundedSender<Vec<u8>>>,
 }
 
@@ -236,6 +273,12 @@ impl FakeSteam {
             unseen: Vec::new(),
             silent_when_asked: false,
             announcement_asks: 0,
+            licences: Vec::new(),
+            packages: HashMap::new(),
+            product_info_asks: Vec::new(),
+            private: Vec::new(),
+            private_refused: false,
+            private_asks: 0,
             clients: Vec::new(),
         }));
         let stop = CancellationToken::new();
@@ -416,6 +459,38 @@ impl FakeSteam {
         self.state().announcement_asks
     }
 
+    /// The account holds these licences, as Steam lists them to a session
+    /// signing on.
+    pub fn licensed(&self, licences: Vec<Licence>) {
+        self.state().licences = licences;
+    }
+
+    /// Package `package_id` holds these apps, as Steam's product info says.
+    /// A package it isn't told of, it says nothing about.
+    pub fn package(&self, package_id: u32, apps: Vec<u32>) {
+        self.state().packages.insert(package_id, apps);
+    }
+
+    /// The packages each ask for product info named, in order.
+    pub fn product_info_asks(&self) -> Vec<Vec<u32>> {
+        self.state().product_info_asks.clone()
+    }
+
+    /// The account marked these games private.
+    pub fn private(&self, apps: Vec<u32>) {
+        self.state().private = apps;
+    }
+
+    /// From now on, Steam won't say which games are private.
+    pub fn refuse_private(&self) {
+        self.state().private_refused = true;
+    }
+
+    /// How often a session asked which games are private.
+    pub fn private_asks(&self) -> usize {
+        self.state().private_asks
+    }
+
     /// Steam signs every session off, saying why.
     pub fn sign_off(&self, why: EResult) {
         self.push(&signed_off(why));
@@ -524,6 +599,9 @@ impl State {
                 if self.logon.is_ok() && !self.playing_state_unsaid {
                     frames.push(playing_state(self.elsewhere));
                 }
+                if self.logon.is_ok() {
+                    frames.push(licence_list(&self.licences));
+                }
                 // Steam packs what it sends at sign-on into one Multi.
                 vec![Packet::encode(
                     emsg::MULTI,
@@ -556,6 +634,23 @@ impl State {
             emsg::CLIENT_LOG_OFF => {
                 self.log_offs += 1;
                 vec![signed_off(EResult::OK), Vec::new()]
+            }
+            emsg::CLIENT_PICS_PRODUCT_INFO_REQUEST => {
+                let ask =
+                    ClientPicsProductInfoRequest::decode(&packet.body[..]).unwrap_or_default();
+                let asked: Vec<(u32, u64)> = ask
+                    .packages
+                    .iter()
+                    .map(|p| {
+                        (
+                            p.packageid.unwrap_or_default(),
+                            p.access_token.unwrap_or_default(),
+                        )
+                    })
+                    .collect();
+                self.product_info_asks
+                    .push(asked.iter().map(|&(id, _)| id).collect());
+                self.product_info(&asked, packet.header.jobid_source)
             }
             emsg::CLIENT_REQUEST_ITEM_ANNOUNCEMENTS => {
                 self.announcement_asks += 1;
@@ -649,9 +744,26 @@ impl State {
                 self.inventory_asks.push(ask);
                 (EResult::OK, items.encode_to_vec())
             }
-            method::GENERATE_ACCESS_TOKEN | method::REVOKE_TOKEN | method::GET_INVENTORY_ITEMS => {
-                (EResult::ACCESS_DENIED, Vec::new())
+            method::GET_PRIVATE_APPS if signed_on => {
+                self.private_asks += 1;
+                if self.private_refused {
+                    return (EResult::FAIL, Vec::new());
+                }
+                let listed = GetPrivateAppListResponse {
+                    private_apps: Some(PrivateAppList {
+                        appids: self
+                            .private
+                            .iter()
+                            .filter_map(|&id| i32::try_from(id).ok())
+                            .collect(),
+                    }),
+                };
+                (EResult::OK, listed.encode_to_vec())
             }
+            method::GENERATE_ACCESS_TOKEN
+            | method::REVOKE_TOKEN
+            | method::GET_INVENTORY_ITEMS
+            | method::GET_PRIVATE_APPS => (EResult::ACCESS_DENIED, Vec::new()),
             _ => (EResult::FAIL, Vec::new()),
         }
     }
@@ -705,6 +817,64 @@ impl State {
         1_000 + first as u64
     }
 
+    /// Steam's product info on the packages asked about, `(package ID,
+    /// access token)` each: in two parts when there's more than one, as
+    /// Steam can answer. A package it doesn't know, or asked about without
+    /// its licence's token, says nothing.
+    fn product_info(&self, asked: &[(u32, u64)], job: Option<u64>) -> Vec<Vec<u8>> {
+        let mut known = Vec::new();
+        let mut unknown = Vec::new();
+        for &(id, token) in asked {
+            let licensed = self
+                .licences
+                .iter()
+                .any(|l| l.package_id == id && l.access_token == token);
+            match self.packages.get(&id) {
+                Some(apps) if licensed => known.push(PicsPackageInfo {
+                    packageid: Some(id),
+                    missing_token: Some(false),
+                    buffer: Some(package_details(id, apps)),
+                }),
+                Some(_) => known.push(PicsPackageInfo {
+                    packageid: Some(id),
+                    missing_token: Some(true),
+                    buffer: None,
+                }),
+                None => unknown.push(id),
+            }
+        }
+        let split = known.len().div_ceil(2);
+        let rest = known.split_off(split);
+        let header = Header {
+            jobid_target: job,
+            eresult: Some(EResult::OK.0),
+            ..Default::default()
+        };
+        let mut parts = vec![(known, Vec::new())];
+        if !rest.is_empty() {
+            parts.push((rest, Vec::new()));
+        }
+        if let Some(last) = parts.last_mut() {
+            last.1 = unknown;
+        }
+        let count = parts.len();
+        parts
+            .into_iter()
+            .enumerate()
+            .map(|(i, (packages, unknown))| {
+                Packet::encode(
+                    emsg::CLIENT_PICS_PRODUCT_INFO_RESPONSE,
+                    &header,
+                    &ClientPicsProductInfoResponse {
+                        packages,
+                        unknown_packageids: unknown,
+                        response_pending: Some(i + 1 < count),
+                    },
+                )
+            })
+            .collect()
+    }
+
     /// A new refresh token, unlike any before it.
     fn issue(&mut self) -> String {
         self.issued += 1;
@@ -754,6 +924,53 @@ fn announcement(unseen: &[UnseenItem]) -> Vec<u8> {
                 .collect(),
         },
     )
+}
+
+/// `ClientLicenseList`: every licence the account holds.
+fn licence_list(licences: &[Licence]) -> Vec<u8> {
+    Packet::encode(
+        emsg::CLIENT_LICENSE_LIST,
+        &Header::default(),
+        &ClientLicenseList {
+            eresult: Some(EResult::OK.0),
+            licenses: licences
+                .iter()
+                .map(|l| proto::License {
+                    package_id: Some(l.package_id),
+                    time_created: Some(l.got_at),
+                    payment_method: Some(l.payment_method),
+                    flags: Some(l.flags),
+                    access_token: Some(l.access_token),
+                })
+                .collect(),
+        },
+    )
+}
+
+/// A package's details as Steam's product info gives them: a number the
+/// Steam client checks, then binary KeyValues, a section named for the
+/// package with its apps listed under `appids`.
+fn package_details(package_id: u32, apps: &[u32]) -> Vec<u8> {
+    const SECTION: u8 = 0;
+    const INT32: u8 = 2;
+    const END: u8 = 8;
+    let named = |kind: u8, name: &str| {
+        let mut out = vec![kind];
+        out.extend(name.as_bytes());
+        out.push(0);
+        out
+    };
+    let mut out = 1u32.to_le_bytes().to_vec();
+    out.extend(named(SECTION, &package_id.to_string()));
+    out.extend(named(INT32, "packageid"));
+    out.extend(package_id.to_le_bytes());
+    out.extend(named(SECTION, "appids"));
+    for (i, app) in apps.iter().enumerate() {
+        out.extend(named(INT32, &i.to_string()));
+        out.extend(app.to_le_bytes());
+    }
+    out.extend([END, END, END]);
+    out
 }
 
 /// `ClientPlayingSessionState`: whether another device is playing, and

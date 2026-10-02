@@ -11,6 +11,7 @@ pub mod games;
 mod help;
 pub mod onboarding;
 mod popup;
+pub mod settings;
 pub mod sign_in;
 mod theme;
 mod widgets;

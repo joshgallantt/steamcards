@@ -67,7 +67,7 @@ steamcards --headless --duration 3600  # stop after an hour (in seconds)
 
 ### Keeping up to date
 
-steamcards looks for a new release when it starts, and once a day after. A copy the install scripts put in place, or you did by hand, downloads the new release, checks it against the release's `SHA256SUMS`, and puts it in place of itself: the copy that's running carries on, and the next start runs the new one. A copy Homebrew or cargo installed is theirs to update, so steamcards says how instead: `brew upgrade steamcards`, or build it again. Either way it says so in the log. Turned off (`a`, then `u`), it asks GitHub nothing.
+steamcards looks for a new release when it starts, and once a day after. A copy the install scripts put in place, or you did by hand, downloads the new release, checks it against the release's `SHA256SUMS`, and puts it in place of itself: the copy that's running carries on, and the next start runs the new one. A copy Homebrew or cargo installed is theirs to update, so steamcards says how instead: `brew upgrade steamcards`, or build it again. Either way it says so in the log. Turned off (`s`, then `u`), it asks GitHub nothing.
 
 ### Where your data is
 

@@ -6,10 +6,11 @@ use std::sync::Arc;
 use game::AppId;
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
-    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    DefaultSetGameTierUseCase, DefaultSetHoursBeforeDropsUseCase, DefaultSetOnlyPriorityUseCase,
+    DefaultSetRestartGamesUseCase, DefaultSetSkipPrivateUseCase, DefaultSetSkipRefundableUseCase,
     GetPreferencesUseCase, Preferences, SetAppearOnlineUseCase, SetAutoUpdateUseCase,
-    SetGameTierUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase, Tier,
-    test_support::FakePreferencesRepository,
+    SetGameTierUseCase, SetHoursBeforeDropsUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetSkipPrivateUseCase, SetSkipRefundableUseCase, Tier, test_support::FakePreferencesRepository,
 };
 
 /// Someone arranging what gets farmed first.
@@ -20,6 +21,9 @@ pub(crate) struct Player {
     pub(crate) online: Arc<dyn SetAppearOnlineUseCase>,
     pub(crate) restart: Arc<dyn SetRestartGamesUseCase>,
     pub(crate) auto_update: Arc<dyn SetAutoUpdateUseCase>,
+    pub(crate) hours: Arc<dyn SetHoursBeforeDropsUseCase>,
+    pub(crate) skip_private: Arc<dyn SetSkipPrivateUseCase>,
+    pub(crate) skip_refundable: Arc<dyn SetSkipRefundableUseCase>,
 }
 
 impl Player {
@@ -39,7 +43,10 @@ impl Player {
             only: Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
             restart: Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
-            auto_update: Arc::new(DefaultSetAutoUpdateUseCase::new(repo)),
+            auto_update: Arc::new(DefaultSetAutoUpdateUseCase::new(repo.clone())),
+            hours: Arc::new(DefaultSetHoursBeforeDropsUseCase::new(repo.clone())),
+            skip_private: Arc::new(DefaultSetSkipPrivateUseCase::new(repo.clone())),
+            skip_refundable: Arc::new(DefaultSetSkipRefundableUseCase::new(repo)),
         }
     }
 

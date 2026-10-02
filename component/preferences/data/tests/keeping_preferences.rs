@@ -37,6 +37,9 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             appear_online: false,
             restart_games: true,
             auto_update: false,
+            hours_before_drops: 2,
+            skip_private: false,
+            skip_refundable: true,
         })
         .unwrap();
 
@@ -50,6 +53,9 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             "appear_online": false,
             "restart_games": true,
             "auto_update": false,
+            "hours_before_drops": 2,
+            "skip_private": false,
+            "skip_refundable": true,
         })
     );
 }
@@ -76,6 +82,19 @@ fn preferences_saved_before_read_as_they_were() {
     assert!(
         read.auto_update,
         "a file from before it was a choice keeps steamcards up to date"
+    );
+    assert_eq!(read.hours_before_drops, 3, "as before it was a choice");
+    assert!(read.skip_private && read.skip_refundable);
+}
+
+#[test]
+fn more_hours_than_theres_a_choice_of_are_the_most() {
+    let path = temp("too-many-hours");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, r#"{"hours_before_drops":48}"#).unwrap();
+    assert_eq!(
+        store(&path).preferences().hours_before_drops,
+        Preferences::MOST_HOURS_BEFORE_DROPS
     );
 }
 

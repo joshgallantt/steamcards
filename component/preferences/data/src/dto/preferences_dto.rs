@@ -1,4 +1,4 @@
-use game::AppId;
+use game::{AppId, HOURS_BEFORE_DROPS};
 use preferences::Preferences;
 use serde::{Deserialize, Serialize};
 
@@ -20,10 +20,22 @@ pub(crate) struct PreferencesDto {
     /// steamcards up to date.
     #[serde(default = "on")]
     auto_update: bool,
+    /// From before it was a choice: 3.
+    #[serde(default = "hours_before_drops")]
+    hours_before_drops: u8,
+    /// On unless turned off, as `auto_update` is.
+    #[serde(default = "on")]
+    skip_private: bool,
+    #[serde(default = "on")]
+    skip_refundable: bool,
 }
 
 fn on() -> bool {
     true
+}
+
+fn hours_before_drops() -> u8 {
+    HOURS_BEFORE_DROPS
 }
 
 impl Default for PreferencesDto {
@@ -41,6 +53,9 @@ impl PreferencesDto {
             appear_online: p.appear_online,
             restart_games: p.restart_games,
             auto_update: p.auto_update,
+            hours_before_drops: p.hours_before_drops,
+            skip_private: p.skip_private,
+            skip_refundable: p.skip_refundable,
         }
     }
 
@@ -52,6 +67,12 @@ impl PreferencesDto {
             appear_online: self.appear_online,
             restart_games: self.restart_games,
             auto_update: self.auto_update,
+            // A file edited by hand can say more than there's a choice of.
+            hours_before_drops: self
+                .hours_before_drops
+                .min(Preferences::MOST_HOURS_BEFORE_DROPS),
+            skip_private: self.skip_private,
+            skip_refundable: self.skip_refundable,
         }
     }
 }

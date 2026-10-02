@@ -11,7 +11,7 @@ use crate::{
     app::Ctx,
     popup::{fit_height, modal},
     theme::{self, BAD, BUSY, GOOD},
-    widgets::{hints, keycap},
+    widgets::{hints, keycap, wrap_text},
 };
 
 pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
@@ -41,23 +41,47 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
     };
     let head = |t: &'static str| Line::styled(t, theme::heading());
 
-    let farmed = vec![
+    let mut farmed = vec![
         head("What gets farmed"),
         num("1", "Your priority games (1–9), #1 first"),
         num("2", "Games whose cards can drop now, fewest left first"),
         num("3", "Games still building hours, most played first"),
-        Line::styled("    Skipped games (x) are never farmed.", theme::dim()),
-        Line::default(),
-        Line::styled(
-            " Cards drop for one game at a time, once it has 3 hours",
-            theme::dim(),
-        ),
-        Line::styled(
-            " on record. Games short of that play together, up to 32,",
-            theme::dim(),
-        ),
-        Line::styled(" to build hours.", theme::dim()),
     ];
+    let mut never = vec!["Skipped games (x)"];
+    if cx.prefs.skip_private {
+        never.push("private games");
+    }
+    if cx.prefs.skip_refundable {
+        never.push("games you could still refund");
+    }
+    let never = match never.split_last() {
+        Some((last, [])) => format!("{last} aren't farmed."),
+        Some((last, rest)) => format!("{} and {last} aren't farmed.", rest.join(", ")),
+        None => String::new(),
+    };
+    let drop = match cx.prefs.hours_before_drops {
+        0 => "Cards drop for one game at a time, from the start on this account: each \
+              game is farmed on its own."
+            .to_owned(),
+        n => format!(
+            "Cards drop for one game at a time, once it has {} on record. Games short of \
+             that play together, up to 32, to build hours.",
+            if n == 1 {
+                "an hour".to_owned()
+            } else {
+                format!("{n} hours")
+            }
+        ),
+    };
+    let dim_lines = |text: &str, indent: &str, w: usize| {
+        wrap_text(text, w)
+            .into_iter()
+            .map(|l| Line::styled(format!("{indent}{l}"), theme::dim()))
+            .collect::<Vec<_>>()
+    };
+    farmed.extend(dim_lines(&never, "    ", 53));
+    farmed.push(Line::default());
+    farmed.extend(dim_lines(&drop, " ", 56));
     // Each column's sections, top to bottom; one column shows them all.
     let (left, right) = if cx.app.onboarding.is_active() {
         // Only setting up's own keys work until farming starts.
@@ -87,8 +111,9 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>) {
         ];
         let everywhere = vec![
             head("Everywhere"),
-            row("a", "account, and how friends see you"),
+            row("a", "your account: sign in or out"),
             row("g", "games: pick priority games"),
+            row("s", "settings, and how friends see you"),
             row("l", "the full log"),
             row("p", "pause or carry on farming"),
             row("?", "this help"),

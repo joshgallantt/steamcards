@@ -1,4 +1,4 @@
-//! The account pop-up: who's signed in, and signing out.
+//! The account pop-up: who's signed in, signing in again, and signing out.
 
 use ratatui::{
     Frame,
@@ -9,14 +9,15 @@ use ratatui::{
 
 use crate::{
     app::Ctx,
-    popup::{fit_height, modal, toggle},
+    popup::{fit_height, modal},
     theme::{self, BAD, BUSY, GOOD},
     widgets::{fit, hints, selected_row, spread, wrap_text},
 };
 
 pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, confirm: bool) {
-    const W: u16 = 66;
-    let inner_w = (W - 6) as usize;
+    // As wide as it can be, up to W: what's in it wraps to fit.
+    const W: u16 = 72;
+    let inner_w = W.min(area.width).saturating_sub(6) as usize;
     if confirm {
         let who = cx
             .account
@@ -65,46 +66,13 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, confirm: bool)
         .map(|l| Line::styled(l, theme::dim())),
     );
     lines.push(Line::default());
-    lines.push(toggle(
-        !cx.prefs.appear_online,
-        "Appear offline while farming",
-        "v",
-    ));
     lines.extend(
         wrap_text(
-            if cx.prefs.appear_online {
-                "Friends see you online, and every game being played."
-            } else {
-                "Friends don't see the games being played. Steam counts them just the same."
-            },
-            inner_w.saturating_sub(2),
+            "Appearing offline, and keeping steamcards up to date, are in settings.",
+            inner_w,
         )
         .into_iter()
-        .map(|l| Line::styled(format!("  {l}"), theme::dim())),
-    );
-
-    lines.push(Line::default());
-    lines.push(toggle(
-        cx.prefs.auto_update,
-        "Keep steamcards up to date",
-        "u",
-    ));
-    let found = cx.app.updates.last().map(|f| farming_words::update(&f));
-    let said = match (cx.prefs.auto_update, found) {
-        (true, Some(found)) => found,
-        (true, None) => format!(
-            "This is steamcards {}. It looks for a new release once a day.",
-            env!("CARGO_PKG_VERSION")
-        ),
-        (false, _) => format!(
-            "This is steamcards {}. It asks GitHub nothing: update it yourself.",
-            env!("CARGO_PKG_VERSION")
-        ),
-    };
-    lines.extend(
-        wrap_text(&said, inner_w.saturating_sub(2))
-            .into_iter()
-            .map(|l| Line::styled(format!("  {l}"), theme::dim())),
+        .map(|l| Line::styled(l, theme::dim())),
     );
 
     let enter = if cx.signed_in() {
@@ -112,11 +80,7 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, confirm: bool)
     } else {
         "sign in"
     };
-    let mut keys = vec![
-        ("enter", enter, 0),
-        ("v", "offline/online", 2),
-        ("u", "updates", 3),
-    ];
+    let mut keys = vec![("enter", enter, 0), ("s", "settings", 2)];
     if cx.signed_in() {
         keys.push(("d", "sign out", 1));
     }

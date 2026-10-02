@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use card::CardKind;
 use farming::{FarmingEvent, Trouble};
-use game::HOURS_BEFORE_DROPS;
 
 use crate::counting::{cards, hours, minutes, ordinal};
 
@@ -18,16 +17,28 @@ pub fn event(event: &FarmingEvent) -> String {
         FarmingEvent::FarmingCards { game, cards_left } => {
             format!("Farming {game} — {} to drop", cards(*cards_left))
         }
-        FarmingEvent::BuildingHours { lead, games: 1 } => format!(
-            "Playing {lead} until it has {HOURS_BEFORE_DROPS} hours, when its cards can start \
-             dropping"
+        FarmingEvent::BuildingHours {
+            lead,
+            games: 1,
+            hours: needed,
+        } => format!(
+            "Playing {lead} until it has {}, when its cards can start dropping",
+            on_record(*needed)
         ),
-        FarmingEvent::BuildingHours { lead, games } => format!(
-            "Playing {games} games together until {lead} has {HOURS_BEFORE_DROPS} hours, when \
-             its cards can start dropping"
+        FarmingEvent::BuildingHours {
+            lead,
+            games,
+            hours: needed,
+        } => format!(
+            "Playing {games} games together until {lead} has {}, when its cards can start \
+             dropping",
+            on_record(*needed)
         ),
-        FarmingEvent::HoursBuilt { game } => {
-            format!("{game} has {HOURS_BEFORE_DROPS} hours now: its cards can drop.")
+        FarmingEvent::HoursBuilt {
+            game,
+            hours: needed,
+        } => {
+            format!("{game} has {} now: its cards can drop.", on_record(*needed))
         }
         FarmingEvent::NewItems => "Steam says new items arrived".into(),
         FarmingEvent::Looked { game, cards_left } => {
@@ -120,6 +131,11 @@ pub fn event(event: &FarmingEvent) -> String {
     }
 }
 
+/// "an hour", "3 hours": the hours a game has on record.
+fn on_record(n: u8) -> String {
+    hours(Duration::from_secs(u64::from(n) * 60 * 60))
+}
+
 /// What went wrong, and when it's tried again, if it is.
 fn retrying(what: &str, again_in: Option<Duration>) -> String {
     match again_in {
@@ -153,26 +169,34 @@ mod tests {
         };
         assert_eq!(farming(3), "Farming Portal 2 — 3 cards to drop");
         assert_eq!(farming(1), "Farming Portal 2 — 1 card to drop");
-        let building = |games| {
+        let building = |games, hours| {
             event(&FarmingEvent::BuildingHours {
                 lead: "Game 10".into(),
                 games,
+                hours,
             })
         };
         assert_eq!(
-            building(1),
+            building(1, 3),
             "Playing Game 10 until it has 3 hours, when its cards can start dropping"
         );
         assert_eq!(
-            building(3),
+            building(3, 3),
             "Playing 3 games together until Game 10 has 3 hours, when its cards can start dropping"
         );
         assert_eq!(
-            event(&FarmingEvent::HoursBuilt {
-                game: "Game 10".into()
-            }),
-            "Game 10 has 3 hours now: its cards can drop."
+            building(2, 1),
+            "Playing 2 games together until Game 10 has an hour, when its cards can start dropping",
+            "the account's own hours"
         );
+        let built = |hours| {
+            event(&FarmingEvent::HoursBuilt {
+                game: "Game 10".into(),
+                hours,
+            })
+        };
+        assert_eq!(built(3), "Game 10 has 3 hours now: its cards can drop.");
+        assert_eq!(built(5), "Game 10 has 5 hours now: its cards can drop.");
     }
 
     #[test]

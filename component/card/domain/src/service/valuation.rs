@@ -215,6 +215,8 @@ mod tests {
                 remaining,
             },
             badge_level: 0,
+            private: false,
+            bought_at: None,
         }
     }
 

@@ -3,9 +3,11 @@ mod preferences_use_cases;
 
 pub use r#impl::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
-    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    DefaultSetGameTierUseCase, DefaultSetHoursBeforeDropsUseCase, DefaultSetOnlyPriorityUseCase,
+    DefaultSetRestartGamesUseCase, DefaultSetSkipPrivateUseCase, DefaultSetSkipRefundableUseCase,
 };
 pub use preferences_use_cases::{
     GetPreferencesUseCase, SetAppearOnlineUseCase, SetAutoUpdateUseCase, SetGameTierUseCase,
-    SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetHoursBeforeDropsUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetSkipPrivateUseCase, SetSkipRefundableUseCase,
 };

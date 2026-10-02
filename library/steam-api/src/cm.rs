@@ -21,19 +21,22 @@ use anyhow::{anyhow, bail};
 use debug_log::DebugLog;
 use futures::{SinkExt, StreamExt};
 use prost::Message;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio_tungstenite::tungstenite::Message as Frame;
 use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{
     DEVICE_NAME, EResult,
     inventory::{COMMUNITY_CONTEXT, STEAM_APP},
+    licences::Licence,
     packet::{Packet, unpack_multi},
     proto::{
         self, ClientChangeStatus, ClientGamesPlayed, ClientHeartBeat, ClientHello,
-        ClientItemAnnouncements, ClientLogOff, ClientLoggedOff, ClientLogon, ClientLogonResponse,
+        ClientItemAnnouncements, ClientLicenseList, ClientLogOff, ClientLoggedOff, ClientLogon,
+        ClientLogonResponse, ClientPicsProductInfoRequest, ClientPicsProductInfoResponse,
         ClientPlayingSessionState, ClientRequestItemAnnouncements, ClientWalletInfoUpdate,
-        GamePlayed, Header, IpAddress, PERSONA_OFFLINE, PERSONA_ONLINE, PROTOCOL_VERSION, emsg,
+        GamePlayed, Header, IpAddress, PERSONA_OFFLINE, PERSONA_ONLINE, PROTOCOL_VERSION,
+        PicsPackageAsk, PicsPackageInfo, emsg,
     },
 };
 
@@ -196,14 +199,17 @@ struct SignedOn {
 }
 
 /// How long Steam's answers as a session signs on may take: whether another
-/// device is playing, and what's new. They come within a round trip when
-/// they come at all.
+/// device is playing, what's new, and the account's licences. They come
+/// within a round trip when they come at all.
 pub(crate) const SIGN_ON_ANSWER_WITHIN: Duration = Duration::from_secs(10);
 
 /// What the tasks share.
 struct State {
     /// Jobs waiting for their answer.
     pending: Mutex<HashMap<u64, oneshot::Sender<Packet>>>,
+    /// Jobs answered in parts, as product info is: each part goes to
+    /// whoever's waiting.
+    parts: Mutex<HashMap<u64, mpsc::UnboundedSender<Packet>>>,
     /// A logon waiting for its answer.
     logon: Mutex<Option<oneshot::Sender<Packet>>>,
     signed_on: Mutex<Option<SignedOn>>,
@@ -218,6 +224,8 @@ struct State {
     /// session's, for the account signing on.
     session: Mutex<Option<(u64, broadcast::Sender<Announced>)>>,
     wallet: Mutex<Option<WalletInfo>>,
+    /// The account's licences, as Steam last listed them.
+    licences: watch::Sender<Option<Vec<Licence>>>,
     /// Why Steam signed the session off, once it has.
     logged_off: Mutex<Option<EResult>>,
     events: broadcast::Sender<Event>,
@@ -253,6 +261,7 @@ impl Connection {
         let (events, _) = broadcast::channel(64);
         let state = Arc::new(State {
             pending: Mutex::default(),
+            parts: Mutex::default(),
             logon: Mutex::default(),
             signed_on: Mutex::default(),
             blocked: Mutex::default(),
@@ -261,6 +270,7 @@ impl Connection {
             new_at_sign_on: Mutex::default(),
             session: Mutex::default(),
             wallet: Mutex::default(),
+            licences: watch::Sender::new(None),
             logged_off: Mutex::default(),
             events,
             next_job: AtomicU64::new(1),
@@ -509,6 +519,23 @@ impl Connection {
         *self.state.wallet.lock().unwrap()
     }
 
+    /// The account's licences, as Steam last listed them, waiting for the
+    /// list if it hasn't come yet: Steam lists them within moments of a
+    /// session signing on. `None` if it doesn't in the time a sign-on answer
+    /// may take, or the connection closes first.
+    pub async fn licences(&self) -> Option<Vec<Licence>> {
+        let mut listed = self.state.licences.subscribe();
+        let within = *self.state.answer_within.lock().unwrap();
+        let wait = async {
+            let list = listed.wait_for(Option::is_some).await.ok()?;
+            list.clone()
+        };
+        tokio::select! {
+            _ = self.stop.cancelled() => self.state.licences.borrow().clone(),
+            listed = tokio::time::timeout(within, wait) => listed.ok().flatten(),
+        }
+    }
+
     pub fn is_signed_on(&self) -> bool {
         !self.is_closed() && self.state.signed_on.lock().unwrap().is_some()
     }
@@ -570,6 +597,54 @@ impl Connection {
             .into());
         }
         proto::decode(method, &packet.body)
+    }
+
+    /// Asks Steam's product info about these packages, `(package ID, access
+    /// token)` each, and reads every part of its answer: the packages it
+    /// says something about. Errs with [`NoAnswer`] when it doesn't answer
+    /// in time.
+    pub(crate) async fn package_info(
+        &self,
+        packages: &[(u32, u64)],
+    ) -> anyhow::Result<Vec<PicsPackageInfo>> {
+        if !self.is_signed_on() {
+            bail!("not signed on to Steam");
+        }
+        let job = self.state.next_job.fetch_add(1, Ordering::Relaxed);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        self.state.parts.lock().unwrap().insert(job, tx);
+        let header = Header {
+            jobid_source: Some(job),
+            ..self.header()
+        };
+        let ask = ClientPicsProductInfoRequest {
+            packages: packages
+                .iter()
+                .map(|&(id, token)| PicsPackageAsk {
+                    packageid: Some(id),
+                    access_token: Some(token),
+                })
+                .collect(),
+            meta_data_only: Some(false),
+        };
+        let parts = async {
+            let mut told = Vec::new();
+            while let Some(part) = rx.recv().await {
+                let part: ClientPicsProductInfoResponse =
+                    proto::decode("product info", &part.body)?;
+                told.extend(part.packages);
+                if !part.response_pending.unwrap_or_default() {
+                    return Ok(told);
+                }
+            }
+            Err(anyhow!("the connection to Steam closed"))
+        };
+        let answer = match self.send(emsg::CLIENT_PICS_PRODUCT_INFO_REQUEST, header, &ask) {
+            Ok(()) => tokio::time::timeout(CALL_TIMEOUT, parts).await,
+            Err(e) => Ok(Err(e)),
+        };
+        self.state.parts.lock().unwrap().remove(&job);
+        answer.map_err(|_| NoAnswer)?
     }
 
     /// The header every message after signing on carries.
@@ -653,6 +728,15 @@ impl State {
                     let _ = waiting.send(packet);
                 }
             }
+            // A part of the answer to asking for product info: to whoever's
+            // waiting on its job, until the last part.
+            emsg::CLIENT_PICS_PRODUCT_INFO_RESPONSE => {
+                let job = packet.header.jobid_target.filter(|&j| j != NO_JOB);
+                let waiting = job.and_then(|job| self.parts.lock().unwrap().get(&job).cloned());
+                if let Some(waiting) = waiting {
+                    let _ = waiting.send(packet);
+                }
+            }
             emsg::CLIENT_LOG_ON_RESPONSE => {
                 if let Some(waiting) = self.logon.lock().unwrap().take() {
                     let _ = waiting.send(packet);
@@ -717,6 +801,18 @@ impl State {
                     *self.wallet.lock().unwrap() = Some(wallet);
                 }
             }
+            // Kept, as the wallet is: Steam lists them as the session signs
+            // on, and again when one is added.
+            emsg::CLIENT_LICENSE_LIST => {
+                let listed = proto::decode::<ClientLicenseList>("licence list", &packet.body)
+                    .ok()
+                    .filter(|l| EResult::of(l.eresult).is_ok());
+                if let Some(list) = listed {
+                    let licences: Vec<Licence> = list.licenses.iter().filter_map(licence).collect();
+                    self.log.line(&format!("licences: {}", licences.len()));
+                    self.licences.send_replace(Some(licences));
+                }
+            }
             emsg::CLIENT_LOGGED_OFF => {
                 let eresult = proto::decode::<ClientLoggedOff>("sign-off", &packet.body)
                     .map_or(EResult::FAIL, |m| EResult::of(m.eresult));
@@ -725,8 +821,8 @@ impl State {
                 *self.logged_off.lock().unwrap() = Some(eresult);
                 let _ = self.events.send(Event::LoggedOff(eresult));
             }
-            // The rest of what Steam tells a client (friends, licences, …)
-            // is nothing steamcards acts on.
+            // The rest of what Steam tells a client (friends, chat, …) is
+            // nothing steamcards acts on.
             _ => {}
         }
     }
@@ -734,11 +830,23 @@ impl State {
     /// The connection is gone: nothing waiting will be answered.
     fn close(&self) {
         self.pending.lock().unwrap().clear();
+        self.parts.lock().unwrap().clear();
         self.logon.lock().unwrap().take();
         *self.signed_on.lock().unwrap() = None;
         self.log.line("connection closed");
         let _ = self.events.send(Event::Closed);
     }
+}
+
+/// A licence as Steam lists it; `None` without a package.
+fn licence(l: &proto::License) -> Option<Licence> {
+    Some(Licence {
+        package_id: l.package_id?,
+        got_at: l.time_created.unwrap_or_default(),
+        payment_method: l.payment_method.unwrap_or_default(),
+        flags: l.flags.unwrap_or_default(),
+        access_token: l.access_token.unwrap_or_default(),
+    })
 }
 
 /// An item as Steam lists it; `None` without an asset ID. Valve's messages

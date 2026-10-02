@@ -465,7 +465,8 @@ async fn a_card_that_drops_while_building_hours_is_recorded() {
         player.reads(playing).await,
         BuildingHours {
             lead: "Hades".into(),
-            games: 1
+            games: 1,
+            hours: 3
         }
     );
 

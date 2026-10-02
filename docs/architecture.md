@@ -52,8 +52,9 @@ The domain starts from its entities:
   trading cards. It holds each game once, and knows the drops received and
   still to come.
 - **`Game`**: one of those games, by its **`AppId`**: its hours, its `CardDrops`
-  (received and still to come) and its badge level. Its drops are what
-  farming works through.
+  (received and still to come), its badge level, whether it's marked
+  private, and when it was bought, if lately enough that Steam would still
+  refund it. Its drops are what farming works through.
 - **`Playing`**: who plays on the account, this session or another device,
   which keeps it from playing anything; **`PlayingSignal`**, what Steam says
   of it (another device started or stopped, took over, a session took this
@@ -77,7 +78,9 @@ The domain starts from its entities:
 - **`Account`**, in `account`: the one Steam account, and whether Steam still
   takes its sign-in. One account only, by design.
 - **`Preferences`**, in `preferences`: priority games, skipped games, "only
-  priority", and whether to appear online while farming.
+  priority", the hours a game needs before its cards drop, whether private
+  games and games Steam would still refund are left out, whether to restart
+  the game, appear online while farming, and keep steamcards up to date.
 - **`Session`**, in `session`: this session of farming, from the first run
   of the farmer until the user signs out, another account signs in, or
   steamcards quits, through pauses. It holds every `Drop` (one per copy that
@@ -150,8 +153,9 @@ library at once, so they're functions in `service/`, pure, so every figure
 can be checked by hand.
 
 The numbers a component runs on are its `model/rules.rs`, each with where
-it comes from: in `game`'s, the 3 hours a game needs and the 32 Steam plays
-at once, which farming and the forecast both use; in `session`'s, the
+it comes from: in `game`'s, the 3 hours a game needs on most accounts
+(where the user's setting starts), the 32 Steam plays at once and Steam's
+refund window, which farming and the forecast use; in `session`'s, the
 forecast's priors; in `farming`'s, how often it looks and when it gives up;
 in `card`'s, the market's. What a use case runs for a while sits beside it
 in `use_cases/impl/`: the farmer `DefaultFarmCardsUseCase` runs, with the
@@ -159,15 +163,16 @@ in `use_cases/impl/`: the farmer `DefaultFarmCardsUseCase` runs, with the
 `DefaultKeepCardPricesUpToDateUseCase` runs, `price_watcher.rs`, with
 `pricing.rs` (looking a set up and keeping it), which two of card's use
 cases share. `farming` keeps nothing, so it has no repository either; what
-to play, and how, is its domain service, `service/ranking.rs`, pure.
+to play, and how, and why a game isn't farmed (`left_out`), is its domain
+service, `service/ranking.rs`, pure.
 `session` keeps which card each drop was in `KeptSession`, and the time to
 finish in `Forecast` (pure). `card` keeps its `Clock` in `model/clock.rs`.
 `money` is its models alone, a file each: `Currency`, with Valve's table of
 currencies as a `match`, and `Money`.
 
 Entities are plain data with the rules that belong to the data itself
-(`SteamLibrary::drops_left`, `CardSet::missing`, `Preferences::wants`,
-`Wallet::seller_gets`). They carry no serde derives: how a thing is stored is
+(`SteamLibrary::drops_left`, `Game::is_refundable`, `CardSet::missing`,
+`Preferences::wants`, `Wallet::seller_gets`). They carry no serde derives: how a thing is stored is
 the data layer's concern.
 
 The market's valuations are functions of what's known: `value_of(price,
@@ -203,7 +208,7 @@ with it, where a dropped `JoinHandle`'s task would go on and take the word.
 | | `SignInUseCase` | Signs in with a QR code; the codes arrive on a channel. Errs with `SignInError`. |
 | | `SignOutUseCase` | Signs out: forgets the sign-in, and Steam ends it too, in the background. |
 | | `GetWalletUseCase` | The wallet, once Steam has said. |
-| game | `GetLibraryUseCase` | The whole library, games with drops left first. Errs with `GameError`, `Replaced` when another session took this one's place meanwhile. |
+| game | `GetLibraryUseCase` | The whole library, games with drops left first, each marked private or not, and with when it was bought if Steam would still refund it. Errs with `GameError`, `Replaced` when another session took this one's place meanwhile. |
 | | `PlayGamesUseCase` | Plays exactly these games, signing on first if need be, online or not: says whether they play here, or another device keeps them from playing. |
 | | `StandByUseCase` | Signs on if need be, playing nothing, so Steam can say when another device stops: says who plays now. |
 | | `StopPlayingUseCase` | Stops playing, and signs off. |
@@ -222,6 +227,9 @@ with it, where a dropped `JoinHandle`'s task would go on and take the word.
 | | `SetAppearOnlineUseCase` | Show as online while farming, or appear offline. |
 | | `SetRestartGamesUseCase` | Restart the game farmed alone every 5 minutes, to shake drops loose, or leave it playing. Off unless turned on. |
 | | `SetAutoUpdateUseCase` | Keep steamcards up to date, or ask GitHub nothing. On unless turned off. |
+| | `SetHoursBeforeDropsUseCase` | The hours a game needs before its cards drop on this account, 0 to 10: 3 unless set. 0 farms every game on its own. |
+| | `SetSkipPrivateUseCase` | Leave out games marked private, which Steam drops no cards for, or farm them too. On unless turned off. |
+| | `SetSkipRefundableUseCase` | Leave out games Steam would still refund (bought in the last 14 days, played under 2 hours), or farm them too. On unless turned off. |
 | farming | `FarmCardsUseCase` | Farms until cancelled, telling what happened (`FarmingEvent`) and where farming stands (`FarmingStatus`), in order, as `FarmingUpdate`s. Each run carries on the session. |
 | session | `EndSessionUseCase` | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
 | update | `KeepUpToDateUseCase` | Looks for a newer release at the start and once a day, while automatic updates are on: puts one this copy updates itself to in place, for the next start, or says how Homebrew or cargo gets it; reports each `UpdateEvent` once. |
@@ -305,6 +313,16 @@ currency the account's prices are in: the wallet's, or dollars without one.
 `account-data` makes the `Wallet` of it, and the market reads its prices in
 that currency.
 
+**So is what the account holds.** `SteamGameClient`, in `game-data`, reads
+the badge pages, then asks over the CM connection which games are private
+(`AccountPrivateApps.GetPrivateAppList`, as ASF asks) and which were bought
+lately: Steam lists the account's licences as a session signs on (CM
+message 780), each with when and how it was got, and Steam's product info
+(PICS) says which apps a purchase's package holds, asked once a run for
+each. Neither signs on in place of a session that took this one's place.
+When Steam doesn't say, the library is read all the same, and asked again
+at the next read.
+
 **So is playing, and what's new.** `SteamPlayingClient`, in `game-data`,
 tells Steam what's played on the connection it signs on, and hears what
 Steam says of playing there. Steam announces new items on whichever
@@ -339,7 +357,7 @@ builds its repository itself.
 
 | Crate | Holds |
 | --- | --- |
-| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, what Steam says back, new items announced by asset ID), QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, single requests to the site for the market (whose pages and queue `card-data` keeps), and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
+| `steam-api` | Steam in its own terms: a CM connection over WebSocket (framing, jobs, heartbeat, sign-on, games played, the wallet, the licences, what Steam says back, new items announced by asset ID), which apps a package holds from Steam's product info, the games marked private, QR sign-in, the pages of steamcommunity.com as the account's owner sees them, with how the site writes its numbers and badges (`page`), each game's own card page (foils' too), which the game and card data crates both read, the inventory's items described over the CM connection, single requests to the site for the market (whose pages and queue `card-data` keeps), and `SteamClient`. Its messages are Valve's own `.proto` definitions, written out with prost. A stand-in Steam server for tests, behind `test-support`. |
 | `config-file` | The JSON files: the config file, readable by its owner only, where each data crate reads and writes its own fields in a shape of its own (`read::<T>()`, `write(&T)`), and the saved sign-in (`CredentialStore`); and `JsonFile`, a file of its own for what can be lost, like the market's prices beside it. It writes first and keeps second, so a failed write changes nothing in memory. `ConfigLock` keeps a second steamcards off the same config file: the composition root takes it before the file is read, and holds it until steamcards exits. |
 | `debug-log` | `DebugLog`: a value saying where debug lines go. |
 

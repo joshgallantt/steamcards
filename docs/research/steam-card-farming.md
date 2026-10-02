@@ -160,6 +160,20 @@ on (2026-10-02).
 - **A game that drops nothing** for 10 hours (ASF's `MaxFarmingTime`) goes
   behind the others; the second time, it's left alone for the rest of the
   session, with a hint at why (family-shared, free-to-play, private).
+- **Private games** are left out, as ASF leaves them out: Steam drops no
+  cards for them. Which they are is Steam's private app list
+  (`AccountPrivateApps.GetPrivateAppList`). The user can farm them anyway
+  (2026-10-02).
+- **Games Steam would still refund**, bought in the last 14 days and played
+  under 2 hours, wait until it wouldn't (ASF's `SkipRefundableGames`, which
+  is off unless asked for; here it's on unless turned off). What counts as
+  bought is ASF's: paid for, not a product key, a free licence or a
+  hardware promotion, and not borrowed from family. The licence list Steam
+  sends at sign-on dates each purchase, and Steam's product info says which
+  apps its package holds.
+- **The threshold is the user's** (2026-10-02): 3 hours unless set, 0 to
+  10, as ASF's `HoursUntilCardDrops`. At 0, every game is farmed on its
+  own.
 - **Sale-event badges** (ASF's `SalesBlacklist`) are never played: those
   cards come from taking part in a sale.
 - **With nothing to farm,** sign off, and look again every 8 hours (ASF's
@@ -191,10 +205,9 @@ other device stopped, then carries on a minute later. If Steam doesn't say
 the other device is playing, its game gets 5 minutes to start (an update,
 or shaders, can hold it up) before steamcards plays again.
 
-**Later, maybe:** the threshold as a setting (0 for accounts that aren't held
-back); telling such an account apart on its own (a card that drops before 3
-hours); a refund guard (skip games bought in the last 14 days with under 2
-hours played, which needs purchase dates).
+**Later, maybe:** telling an account Steam doesn't hold back apart on its
+own (a card that drops before 3 hours), rather than leaving it to the
+setting.
 
 ---
 

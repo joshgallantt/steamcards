@@ -1,6 +1,7 @@
 mod farming_event;
 mod farming_status;
 mod farming_update;
+mod left_out;
 mod nothing_to_farm;
 mod plan;
 pub(crate) mod rules;
@@ -11,6 +12,7 @@ mod trouble;
 pub use farming_event::FarmingEvent;
 pub use farming_status::FarmingStatus;
 pub use farming_update::FarmingUpdate;
+pub use left_out::LeftOut;
 pub use nothing_to_farm::NothingToFarm;
 pub(crate) use plan::Plan;
 pub(crate) use signal::Signal;

@@ -30,12 +30,18 @@ fn what_was_chosen_is_there_when_steamcards_starts_again() {
     player.sets(730, Tier::Skip).unwrap();
     player.appears_online(true).unwrap();
     player.farms_only_priority(true).unwrap();
+    player.sets_hours_before_drops(0).unwrap();
+    player.skips_private_games(false).unwrap();
+    player.skips_refundable_games(false).unwrap();
 
     let player = player.comes_back();
 
     assert_eq!(player.priorities(), [620]);
     assert_eq!(player.skipped(), [730]);
-    assert!(player.prefs().appear_online && player.prefs().only_priority);
+    let prefs = player.prefs();
+    assert!(prefs.appear_online && prefs.only_priority);
+    assert_eq!(prefs.hours_before_drops, 0);
+    assert!(!prefs.skip_private && !prefs.skip_refundable);
 }
 
 #[test]

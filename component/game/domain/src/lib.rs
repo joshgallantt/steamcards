@@ -1,6 +1,7 @@
 //! Game: the user's games that have trading cards, as far as farming goes,
-//! each with its hours and badge, and the card drops it has given and still
-//! has to give; and the Steam library of them all. What a game's cards are,
+//! each with its hours and badge, the card drops it has given and still has
+//! to give, whether it's private, and when it was bought, if lately enough
+//! to refund; and the Steam library of them all. What a game's cards are,
 //! its set and the copies the account holds, is the card component's.
 //!
 //! Playing them is the game's too: playing exactly the games asked, or
@@ -21,7 +22,7 @@ pub mod test_support;
 
 pub use model::{
     AppId, CardDrops, Game, GameError, HOURS_BEFORE_DROPS, MOST_PLAYED_AT_ONCE, Playing,
-    PlayingSignal, SteamLibrary,
+    PlayingSignal, REFUND_UNDER_HOURS, REFUND_WITHIN, SteamLibrary,
 };
 pub use repository::{GameRepository, PlayingRepository};
 pub use use_cases::{

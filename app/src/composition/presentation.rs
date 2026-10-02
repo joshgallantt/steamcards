@@ -6,6 +6,7 @@ use terminal_ui::{
     dashboard::{FarmingViewModel, LibraryViewModel, MarketViewModel},
     games::GamesViewModel,
     onboarding::OnboardingViewModel,
+    settings::SettingsViewModel,
     sign_in::SignInViewModel,
 };
 
@@ -41,8 +42,14 @@ impl PresentationAssembler {
                 d.preferences.get_preferences.clone(),
                 d.preferences.set_game_tier.clone(),
                 d.preferences.set_only_priority.clone(),
-                d.preferences.set_appear_online.clone(),
+            ),
+            SettingsViewModel::new(
+                d.preferences.get_preferences.clone(),
+                d.preferences.set_hours_before_drops.clone(),
+                d.preferences.set_skip_private.clone(),
+                d.preferences.set_skip_refundable.clone(),
                 d.preferences.set_restart_games.clone(),
+                d.preferences.set_appear_online.clone(),
             ),
             LibraryViewModel::new(d.game.get_library.clone()),
             OnboardingViewModel::new(d.account.get_account.clone()),

@@ -7,9 +7,11 @@ use std::sync::Arc;
 use config_file::ConfigFile;
 use preferences::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
-    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    DefaultSetGameTierUseCase, DefaultSetHoursBeforeDropsUseCase, DefaultSetOnlyPriorityUseCase,
+    DefaultSetRestartGamesUseCase, DefaultSetSkipPrivateUseCase, DefaultSetSkipRefundableUseCase,
     GetPreferencesUseCase, PreferencesRepository, SetAppearOnlineUseCase, SetAutoUpdateUseCase,
-    SetGameTierUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetGameTierUseCase, SetHoursBeforeDropsUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetSkipPrivateUseCase, SetSkipRefundableUseCase,
 };
 use preferences_data::{DefaultPreferencesRepository, FilePreferencesStore, PreferencesStore};
 
@@ -20,6 +22,9 @@ pub struct PreferencesComponent {
     pub set_appear_online: Arc<dyn SetAppearOnlineUseCase>,
     pub set_restart_games: Arc<dyn SetRestartGamesUseCase>,
     pub set_auto_update: Arc<dyn SetAutoUpdateUseCase>,
+    pub set_hours_before_drops: Arc<dyn SetHoursBeforeDropsUseCase>,
+    pub set_skip_private: Arc<dyn SetSkipPrivateUseCase>,
+    pub set_skip_refundable: Arc<dyn SetSkipRefundableUseCase>,
 }
 
 impl PreferencesComponent {
@@ -38,7 +43,10 @@ impl PreferencesComponent {
             set_only_priority: Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             set_appear_online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
             set_restart_games: Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
-            set_auto_update: Arc::new(DefaultSetAutoUpdateUseCase::new(repo)),
+            set_auto_update: Arc::new(DefaultSetAutoUpdateUseCase::new(repo.clone())),
+            set_hours_before_drops: Arc::new(DefaultSetHoursBeforeDropsUseCase::new(repo.clone())),
+            set_skip_private: Arc::new(DefaultSetSkipPrivateUseCase::new(repo.clone())),
+            set_skip_refundable: Arc::new(DefaultSetSkipRefundableUseCase::new(repo)),
         }
     }
 }

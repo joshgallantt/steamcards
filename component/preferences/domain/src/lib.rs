@@ -1,5 +1,7 @@
-//! Preferences: what the user wants farmed first, what never, and whether
-//! they show as online while it runs.
+//! Preferences: what the user wants farmed first, what never, and how:
+//! whether they show as online while it runs, the hours their account holds
+//! cards back for, and whether private games, and games Steam would still
+//! refund, are left out.
 //!
 //! The domain of this component — entities, the repository contract the data
 //! layer is written to fit, and one use case per thing the user can change.
@@ -17,7 +19,9 @@ pub use model::{Preferences, PreferencesError, Tier};
 pub use repository::PreferencesRepository;
 pub use use_cases::{
     DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
-    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    DefaultSetGameTierUseCase, DefaultSetHoursBeforeDropsUseCase, DefaultSetOnlyPriorityUseCase,
+    DefaultSetRestartGamesUseCase, DefaultSetSkipPrivateUseCase, DefaultSetSkipRefundableUseCase,
     GetPreferencesUseCase, SetAppearOnlineUseCase, SetAutoUpdateUseCase, SetGameTierUseCase,
-    SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetHoursBeforeDropsUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    SetSkipPrivateUseCase, SetSkipRefundableUseCase,
 };

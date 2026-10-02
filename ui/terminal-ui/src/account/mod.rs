@@ -1,5 +1,6 @@
 //! The account: who's signed in, and signing out, and keeping steamcards
-//! up to date. Their view models, and the pop-up that shows them.
+//! up to date. Their view models, and the pop-up that shows who's signed
+//! in.
 
 pub(crate) mod account_view;
 mod account_view_model;

@@ -51,6 +51,15 @@ fn nothing_to_farm(why: NothingToFarm) -> &'static str {
             "\"only priority\" is on, and your priority games are done"
         }
         NothingToFarm::AllSkipped => "every game with cards left is skipped",
+        NothingToFarm::HeldBack {
+            private,
+            refundable_until,
+        } => match (private, refundable_until.is_some()) {
+            (true, false) => "the games left are private: Steam drops no cards for them",
+            (false, true) => "the games left can still be refunded: they're farmed once they can't",
+            (true, true) => "the games left are private, or can still be refunded",
+            (false, false) => "every game with cards left is skipped",
+        },
         NothingToFarm::NotDropping => "Steam isn't dropping cards for the games left",
     }
 }
@@ -95,6 +104,24 @@ mod tests {
         assert_eq!(
             idle(NothingToFarm::NotDropping),
             "Steam isn't dropping cards for the games left"
+        );
+        let held = |private, refundable: bool| {
+            idle(NothingToFarm::HeldBack {
+                private,
+                refundable_until: refundable.then(now),
+            })
+        };
+        assert_eq!(
+            held(true, false),
+            "the games left are private: Steam drops no cards for them"
+        );
+        assert_eq!(
+            held(false, true),
+            "the games left can still be refunded: they're farmed once they can't"
+        );
+        assert_eq!(
+            held(true, true),
+            "the games left are private, or can still be refunded"
         );
     }
 

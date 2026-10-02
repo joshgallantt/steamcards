@@ -6,6 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use card::{AssetId, Card, CardAsset, CardKind, CardRepository, CardSet, GameCards, NewItem};
+use chrono::{DateTime, Utc};
 use game::{
     AppId, CardDrops, Game, GameRepository, Playing, PlayingRepository, PlayingSignal, SteamLibrary,
 };
@@ -133,6 +134,8 @@ impl FakeSteamAccount {
                         remaining: cards,
                     },
                     badge_level: 0,
+                    private: false,
+                    bought_at: None,
                 },
                 cards: Vec::new(),
                 drop_every: every,
@@ -214,6 +217,22 @@ impl FakeSteamAccount {
     pub fn drops_straight_away(&self, app_id: u32) {
         if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
             f.needs_hours = 0.0;
+        }
+    }
+
+    /// The account marks a game private: the badge pages still list it, and
+    /// Steam drops no cards for it.
+    pub fn private(&self, app_id: u32) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
+            f.game.private = true;
+        }
+    }
+
+    /// The account bought a game `at`, so lately that Steam may still refund
+    /// it.
+    pub fn bought(&self, app_id: u32, at: DateTime<Utc>) {
+        if let Some(f) = self.state.lock().unwrap().games.get_mut(&AppId(app_id)) {
+            f.game.bought_at = Some(at);
         }
     }
 
@@ -388,7 +407,7 @@ impl FakeSteamAccount {
             f.game.hours += elapsed.as_secs_f64() / 3600.0;
             let Some(every) = f
                 .drop_every
-                .filter(|_| drops && f.game.hours >= f.needs_hours)
+                .filter(|_| drops && !f.game.private && f.game.hours >= f.needs_hours)
             else {
                 continue;
             };

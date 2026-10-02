@@ -1,5 +1,5 @@
-//! Choosing which games are farmed first, and how farming shows to friends:
-//! its view model, and the pop-up to pick games in.
+//! Choosing which games are farmed first: its view model, and the pop-up to
+//! pick games in.
 
 mod game_row;
 pub(crate) mod games_view;
