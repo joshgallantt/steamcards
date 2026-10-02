@@ -19,12 +19,12 @@ class Steamcards < Formula
 
   on_arm do
     url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.0/steamcards-aarch64-apple-darwin.tar.gz"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+    sha256 "559087584b38d919123062fd1a7e850cc6a7027a0759631d8cc8c03ae320e79e"
   end
 
   on_intel do
     url "https://github.com/joshgallantt/steamcards/releases/download/v0.1.0/steamcards-x86_64-apple-darwin.tar.gz"
-    sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+    sha256 "2cd4867cb9eb8145f41e0b2ac0395ae01932fdd8113d6622d6b5ed29661d15e0"
   end
 
   def install
