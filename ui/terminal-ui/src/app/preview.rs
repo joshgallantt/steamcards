@@ -27,16 +27,17 @@ use chrono::{DateTime, FixedOffset, Offset, TimeZone, Utc};
 use farming::{FarmingStatus, NothingToFarm, Status, test_support::SpyFarmCardsUseCase};
 use game::{AppId, CardDrops, Game, SteamLibrary, test_support::SpyGetLibraryUseCase};
 use preferences::{
-    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, Preferences,
-    test_support::FakePreferencesRepository,
+    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
+    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    Preferences, test_support::FakePreferencesRepository,
 };
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, style::Modifier};
 use session::{Drop, DropCard, Mode, Session, Stretch, test_support::SpyEndSessionUseCase};
+use update::test_support::SpyKeepUpToDateUseCase;
 
 use super::{App, Clock, LogView, Overlay, SignInView};
 use crate::{
-    account::AccountViewModel,
+    account::{AccountViewModel, UpdateViewModel},
     dashboard::{EventKind, FarmingViewModel, LibraryViewModel, MarketViewModel},
     games::GamesViewModel,
     onboarding::{OnboardingViewModel, Step},
@@ -269,7 +270,7 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
+            Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
         ),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(library())))),
         OnboardingViewModel::new(accounts),
@@ -279,6 +280,11 @@ fn app(account: Option<SignedIn>, prefs: Preferences) -> App {
             Arc::new(SpyKeepCardPricesUpToDateUseCase::default()),
             Arc::new(SpyRefreshCardPricesUseCase::default()),
             Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
+        ),
+        UpdateViewModel::new(
+            Arc::new(SpyKeepUpToDateUseCase::default()),
+            Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
+            Arc::new(DefaultSetAutoUpdateUseCase::new(repo)),
         ),
     );
     app.clock = CLOCK;
@@ -995,7 +1001,7 @@ fn showcase_app() -> App {
             Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
+            Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
         ),
         LibraryViewModel::new(Arc::new(SpyGetLibraryUseCase::answering(Ok(
             showcase_library(),
@@ -1007,6 +1013,11 @@ fn showcase_app() -> App {
             Arc::new(SpyKeepCardPricesUpToDateUseCase::default()),
             Arc::new(SpyRefreshCardPricesUseCase::default()),
             Arc::new(StubGetWalletUseCase::new(Some(pounds()))),
+        ),
+        UpdateViewModel::new(
+            Arc::new(SpyKeepUpToDateUseCase::default()),
+            Arc::new(DefaultGetPreferencesUseCase::new(repo.clone())),
+            Arc::new(DefaultSetAutoUpdateUseCase::new(repo)),
         ),
     );
     a.clock = CLOCK;

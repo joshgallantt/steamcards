@@ -1,0 +1,28 @@
+[package]
+name = "update"
+description = "steamcards' own releases: whether a newer one is out, and keeping this copy up to date with it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Doubles for other crates' tests. Never depends on update-data.
+test-support = []
+
+[dependencies]
+preferences.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+update = { path = ".", features = ["test-support"] }
+preferences = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["test-util"] }

@@ -33,3 +33,9 @@ pub trait SetAppearOnlineUseCase: Send + Sync {
 pub trait SetRestartGamesUseCase: Send + Sync {
     fn call(&self, restart: bool) -> Result<(), PreferencesError>;
 }
+
+/// Keeps steamcards up to date, or leaves it as it is, asking GitHub
+/// nothing.
+pub trait SetAutoUpdateUseCase: Send + Sync {
+    fn call(&self, on: bool) -> Result<(), PreferencesError>;
+}

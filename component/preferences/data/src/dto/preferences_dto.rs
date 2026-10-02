@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// The preferences' fields in the config file, each at the top of it: games
 /// by app ID.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PreferencesDto {
     #[serde(default)]
     priority_games: Vec<u32>,
@@ -16,6 +16,20 @@ pub(crate) struct PreferencesDto {
     appear_online: bool,
     #[serde(default)]
     restart_games: bool,
+    /// On unless turned off, so a file from before it was a choice keeps
+    /// steamcards up to date.
+    #[serde(default = "on")]
+    auto_update: bool,
+}
+
+fn on() -> bool {
+    true
+}
+
+impl Default for PreferencesDto {
+    fn default() -> Self {
+        Self::new(&Preferences::default())
+    }
 }
 
 impl PreferencesDto {
@@ -26,6 +40,7 @@ impl PreferencesDto {
             only_priority: p.only_priority,
             appear_online: p.appear_online,
             restart_games: p.restart_games,
+            auto_update: p.auto_update,
         }
     }
 
@@ -36,6 +51,7 @@ impl PreferencesDto {
             only_priority: self.only_priority,
             appear_online: self.appear_online,
             restart_games: self.restart_games,
+            auto_update: self.auto_update,
         }
     }
 }

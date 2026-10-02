@@ -16,7 +16,8 @@ pub mod test_support;
 pub use model::{Preferences, PreferencesError, Tier};
 pub use repository::PreferencesRepository;
 pub use use_cases::{
-    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, GetPreferencesUseCase,
-    SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase,
+    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
+    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    GetPreferencesUseCase, SetAppearOnlineUseCase, SetAutoUpdateUseCase, SetGameTierUseCase,
+    SetOnlyPriorityUseCase, SetRestartGamesUseCase,
 };

@@ -4,7 +4,7 @@ use crate::Tier;
 
 /// Games are named by their Steam app ID throughout: a name can change, and
 /// two games can share one.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preferences {
     /// Games farmed first, in this order; index 0 is the user's #1.
     pub priority_games: Vec<AppId>,
@@ -20,6 +20,23 @@ pub struct Preferences {
     /// later, to shake drops loose, as Steam Game Idler does. Off unless the
     /// user turns it on.
     pub restart_games: bool,
+    /// Keep steamcards up to date: look for a new release once a day, and
+    /// put it in place, or say how to get it. On unless the user turns it
+    /// off.
+    pub auto_update: bool,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            priority_games: Vec::new(),
+            skipped_games: Vec::new(),
+            only_priority: false,
+            appear_online: false,
+            restart_games: false,
+            auto_update: true,
+        }
+    }
 }
 
 impl Preferences {

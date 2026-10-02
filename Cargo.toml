@@ -26,6 +26,9 @@ members = [
     "component/preferences/di",
     "component/farming/domain",
     "component/farming/di",
+    "component/update/domain",
+    "component/update/data",
+    "component/update/di",
     "library/config-file",
     "library/debug-log",
     "library/steam-api",
@@ -99,12 +102,14 @@ card = { path = "component/card/domain" }
 session = { path = "component/session/domain" }
 preferences = { path = "component/preferences/domain" }
 farming = { path = "component/farming/domain" }
+update = { path = "component/update/domain" }
 
 # Data
 account-data = { path = "component/account/data" }
 game-data = { path = "component/game/data" }
 card-data = { path = "component/card/data" }
 preferences-data = { path = "component/preferences/data" }
+update-data = { path = "component/update/data" }
 
 # DI
 account-di = { path = "component/account/di" }
@@ -113,6 +118,7 @@ card-di = { path = "component/card/di" }
 session-di = { path = "component/session/di" }
 preferences-di = { path = "component/preferences/di" }
 farming-di = { path = "component/farming/di" }
+update-di = { path = "component/update/di" }
 
 # Library
 config-file = { path = "library/config-file" }
@@ -177,6 +183,11 @@ base64 = "0.23"
 flate2 = "1"
 rand = "0.10"
 hex = "0.4"
+
+# Updating: checking a release's archive, and unpacking it
+sha2 = "0.10"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive"] }

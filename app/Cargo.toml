@@ -21,6 +21,7 @@ path = "src/main.rs"
 account-di.workspace = true
 farming.workspace = true
 farming-di.workspace = true
+update-di.workspace = true
 game-di.workspace = true
 card-di.workspace = true
 preferences-di.workspace = true

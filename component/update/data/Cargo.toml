@@ -1,0 +1,31 @@
+[package]
+name = "update-data"
+description = "steamcards' releases as GitHub publishes them, read and put in place through a client of its own, written to fit the update domain's ReleaseRepository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+update.workspace = true
+debug-log.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+flate2.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+tar.workspace = true
+
+# Windows' builds come as a zip.
+[target.'cfg(windows)'.dependencies]
+zip.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true

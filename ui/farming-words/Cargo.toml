@@ -1,6 +1,6 @@
 [package]
 name = "farming-words"
-description = "Farming in words, for every presentation alike: what each event says in the log, and what the status line says."
+description = "Farming in words, for every presentation alike: what each event says in the log, what the status line says, and what an update found."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,4 +18,5 @@ workspace = true
 card.workspace = true
 farming.workspace = true
 game.workspace = true
+update.workspace = true
 chrono.workspace = true

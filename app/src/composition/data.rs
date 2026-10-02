@@ -10,7 +10,8 @@ use crate::settings::Settings;
 /// client, shared, so when Steam rejects the sign-in every screen knows.
 /// Where the market's prices are kept: a file of their own beside the config
 /// file, which the card component opens. And the keeper of this session of
-/// farming, which holds it in memory alone.
+/// farming, which holds it in memory alone. And this copy of steamcards:
+/// where it is, and where its releases are.
 pub(crate) struct DataAssembler {
     /// This steamcards' hold on its config file, taken before the file is
     /// read: another can't use it until this one exits.
@@ -19,6 +20,9 @@ pub(crate) struct DataAssembler {
     pub prices: PathBuf,
     pub steam: Arc<SteamClient>,
     pub sessions: Arc<SessionKeeper>,
+    pub exe: PathBuf,
+    pub cargo_home: PathBuf,
+    pub releases: String,
 }
 
 impl DataAssembler {
@@ -38,6 +42,9 @@ impl DataAssembler {
             steam: Arc::new(SteamClient::new(credentials, &settings.debug_log)),
             sessions: Arc::default(),
             config,
+            exe: settings.exe.clone(),
+            cargo_home: settings.cargo_home.clone(),
+            releases: settings.releases.clone(),
         })
     }
 }

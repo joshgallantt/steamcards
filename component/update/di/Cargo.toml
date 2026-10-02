@@ -1,0 +1,18 @@
+[package]
+name = "update-di"
+description = "Builds the update use case over GitHub's releases and the copy of steamcards that's running."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+update.workspace = true
+update-data.workspace = true
+preferences.workspace = true
+debug-log.workspace = true

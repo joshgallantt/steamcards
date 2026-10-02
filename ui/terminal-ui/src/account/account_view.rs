@@ -83,12 +83,40 @@ pub(crate) fn render(f: &mut Frame<'_>, area: Rect, cx: &Ctx<'_>, confirm: bool)
         .map(|l| Line::styled(format!("  {l}"), theme::dim())),
     );
 
+    lines.push(Line::default());
+    lines.push(toggle(
+        cx.prefs.auto_update,
+        "Keep steamcards up to date",
+        "u",
+    ));
+    let found = cx.app.updates.last().map(|f| farming_words::update(&f));
+    let said = match (cx.prefs.auto_update, found) {
+        (true, Some(found)) => found,
+        (true, None) => format!(
+            "This is steamcards {}. It looks for a new release once a day.",
+            env!("CARGO_PKG_VERSION")
+        ),
+        (false, _) => format!(
+            "This is steamcards {}. It asks GitHub nothing: update it yourself.",
+            env!("CARGO_PKG_VERSION")
+        ),
+    };
+    lines.extend(
+        wrap_text(&said, inner_w.saturating_sub(2))
+            .into_iter()
+            .map(|l| Line::styled(format!("  {l}"), theme::dim())),
+    );
+
     let enter = if cx.signed_in() {
         "sign in again"
     } else {
         "sign in"
     };
-    let mut keys = vec![("enter", enter, 0), ("v", "offline/online", 2)];
+    let mut keys = vec![
+        ("enter", enter, 0),
+        ("v", "offline/online", 2),
+        ("u", "updates", 3),
+    ];
     if cx.signed_in() {
         keys.push(("d", "sign out", 1));
     }

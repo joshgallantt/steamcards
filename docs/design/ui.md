@@ -206,7 +206,7 @@ still has this session's count and value.
 | o | open its card page |
 | c | show or hide finished games |
 | g | games: pick priority games, only priority, shake drops loose |
-| a | account: sign in or out, appear offline |
+| a | account: sign in or out, appear offline, keep steamcards up to date |
 | l | the log |
 | p | pause, or carry on |
 | ? | help |

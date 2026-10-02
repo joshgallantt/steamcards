@@ -5,6 +5,7 @@ use farming_di::FarmingComponent;
 use game_di::GameComponent;
 use preferences_di::PreferencesComponent;
 use session_di::SessionComponent;
+use update_di::UpdateComponent;
 
 use super::DataAssembler;
 
@@ -16,6 +17,7 @@ pub(crate) struct DomainAssembler {
     pub session: SessionComponent,
     pub card: CardComponent,
     pub farming: FarmingComponent,
+    pub update: UpdateComponent,
 }
 
 impl DomainAssembler {
@@ -40,6 +42,14 @@ impl DomainAssembler {
             get_preferences: preferences.get_preferences.clone(),
             sessions: data.sessions.clone(),
         });
+        let update = UpdateComponent::new(
+            &data.releases,
+            data.exe.clone(),
+            env!("CARGO_PKG_VERSION"),
+            &data.cargo_home,
+            preferences.get_preferences.clone(),
+            data.steam.log().clone(),
+        );
         Self {
             account,
             game,
@@ -47,6 +57,7 @@ impl DomainAssembler {
             session,
             card,
             farming,
+            update,
         }
     }
 }

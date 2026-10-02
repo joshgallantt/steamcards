@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use terminal_ui::{
     App,
-    account::AccountViewModel,
+    account::{AccountViewModel, UpdateViewModel},
     dashboard::{FarmingViewModel, LibraryViewModel, MarketViewModel},
     games::GamesViewModel,
     onboarding::OnboardingViewModel,
@@ -53,6 +53,11 @@ impl PresentationAssembler {
                 d.card.refresh_card_prices.clone(),
                 d.account.get_wallet.clone(),
             ),
+            UpdateViewModel::new(
+                d.update.keep_up_to_date.clone(),
+                d.preferences.get_preferences.clone(),
+                d.preferences.set_auto_update.clone(),
+            ),
         )
     }
 
@@ -61,6 +66,7 @@ impl PresentationAssembler {
         headless::run(
             d.account.get_account.clone(),
             d.farming.farm_cards.clone(),
+            d.update.keep_up_to_date.clone(),
             duration,
         )
         .await;

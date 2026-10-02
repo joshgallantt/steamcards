@@ -12,13 +12,15 @@ use account::GetAccountUseCase;
 use farming::{FarmCardsUseCase, FarmingStatus, FarmingUpdate};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use update::{KeepUpToDateUseCase, UpdateEvent};
 
-/// Farms until `duration` passes (never, if `None`) or ctrl-c. Signing in
-/// takes the Steam app and a screen for its QR code, so it's done in the
-/// TUI first.
+/// Farms until `duration` passes (never, if `None`) or ctrl-c, keeping
+/// steamcards up to date meanwhile. Signing in takes the Steam app and a
+/// screen for its QR code, so it's done in the TUI first.
 pub async fn run(
     account: Arc<dyn GetAccountUseCase>,
     farm: Arc<dyn FarmCardsUseCase>,
+    keep_up_to_date: Arc<dyn KeepUpToDateUseCase>,
     duration: Option<Duration>,
 ) {
     let Some(signed_in) = account.call() else {
@@ -48,6 +50,15 @@ pub async fn run(
         });
     }
 
+    let (found_tx, mut found) = mpsc::channel::<UpdateEvent>(8);
+    drop(keep_up_to_date.call(token.clone(), found_tx));
+    let announcer = tokio::spawn(async move {
+        while let Some(f) = found.recv().await {
+            let ts = chrono::Local::now().format("%H:%M:%S");
+            println!("{ts} {}", farming_words::update(&f));
+        }
+    });
+
     let (tx, mut rx) = mpsc::channel::<FarmingUpdate>(256);
     let printer = tokio::spawn(async move {
         let mut last = None;
@@ -55,8 +66,12 @@ pub async fn run(
             print_update(&update, &mut last);
         }
     });
-    let _ = farm.call(token, tx).await;
+    let _ = farm.call(token.clone(), tx).await;
+    // Farming can stop by itself, as when another session takes over: the
+    // updates stop with it.
+    token.cancel();
     let _ = printer.await;
+    let _ = announcer.await;
 }
 
 /// What a status line says, to print it only when that changes.

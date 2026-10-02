@@ -5,10 +5,11 @@ use std::sync::Arc;
 
 use game::AppId;
 use preferences::{
-    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetGameTierUseCase,
-    DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase, GetPreferencesUseCase,
-    Preferences, SetAppearOnlineUseCase, SetGameTierUseCase, SetOnlyPriorityUseCase,
-    SetRestartGamesUseCase, Tier, test_support::FakePreferencesRepository,
+    DefaultGetPreferencesUseCase, DefaultSetAppearOnlineUseCase, DefaultSetAutoUpdateUseCase,
+    DefaultSetGameTierUseCase, DefaultSetOnlyPriorityUseCase, DefaultSetRestartGamesUseCase,
+    GetPreferencesUseCase, Preferences, SetAppearOnlineUseCase, SetAutoUpdateUseCase,
+    SetGameTierUseCase, SetOnlyPriorityUseCase, SetRestartGamesUseCase, Tier,
+    test_support::FakePreferencesRepository,
 };
 
 /// Someone arranging what gets farmed first.
@@ -18,6 +19,7 @@ pub(crate) struct Player {
     pub(crate) only: Arc<dyn SetOnlyPriorityUseCase>,
     pub(crate) online: Arc<dyn SetAppearOnlineUseCase>,
     pub(crate) restart: Arc<dyn SetRestartGamesUseCase>,
+    pub(crate) auto_update: Arc<dyn SetAutoUpdateUseCase>,
 }
 
 impl Player {
@@ -36,7 +38,8 @@ impl Player {
             tier: Arc::new(DefaultSetGameTierUseCase::new(repo.clone())),
             only: Arc::new(DefaultSetOnlyPriorityUseCase::new(repo.clone())),
             online: Arc::new(DefaultSetAppearOnlineUseCase::new(repo.clone())),
-            restart: Arc::new(DefaultSetRestartGamesUseCase::new(repo)),
+            restart: Arc::new(DefaultSetRestartGamesUseCase::new(repo.clone())),
+            auto_update: Arc::new(DefaultSetAutoUpdateUseCase::new(repo)),
         }
     }
 

@@ -29,7 +29,7 @@ use ratatui::{DefaultTerminal, Frame, Terminal, backend::CrosstermBackend};
 use session::Session;
 
 use crate::{
-    account::AccountViewModel,
+    account::{AccountViewModel, UpdateViewModel},
     dashboard::{
         EventKind, FarmingViewModel, LibraryViewModel, LogEntry, MarketViewModel, Queue,
         QueueEntry, Section, card_page, dashboard_view, farming_log, log_view::LogView,
@@ -141,6 +141,7 @@ pub struct App {
     pub(crate) library: LibraryViewModel,
     pub(crate) onboarding: OnboardingViewModel,
     pub(crate) market: MarketViewModel,
+    pub(crate) updates: UpdateViewModel,
     pub(crate) setup: SetupView,
 
     /// The farmer's last word on what it's doing.
@@ -166,6 +167,10 @@ pub struct App {
 }
 
 impl App {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the app holds every feature's view model, each handed in by the composition root"
+    )]
     pub fn new(
         account: AccountViewModel,
         login: SignInViewModel,
@@ -174,6 +179,7 @@ impl App {
         library: LibraryViewModel,
         onboarding: OnboardingViewModel,
         market: MarketViewModel,
+        updates: UpdateViewModel,
     ) -> Self {
         Self {
             account,
@@ -183,6 +189,7 @@ impl App {
             library,
             onboarding,
             market,
+            updates,
             setup: SetupView::default(),
             status: None,
             log: Vec::new(),
@@ -209,9 +216,11 @@ impl App {
             // Farming starts by itself; there's nothing else to do until it does.
             self.farming.start();
         }
+        self.updates.start();
         let result = self.event_loop(&mut terminal).await;
         self.login.cancel();
         self.market.stop();
+        self.updates.stop();
         self.farming.stop().await;
 
         disable_raw_mode()?;
@@ -245,6 +254,11 @@ impl App {
         }
         while let Some(ev) = self.market.try_recv() {
             self.on_market_event(ev);
+        }
+        while let Some(found) = self.updates.try_recv() {
+            let said = farming_words::update(&found);
+            self.push_log(EventKind::Info, said.clone());
+            self.flash(said);
         }
         self.keep_prices_coming();
         self.library.poll();
@@ -508,6 +522,16 @@ impl App {
         }
     }
 
+    fn toggle_auto_update(&mut self) {
+        match self.updates.toggle_auto_update() {
+            Ok(()) if self.updates.auto_update() => {
+                self.flash("Keeping steamcards up to date: it looks for a new release once a day.")
+            }
+            Ok(()) => self.flash("Not looking for updates: steamcards asks GitHub nothing."),
+            Err(e) => self.didnt_stick(e),
+        }
+    }
+
     fn toggle_appear_online(&mut self) {
         match self.games.toggle_appear_online() {
             Ok(()) if self.games.appear_online() => {
@@ -726,6 +750,10 @@ impl App {
                     KeyCode::Char('d') if signed_in => Some(Overlay::Account { confirm: true }),
                     KeyCode::Char('v') => {
                         self.toggle_appear_online();
+                        Some(Overlay::Account { confirm: false })
+                    }
+                    KeyCode::Char('u') => {
+                        self.toggle_auto_update();
                         Some(Overlay::Account { confirm: false })
                     }
                     KeyCode::Esc | KeyCode::Char('a' | 'q') => None,

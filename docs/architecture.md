@@ -12,9 +12,9 @@ is: the same layers, the same rules, and the same checks that keep them.
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming` | Domain |
-| Data | `account-data`, `game-data`, `card-data`, `preferences-data` | Domain, Library |
-| DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di` | Domain, Data, Library |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `update` | Domain |
+| Data | `account-data`, `game-data`, `card-data`, `preferences-data`, `update-data` | Domain, Library |
+| DI | `account-di`, `game-di`, `card-di`, `session-di`, `preferences-di`, `farming-di`, `update-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `steam-api` | Library |
 | Presentation | `farming-words`, `terminal-ui`, `headless` | Domain, Presentation |
 | App | `steamcards` | Domain, DI, Library, Presentation |
@@ -38,6 +38,7 @@ Two things enforce this table:
    | `card` | `game`, `money`, `account` |
    | `session` | `game`, `card` |
    | `farming` | `game`, `card`, `session`, `preferences` |
+   | `update` | `preferences` |
 
 Dev-dependencies are exempt. A test may reach anywhere it needs to.
 
@@ -220,8 +221,10 @@ with it, where a dropped `JoinHandle`'s task would go on and take the word.
 | | `SetOnlyPriorityUseCase` | Farm priority games only. |
 | | `SetAppearOnlineUseCase` | Show as online while farming, or appear offline. |
 | | `SetRestartGamesUseCase` | Restart the game farmed alone every 5 minutes, to shake drops loose, or leave it playing. Off unless turned on. |
+| | `SetAutoUpdateUseCase` | Keep steamcards up to date, or ask GitHub nothing. On unless turned off. |
 | farming | `FarmCardsUseCase` | Farms until cancelled, telling what happened (`FarmingEvent`) and where farming stands (`FarmingStatus`), in order, as `FarmingUpdate`s. Each run carries on the session. |
 | session | `EndSessionUseCase` | Ends the session: the next run starts a new one. Signing out ends it, and so does signing in as another account. |
+| update | `KeepUpToDateUseCase` | Looks for a newer release at the start and once a day, while automatic updates are on: puts one this copy updates itself to in place, for the next start, or says how Homebrew or cargo gets it; reports each `UpdateEvent` once. |
 
 The price use cases that keep time take a `Clock`: the system's, or in a
 test, one that moves with tokio's paused time.
@@ -267,6 +270,7 @@ the two.
 | `CardRepository` | `card` | `DefaultCardRepository` in `card-data`, through a `SteamCardClient` |
 | `PreferencesRepository` | `preferences` | `DefaultPreferencesRepository` in `preferences-data`, through a `FilePreferencesStore` |
 | `CardPriceRepository` | `card` | `DefaultCardPriceRepository` in `card-data`, through a `SteamMarketClient` and a `FilePriceStore` |
+| `ReleaseRepository` | `update` | `DefaultReleaseRepository` in `update-data`, through a `GitHubReleaseClient` |
 
 Use cases return errors in the user's vocabulary (`SignInError::Refused`,
 `SignOutError::Unavailable`, `PreferencesError::Unavailable`,
@@ -308,6 +312,16 @@ connection is signed on, the farmer's or any other: `SteamClient` hears
 each connection's from before it signs on, in order, and `SteamCardClient`,
 in `card-data`, passes each card on once. What was new at the account's
 first sign-on here was there already.
+
+**So is putting a release in place.** `GitHubReleaseClient`, in
+`update-data`, finds the latest release where `<releases>/latest`
+redirects, as the install scripts do, and downloads this computer's
+archive and the release's `SHA256SUMS`. The archive is checked against
+them, unpacked, and the program in it written beside the running copy,
+then renamed over it: the running copy carries on, and the next start runs
+the new one. Windows won't let a running program be replaced, so there the
+old one is renamed aside first. Where the copy is says who updates it:
+Homebrew's `Cellar`, cargo's `bin`, or the copy itself.
 
 **Each data crate has the same shape.** A `Default…Repository` satisfies the
 domain's contract through a client or a store: a trait, with the
@@ -396,7 +410,7 @@ types are named, in three phases, each handed only the one before it:
 | Phase | Builds | From |
 | --- | --- | --- |
 | `DataAssembler` | `ConfigFile`, `steam_api::SteamClient`, `SessionKeeper`, and where the prices are kept | `Settings` |
-| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent` | `DataAssembler` |
+| `DomainAssembler` | `AccountComponent`, `GameComponent`, `CardComponent`, `SessionComponent`, `PreferencesComponent`, `FarmingComponent`, `UpdateComponent` | `DataAssembler` |
 | `PresentationAssembler` | the terminal `App`, or a headless run | `DomainAssembler` |
 
 `CardComponent` takes the `SteamClient`, the `ConfigFile` and where the
@@ -412,7 +426,7 @@ opens; `Settings` works out where.
 | Unit | `#[cfg(test)]` beside the code, and each domain crate's `tests/` | the system's terms (`farm_order`, `unpack_multi`), and the use cases' rules | the component's fakes, stubs and spies |
 | Acceptance | `component/*/di/tests/`, with the driver in `tests/support/` | the user's terms: `Player::signs_in`, `has_prices_looked_up` | only Steam: the stand-in Steam server and wiremock for steamcommunity.com, with real files in a folder of their own |
 | Paused time | `component/farming/domain/tests/`, `component/card/domain/tests/pricing_cards.rs` | the user's terms, over hours of play: `Player::starts_farming`, `reads(dropped)`, and what the farmer says happened | fakes of Steam and the market, on tokio's paused time |
-| Data | `component/*/data/tests/`, `library/steam-api/tests/` | Steam's terms | a stand-in Steam server over a real WebSocket, and wiremock for steamcommunity.com |
+| Data | `component/*/data/tests/`, `library/steam-api/tests/` | Steam's terms, and GitHub's | a stand-in Steam server over a real WebSocket, and wiremock for steamcommunity.com and GitHub's releases |
 | Screens | `ui/terminal-ui/src/app/preview.rs` | what's on screen | `test-support` doubles |
 | Architecture | `app/tests/dependency_rule.rs`, `app/tests/language_rules.rs` | the table at the top of this page, and the section below | none |
 
@@ -468,6 +482,7 @@ graph TD
         SDI[session-di]
         PDI[preferences-di]
         FDI[farming-di]
+        UDI[update-di]
     end
 
     subgraph DATA["component/*/data"]
@@ -475,6 +490,7 @@ graph TD
         GD[game-data]
         CD[card-data]
         PD[preferences-data]
+        UD[update-data]
     end
 
     subgraph DOMAIN["component/*/domain"]
@@ -485,6 +501,7 @@ graph TD
         SES[session]
         PREF[preferences]
         FARM[farming]
+        UPD[update]
     end
 
     subgraph LIBS["library/"]
@@ -493,25 +510,28 @@ graph TD
         DL[debug-log]
     end
 
-    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & SES & FARM & CF & SA & DL
-    TUI --> FW & ACC & GAME & CARD & SES & PREF & FARM & MON
-    HL --> FW & ACC & FARM
-    FW --> FARM & GAME & CARD
+    APP --> TUI & HL & ADI & GDI & CDI & SDI & PDI & FDI & UDI & SES & FARM & CF & SA & DL
+    TUI --> FW & ACC & GAME & CARD & SES & PREF & FARM & UPD & MON
+    HL --> FW & ACC & FARM & UPD
+    FW --> FARM & GAME & CARD & UPD
     ADI --> AD
     GDI --> GD
     CDI --> CD
     PDI --> PD
     FDI --> FARM
+    UDI --> UD
     SDI --> SES
     AD --> ACC & MON & SA
     GD --> GAME & SA
     CD --> CARD & GAME & MON & SA & CF & DL
     PD --> PREF & GAME & CF
+    UD --> UPD & DL
     ACC --> MON
     CARD --> GAME & MON & ACC
     PREF --> GAME
     SES --> GAME & CARD
     FARM --> GAME & CARD & SES & PREF
+    UPD --> PREF
     SA --> CF & DL
 ```
 

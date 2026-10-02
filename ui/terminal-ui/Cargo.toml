@@ -23,6 +23,7 @@ card.workspace = true
 money.workspace = true
 preferences.workspace = true
 session.workspace = true
+update.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 crossterm.workspace = true
@@ -40,4 +41,5 @@ game = { workspace = true, features = ["test-support"] }
 card = { workspace = true, features = ["test-support"] }
 preferences = { workspace = true, features = ["test-support"] }
 session = { workspace = true, features = ["test-support"] }
+update = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

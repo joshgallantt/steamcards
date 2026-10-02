@@ -63,6 +63,11 @@ steamcards --headless --duration 3600  # stop after an hour (in seconds)
 | --- | --- |
 | `STEAMCARDS_CONFIG` | Use a different config file, e.g. to keep your own sign-in out of the way while you work. |
 | `STEAMCARDS_DEBUG` | Write a debug log: what's said to Steam, and what Steam says back. `1` puts it beside the config file, as `debug.log`; a path puts it there. In headless mode, debug lines go to the terminal's error output unless this says otherwise. |
+| `STEAMCARDS_RELEASES_URL` | Look for updates on a mirror instead of the releases page, as the install scripts can (below). |
+
+### Keeping up to date
+
+steamcards looks for a new release when it starts, and once a day after. A copy the install scripts put in place, or you did by hand, downloads the new release, checks it against the release's `SHA256SUMS`, and puts it in place of itself: the copy that's running carries on, and the next start runs the new one. A copy Homebrew or cargo installed is theirs to update, so steamcards says how instead: `brew upgrade steamcards`, or build it again. Either way it says so in the log. Turned off (`a`, then `u`), it asks GitHub nothing.
 
 ### Where your data is
 
@@ -193,6 +198,7 @@ The domain is the rules: what gets farmed first, one game at a time or together,
 │   ├── preferences/   What you want farmed first.
 │   ├── session/       This session: every card that dropped, and how long the rest should take.
 │   ├── farming/       What to play, and how, and stepping aside for another device. Keeps nothing: no data crate.
+│   ├── update/        steamcards' own releases: keeping itself up to date.
 │   └── money/         Amounts in a currency, as Steam counts and writes them.
 ├── library/       Infrastructure with no domain knowledge.
 │   ├── steam-api/     The CM connection, QR sign-in, the pages several components read.
@@ -374,7 +380,7 @@ None of these are conventions to remember. Break one and the build, a test or CI
 
 | Layer | Crates | May depend on |
 | --- | --- | --- |
-| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming` | Domain |
+| Domain | `money`, `account`, `game`, `card`, `session`, `preferences`, `farming`, `update` | Domain |
 | Data | `*-data` | Domain, Library |
 | DI | `*-di` | Domain, Data, Library |
 | Library | `config-file`, `debug-log`, `steam-api` | Library |

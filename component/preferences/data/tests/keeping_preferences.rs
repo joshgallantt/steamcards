@@ -36,6 +36,7 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             only_priority: true,
             appear_online: false,
             restart_games: true,
+            auto_update: false,
         })
         .unwrap();
 
@@ -48,6 +49,7 @@ fn preferences_are_kept_at_the_top_of_the_config_file() {
             "only_priority": true,
             "appear_online": false,
             "restart_games": true,
+            "auto_update": false,
         })
     );
 }
@@ -62,13 +64,18 @@ fn preferences_saved_before_read_as_they_were() {
     )
     .unwrap();
 
+    let read = store(&path).preferences();
     assert_eq!(
-        store(&path).preferences(),
+        read,
         Preferences {
             priority_games: vec![AppId(620)],
             only_priority: true,
             ..Default::default()
         }
+    );
+    assert!(
+        read.auto_update,
+        "a file from before it was a choice keeps steamcards up to date"
     );
 }
 

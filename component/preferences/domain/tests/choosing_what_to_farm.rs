@@ -54,6 +54,14 @@ fn restarting_games_is_off_until_asked_for() {
 }
 
 #[test]
+fn automatic_updates_are_on_until_turned_off() {
+    let player = Player::new();
+    assert!(player.prefs().auto_update);
+    player.auto_update.call(false).unwrap();
+    assert!(!player.prefs().auto_update);
+}
+
+#[test]
 fn only_priority_is_kept() {
     let player = Player::new();
     player.only.call(true).unwrap();

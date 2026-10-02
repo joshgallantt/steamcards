@@ -19,6 +19,7 @@
 - **Status Dashboard:** Includes farming progress, market value of cards, and much more.
 - **Appears offline** Enabled by default. So your friends don't get spammed by you launching games.
 - **Steps aside** While you play on another device, and carries on a minute after you stop.
+- **Keeps itself up to date:** Checks for a new release once a day. Turn it off with `a`, then `u`.
 - **Windows, macOS and Linux.**
 
 ## Install
@@ -45,7 +46,7 @@ In Windows Terminal:
 irm https://raw.githubusercontent.com/joshgallantt/steamcards/main/install/install.ps1 | iex
 ```
 
-To update, run the same line again (with Homebrew, `brew upgrade steamcards`). See [what's new](https://github.com/joshgallantt/steamcards/releases).
+steamcards keeps itself up to date. To update by hand, run the same line again (with Homebrew, `brew upgrade steamcards`). See [what's new](https://github.com/joshgallantt/steamcards/releases).
 
 ## Getting started
 
@@ -71,7 +72,7 @@ If you start a game on another computer while steamcards farms, Steam says you'r
 
 ## Your data, and uninstalling
 
-Your sign-in and choices stay on your computer, in one file only you can read, with your cards' market prices beside it, so a restart doesn't look every game up again. steamcards talks to nobody but Steam, and collects nothing: no analytics, no tracking. Signing out (press `a`) forgets the sign-in, and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.
+Your sign-in and choices stay on your computer, in one file only you can read, with your cards' market prices beside it, so a restart doesn't look every game up again. steamcards talks to nobody but Steam, and GitHub once a day to look for a new release, unless you turn that off. It collects nothing: no analytics, no tracking. Signing out (press `a`) forgets the sign-in, and ends it at Steam's end too. [CONTRIBUTING.md](CONTRIBUTING.md#where-your-data-is) says where the folder is.
 
 To uninstall, paste the line for your computer. It works however you installed steamcards, and asks whether to delete your sign-in and choices too.
 
