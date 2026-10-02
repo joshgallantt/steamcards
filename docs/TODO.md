@@ -46,6 +46,12 @@ done, and move it into a numbered section if it grows.
 - [x] Stopping and restarting games to shake drops loose (SGI, xPaw,
       steamctl), every 5 minutes (2026-10-02): off until turned on in the
       games list, since ASF calls it a glitch.
+- [x] Show how long the session has farmed (2026-10-02), first in the
+      dashboard's summary, waits and pauses left out.
+- [x] Keep steamcards up to date by itself (2026-10-02): a look for a new
+      release at the start and once a day, on unless turned off. A copy the
+      install scripts put in place puts the release in place of itself; one
+      Homebrew or cargo installed says how to get it.
 - [ ] Look at farming faster (2026-09-29, "at some point"). The redesign's
       time-to-finish estimate learns from real drops, so it will show
       whether a change helps.
@@ -140,8 +146,8 @@ done, and move it into a numbered section if it grows.
       and the GitHub repository recreated from it, so no old copy is left.
       Keep it that way: made-up names in tests, fixtures, docs and
       screenshots, and check a debug log before quoting it.
-- [ ] CI on GitHub: Actions won't start jobs until the account's billing
-      is sorted (Settings → Billing and plans). Once public, they run free.
+- [x] CI on GitHub (2026-10-01): every push and pull request, on Linux,
+      Arch, macOS and Windows. Once public, it runs free.
 
 ### Going public
 
@@ -204,11 +210,10 @@ In this order, on the day:
       all, which misfiled the first drop; fixed. Still to see: prices in
       another currency (question 2), unlisted cards (question 3), and the
       foil badge page's markup.
-- [ ] If the first drops show Steam's announcements leave asset IDs out
-      (research §6, question 1), build the inventory fallback (§2.3 A):
-      the community inventory read over CM at sign-on, then diffed as
-      drops come. Until then a drop Steam doesn't name goes by its card
-      page, or reads "couldn't tell which card".
+- [x] No inventory fallback needed (§2.3 A): Steam's announcements name
+      each drop by its asset ID and game (research §6, question 1). A drop
+      Steam doesn't name still goes by its card page, or reads "couldn't
+      tell which card".
 
 ## Later
 
