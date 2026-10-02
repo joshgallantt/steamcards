@@ -1,17 +1,13 @@
-//! `cargo xtask protect`: puts the repository's rules on GitHub.
+//! `cargo xtask protect`: puts the rules for `main` on GitHub.
 //!
-//! The rules are GitHub rulesets, kept in `.github/rulesets/`:
-//! - `main.json`: changes reach `main` through pull requests, once the Tests
-//!   workflow passes; only the repository's admin (the maintainer) can
-//!   update `main`, by merging a pull request or pushing, which is how
-//!   releases land; and `main` can't be force-pushed or deleted.
-//! - `tags.json`: only the admin can create, move or delete a tag. Pushing a
-//!   `v*` tag is what publishes a release, and creating a release on GitHub
-//!   makes a tag, so only the admin can publish one.
+//! They're a GitHub ruleset, kept in `.github/rulesets/main.json`: changes
+//! reach `main` through pull requests, once the Tests workflow passes; only
+//! the repository's admin (the maintainer) can update `main`, by merging a
+//! pull request or pushing, which is how releases land; and `main` can't be
+//! force-pushed or deleted. Releases need no rule of their own: the release
+//! workflow publishes only what the maintainer started.
 //!
-//! The admin can go around the rules when needed, but nobody else can.
-//!
-//! This creates each ruleset, or brings it back in line with its file. It
+//! This creates the ruleset, or brings it back in line with its file. It
 //! needs the GitHub CLI, signed in as the repository's admin, and GitHub only
 //! enforces rules on a public repository, or on a private one with GitHub
 //! Pro.
@@ -20,7 +16,7 @@ use std::{fs, path::Path, process::Command};
 
 use serde_json::Value;
 
-const RULESETS: [&str; 2] = [".github/rulesets/main.json", ".github/rulesets/tags.json"];
+const RULESETS: [&str; 1] = [".github/rulesets/main.json"];
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if !args.is_empty() {
@@ -107,12 +103,7 @@ mod tests {
         serde_json::from_str(include_str!("../../.github/rulesets/main.json")).unwrap()
     }
 
-    fn tags() -> Value {
-        serde_json::from_str(include_str!("../../.github/rulesets/tags.json")).unwrap()
-    }
-
-    /// The one exemption, in both: the repository's admin role, 5 in
-    /// GitHub's API.
+    /// The one exemption: the repository's admin role, 5 in GitHub's API.
     fn only_the_admin_bypasses(ruleset: &Value) {
         let bypass = ruleset["bypass_actors"].as_array().unwrap();
         assert_eq!(bypass.len(), 1);
@@ -143,21 +134,25 @@ mod tests {
         only_the_admin_bypasses(&ruleset);
     }
 
+    /// Releasing is the maintainer's alone: the release workflow's first
+    /// step stops a run anyone else pushed the tag for, or started again.
     #[test]
-    fn only_the_admin_makes_moves_or_deletes_a_tag() {
-        let tags = tags();
-        assert_eq!(tags["target"], "tag");
-        assert_eq!(tags["enforcement"], "active");
-        assert_eq!(tags["conditions"]["ref_name"]["include"][0], "~ALL");
-        for kind in ["creation", "update", "deletion"] {
-            assert!(rule(&tags, kind).is_some(), "no {kind} rule");
+    fn only_the_maintainer_releases() {
+        let jobs = jobs(include_str!("../../.github/workflows/release.yml"));
+        let (first, lines) = jobs.first().unwrap();
+        assert_eq!(*first, "check", "the release starts with its checks");
+        let steps: Vec<&str> = lines
+            .iter()
+            .filter_map(|line| line.strip_prefix("      - "))
+            .collect();
+        assert_eq!(steps.first(), Some(&"name: The maintainer released it"));
+        for said in [
+            "PUSHED_BY: ${{ github.actor }}",
+            "STARTED_BY: ${{ github.triggering_actor }}",
+            "MAINTAINER: ${{ github.repository_owner }}",
+        ] {
+            assert!(lines.iter().any(|l| l.trim() == said), "{said}");
         }
-        only_the_admin_bypasses(&tags);
-        assert_ne!(
-            tags["name"],
-            ruleset()["name"],
-            "names tell them apart on GitHub"
-        );
     }
 
     /// A workflow's jobs, by id, each with its lines.

@@ -153,8 +153,8 @@ In this order, on the day:
 - [ ] Turn on private vulnerability reporting, which the security policy's
       "Report a vulnerability" link needs:
       `gh api -X PUT repos/joshgallantt/steamcards/private-vulnerability-reporting`.
-- [ ] `cargo xtask protect`: the rulesets for `main` and tags. GitHub applies
-      them to a private repository only with GitHub Pro.
+- [ ] `cargo xtask protect`: the ruleset for `main`. GitHub applies it to a
+      private repository only with GitHub Pro.
 - [x] The first release, v0.1.0 (2026-10-02): `cargo xtask release 0.1.0`.
       It filled in the Homebrew formula's checksums.
 - [ ] Check the one-liners install and uninstall a release: the release

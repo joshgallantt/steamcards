@@ -159,7 +159,7 @@ In PowerShell, set it first: `$env:STEAMCARDS_DELETE_DATA = 1`. A copy you insta
 | `cargo test -p <crate>` | One crate's tests, e.g. `cargo test -p farming`. |
 | `cargo test -p terminal-ui previews -- --nocapture` | Draws every screen, in every state, into your terminal. |
 | `cargo xtask screenshots` | Redraws the README's images, in `docs/images/`, from the previews. |
-| `cargo xtask protect` | Puts the rules for `main` and for tags on GitHub (maintainer only): see [Pull requests](#pull-requests). |
+| `cargo xtask protect` | Puts the rules for `main` on GitHub (maintainer only): see [Pull requests](#pull-requests). |
 
 `cargo xtask` is a small Rust tool in [`xtask/`](xtask/src/main.rs), so it works the same everywhere. Three of its checks use a tool that doesn't come with Rust: spelling (typos), unused dependencies (cargo-machete) and the dependencies themselves (cargo-deny). Without the tool, that check is skipped locally, with a hint; CI always runs it. The tools' versions are set in one place, `TOOLS` in [`xtask/src/main.rs`](xtask/src/main.rs), and CI installs the same ones.
 
@@ -505,11 +505,9 @@ Its last job, "Tests passed", passes once every other job has passed or was skip
 
 Two more workflows run less often. [`release.yml`](.github/workflows/release.yml) publishes a release (see [Cutting a release](#cutting-a-release)). When a release changes the Homebrew formula, [`homebrew.yml`](.github/workflows/homebrew.yml) installs it and checks it runs.
 
-**Merging and releasing.** Two GitHub rulesets, kept in [`.github/rulesets/`](.github/rulesets/), protect the repository:
-- [`main.json`](.github/rulesets/main.json): changes reach `main` through pull requests, and the tests have to pass. Only the maintainer can merge them, or push to `main` at all, and `main` can't be force-pushed or deleted.
-- [`tags.json`](.github/rulesets/tags.json): only the maintainer can create, move or delete a tag. Pushing a `v*` tag is what publishes a release, so only the maintainer can publish one.
+**Merging.** A GitHub ruleset, [`.github/rulesets/main.json`](.github/rulesets/main.json), protects `main`: changes reach it through pull requests, and the tests have to pass. Only the maintainer can merge them, or push to `main` at all, and `main` can't be force-pushed or deleted. `cargo xtask protect` puts it on GitHub, or brings it back in line with the file; GitHub enforces it on a public repository, or on a private one with GitHub Pro.
 
-The maintainer can go around the rules when needed: releases push straight to `main`. `cargo xtask protect` puts both rulesets on GitHub, or brings them back in line with the files. GitHub enforces rules on a public repository, or on a private one with GitHub Pro.
+**Releasing** is the maintainer's alone, and there's one way to do it: `cargo xtask release` (see [Cutting a release](#cutting-a-release)). The release workflow stops any run the maintainer didn't start, before anything is built.
 
 A pull request merges once the tests pass and the maintainer has reviewed it.
 
@@ -519,7 +517,7 @@ A pull request merges once the tests pass and the maintainer has reviewed it.
 
 ## Cutting a release
 
-One command does it, and asks once before anything leaves your machine:
+Releasing is the maintainer's, and this is the only way to do it. One command does it, and asks once before anything leaves your machine:
 
 ```sh
 cargo xtask release

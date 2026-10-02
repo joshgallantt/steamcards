@@ -20,8 +20,7 @@
 //!   does, which the compiler can't see. See `dead_code.rs`.
 //! - `screenshots`: redraws the README's images of the TUI, in `docs/images/`.
 //!   With `--check` (one of the `ci` checks), fails if they're out of date.
-//! - `protect`: puts the rules for `main` and for tags (in `.github/rulesets/`)
-//!   on GitHub.
+//! - `protect`: puts the rules for `main` (in `.github/rulesets/`) on GitHub.
 //! - `release [X.Y.Z]`: publishes the next release, or this version, from the
 //!   checks to Homebrew. See `release/mod.rs`.
 //! - `release-notes <tag>`: a release's notes, for the release workflow.
