@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "account"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "anyhow",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "account-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "anyhow",
@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "account-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "account-data",
@@ -269,7 +269,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "card"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "anyhow",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "card-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "card-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "card",
  "card-data",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "config-file"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "serde",
@@ -666,7 +666,7 @@ checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 
 [[package]]
 name = "debug-log"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
 ]
@@ -852,7 +852,7 @@ dependencies = [
 
 [[package]]
 name = "farming"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -868,14 +868,14 @@ dependencies = [
 
 [[package]]
 name = "farming-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "farming",
 ]
 
 [[package]]
 name = "farming-words"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "card",
  "chrono",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "game"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "game-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1076,7 +1076,7 @@ dependencies = [
 
 [[package]]
 name = "game-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "config-file",
  "debug-log",
@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "headless"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "chrono",
@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "money"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "ndk-context"
@@ -2176,7 +2176,7 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "preferences"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "game",
@@ -2185,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "preferences-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "config-file",
@@ -2197,7 +2197,7 @@ dependencies = [
 
 [[package]]
 name = "preferences-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "config-file",
  "game",
@@ -2791,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "session"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "card",
  "chrono",
@@ -2800,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "session-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "session",
 ]
@@ -2928,7 +2928,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "steam-api"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2952,7 +2952,7 @@ dependencies = [
 
 [[package]]
 name = "steamcards"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account-di",
  "anyhow",
@@ -3120,7 +3120,7 @@ dependencies = [
 
 [[package]]
 name = "terminal-ui"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "account",
  "anyhow",
@@ -3488,7 +3488,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "update"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3500,7 +3500,7 @@ dependencies = [
 
 [[package]]
 name = "update-data"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3518,7 +3518,7 @@ dependencies = [
 
 [[package]]
 name = "update-di"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "debug-log",
  "preferences",
