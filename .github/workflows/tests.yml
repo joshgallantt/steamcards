@@ -54,7 +54,7 @@ jobs:
       # The compiler and components in rust-toolchain.toml.
       - name: Install Rust
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # The versions `cargo xtask setup` installs: `TOOLS` in xtask.
       - name: List the tools
         id: tools
@@ -62,7 +62,7 @@ jobs:
           tools=$(cargo xtask tools lint)
           echo "list=$tools" >> "$GITHUB_OUTPUT"
       - name: Install the tools
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: ${{ steps.tools.outputs.list }}
       - run: cargo xtask lint
@@ -79,7 +79,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo xtask docs
 
   # Unused dependencies, and the dependencies' advisories, licences and
@@ -100,7 +100,7 @@ jobs:
           tools=$(cargo xtask tools deps)
           echo "list=$tools" >> "$GITHUB_OUTPUT"
       - name: Install the tools
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: ${{ steps.tools.outputs.list }}
       - run: cargo xtask deps
@@ -121,7 +121,7 @@ jobs:
           rustup toolchain install "$version" --profile minimal --no-self-update
           # For the steps after this one, it wins over rust-toolchain.toml.
           echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo check --workspace --all-targets --locked
 
   # The workflows themselves. actionlint finds mistakes, and runs ShellCheck
@@ -140,7 +140,7 @@ jobs:
         with:
           args: -color
       - name: Install zizmor
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: zizmor@1.30.1
       - name: zizmor
@@ -172,7 +172,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: rustup toolchain install --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo xtask test
 
   # And on Arch Linux, which CONTRIBUTING.md's build guide covers.
